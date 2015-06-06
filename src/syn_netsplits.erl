@@ -183,7 +183,7 @@ stitch(RemoteNode) ->
     mnesia_controller:connect_nodes(
         [RemoteNode],
         fun(MergeF) ->
-            case MergeF([syn_processes_table]) of
+            catch case MergeF([syn_processes_table]) of
                 {merged, _, _} = Res ->
                     stitch_tab(RemoteNode),
                     Res;
