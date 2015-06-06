@@ -7,7 +7,8 @@
 
 %% tests
 -export([
-    single_node_when_mnesia_is_ram_simple_registration/1
+    single_node_when_mnesia_is_ram_find_by_key/1,
+    single_node_when_mnesia_is_ram_find_by_pid/1
 ]).
 
 %% include
@@ -45,7 +46,8 @@ all() ->
 groups() ->
     [
         {single_node_process_registration, [shuffle], [
-            single_node_when_mnesia_is_ram_simple_registration
+            single_node_when_mnesia_is_ram_find_by_key,
+            single_node_when_mnesia_is_ram_find_by_pid
         ]}
     ].
 %% -------------------------------------------------------------------
@@ -90,7 +92,7 @@ end_per_group(_GroupName, _Config) ->
 %% ===================================================================
 %% Tests
 %% ===================================================================
-single_node_when_mnesia_is_ram_simple_registration(_Config) ->
+single_node_when_mnesia_is_ram_find_by_key(_Config) ->
     %% set schema location
     application:set_env(mnesia, schema_location, ram),
     %% start
@@ -108,6 +110,23 @@ single_node_when_mnesia_is_ram_simple_registration(_Config) ->
     timer:sleep(100),
     %% retrieve
     undefined = syn:find_by_key(<<"my proc">>).
+
+single_node_when_mnesia_is_ram_find_by_pid(_Config) ->
+    %% set schema location
+    application:set_env(mnesia, schema_location, ram),
+    %% start
+    ok = syn:start(),
+    %% start process
+    Pid = start_process(),
+    %% register
+    syn:register(<<"my proc">>, Pid),
+    %% retrieve
+    <<"my proc">> = syn:find_by_pid(Pid),
+    %% kill process
+    kill_process(Pid),
+    timer:sleep(100),
+    %% retrieve
+    undefined = syn:find_by_pid(Pid).
 
 %% ===================================================================
 %% Internal
