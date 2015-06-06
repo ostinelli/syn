@@ -70,14 +70,16 @@ find_by_pid(Pid) ->
 register(Key, Pid) ->
     case find_by_key(Key) of
         undefined ->
+            %% get processes's node
+            Node = node(Pid),
             %% add to table
             mnesia:dirty_write(#syn_processes_table{
                 key = Key,
                 pid = Pid,
-                node = node()
+                node = Node
             }),
             %% link
-            gen_server:call(?MODULE, {link_process, Pid});
+            gen_server:call({?MODULE, Node}, {link_process, Pid});
         _ ->
             {error, taken}
     end.
@@ -136,7 +138,7 @@ handle_call({unlink_process, Pid}, _From, State) ->
     {reply, ok, State};
 
 handle_call(Request, From, State) ->
-    error_logger:warning_msg("Received from ~p an unknown call message: ~p", [Request, From]),
+    error_logger:warning_msg("Received from ~p an unknown call message: ~p~n", [Request, From]),
     {reply, undefined, State}.
 
 %% ----------------------------------------------------------------------------------------------------------
@@ -148,7 +150,7 @@ handle_call(Request, From, State) ->
     {stop, Reason :: any(), #state{}}.
 
 handle_cast(Msg, State) ->
-    error_logger:warning_msg("Received an unknown cast message: ~p", [Msg]),
+    error_logger:warning_msg("Received an unknown cast message: ~p~n", [Msg]),
     {noreply, State}.
 
 %% ----------------------------------------------------------------------------------------------------------
@@ -167,7 +169,8 @@ handle_info({'EXIT', Pid, Reason}, State) ->
             undefined ->
                 case Reason of
                     normal -> ok;
-                    _ -> error_logger:warning_msg("Received a crash message from an unlinked process ~p with reason: ~p", [Pid, Reason])
+                    _ ->
+                        error_logger:warning_msg("Received a crash message from an unlinked process ~p with reason: ~p~n", [Pid, Reason])
                 end;
             Key ->
                 %% delete from table
@@ -176,7 +179,7 @@ handle_info({'EXIT', Pid, Reason}, State) ->
                 case Reason of
                     normal -> ok;
                     killed -> ok;
-                    _ -> error_logger:error_msg("Process with key ~p crashed with reason: ~p", [Key, Reason])
+                    _ -> error_logger:error_msg("Process with key ~p crashed with reason: ~p~n", [Key, Reason])
                 end
         end
     end),
@@ -184,7 +187,7 @@ handle_info({'EXIT', Pid, Reason}, State) ->
     {noreply, State};
 
 handle_info(Info, State) ->
-    error_logger:warning_msg("Received an unknown info message: ~p", [Info]),
+    error_logger:warning_msg("Received an unknown info message: ~p~n", [Info]),
     {noreply, State}.
 
 %% ----------------------------------------------------------------------------------------------------------
@@ -192,7 +195,7 @@ handle_info(Info, State) ->
 %% ----------------------------------------------------------------------------------------------------------
 -spec terminate(Reason :: any(), #state{}) -> terminated.
 terminate(Reason, _State) ->
-    error_logger:info_msg("Terminating syn with reason: ~p", [Reason]),
+    error_logger:info_msg("Terminating syn with reason: ~p~n", [Reason]),
     terminated.
 
 %% ----------------------------------------------------------------------------------------------------------
@@ -219,7 +222,7 @@ initdb() ->
         {storage_properties, [{ets, [{read_concurrency, true}]}]}
     ]) of
         {atomic, ok} ->
-            error_logger:info_msg("syn_processes_table was successfully created."),
+            error_logger:info_msg("syn_processes_table was successfully created.~n"),
             ok;
         {aborted, {already_exists, syn_processes_table}} ->
             %% table already exists, try to add current node as copy
@@ -228,7 +231,7 @@ initdb() ->
             %% table already exists, try to add current node as copy
             add_table_copy_to_local_node();
         Other ->
-            error_logger:error_msg("Error while creating syn_processes_table: ~p", [Other]),
+            error_logger:error_msg("Error while creating syn_processes_table: ~p~n", [Other]),
             {error, Other}
     end.
 
@@ -237,16 +240,16 @@ add_table_copy_to_local_node() ->
     CurrentNode = node(),
     case mnesia:add_table_copy(syn_processes_table, node(), ram_copies) of
         {atomic, ok} ->
-            error_logger:info_msg("Copy of syn_processes_table was successfully added to current node."),
+            error_logger:info_msg("Copy of syn_processes_table was successfully added to current node.~n"),
             ok;
         {aborted, {already_exists, syn_processes_table}} ->
-            %% a copy of syn_processes_table is already added to current node
+            error_logger:info_msg("Copy of syn_processes_table is already added to current node.~n"),
             ok;
         {aborted, {already_exists, syn_processes_table, CurrentNode}} ->
-            %% a copy of syn_processes_table is already added to current node
+            error_logger:info_msg("Copy of syn_processes_table is already added to current node.~n"),
             ok;
         {aborted, Reason} ->
-            error_logger:error_msg("Error while creating copy of syn_processes_table: ~p", [Reason]),
+            error_logger:error_msg("Error while creating copy of syn_processes_table: ~p~n", [Reason]),
             {error, Reason}
     end.
 

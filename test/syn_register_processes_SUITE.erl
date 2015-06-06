@@ -34,9 +34,6 @@
 -export([groups/0, init_per_group/2, end_per_group/2]).
 -export([init_per_testcase/2, end_per_testcase/2]).
 
-%% internal
--export([process_main/0]).
-
 %% tests
 -export([
     single_node_when_mnesia_is_ram_find_by_key/1,
@@ -126,7 +123,7 @@ end_per_suite(_Config) -> ok.
 %% Reason = term()
 %% -------------------------------------------------------------------
 init_per_group(two_nodes_process_registration, Config) ->
-    %% get slave node short name
+    %% start slave
     SlaveNodeShortName = proplists:get_value(slave_node_short_name, Config),
     {ok, SlaveNodeName} = syn_test_suite_helper:start_slave(SlaveNodeShortName),
     %% config
@@ -169,10 +166,8 @@ init_per_testcase(_TestCase, Config) ->
 % ----------------------------------------------------------------------------------------------------------
 end_per_testcase(_TestCase, Config) ->
     %% get slave
-    case proplists:get_value(slave_node_name, Config) of
-        undefined -> syn_test_suite_helper:clean_after_test();
-        SlaveNodeName -> syn_test_suite_helper:clean_after_test(SlaveNodeName)
-    end.
+    SlaveNodeName = proplists:get_value(slave_node_name, Config),
+    syn_test_suite_helper:clean_after_test(SlaveNodeName).
 
 %% ===================================================================
 %% Tests
@@ -183,7 +178,7 @@ single_node_when_mnesia_is_ram_find_by_key(_Config) ->
     %% start
     ok = syn:start(),
     %% start process
-    Pid = start_process(),
+    Pid = syn_test_suite_helper:start_process(),
     %% retrieve
     undefined = syn:find_by_key(<<"my proc">>),
     %% register
@@ -191,7 +186,7 @@ single_node_when_mnesia_is_ram_find_by_key(_Config) ->
     %% retrieve
     Pid = syn:find_by_key(<<"my proc">>),
     %% kill process
-    kill_process(Pid),
+    syn_test_suite_helper:kill_process(Pid),
     timer:sleep(100),
     %% retrieve
     undefined = syn:find_by_key(<<"my proc">>).
@@ -202,13 +197,13 @@ single_node_when_mnesia_is_ram_find_by_pid(_Config) ->
     %% start
     ok = syn:start(),
     %% start process
-    Pid = start_process(),
+    Pid = syn_test_suite_helper:start_process(),
     %% register
     ok = syn:register(<<"my proc">>, Pid),
     %% retrieve
     <<"my proc">> = syn:find_by_pid(Pid),
     %% kill process
-    kill_process(Pid),
+    syn_test_suite_helper:kill_process(Pid),
     timer:sleep(100),
     %% retrieve
     undefined = syn:find_by_pid(Pid).
@@ -219,15 +214,15 @@ single_node_when_mnesia_is_ram_re_register_error(_Config) ->
     %% start
     ok = syn:start(),
     %% start process
-    Pid = start_process(),
-    Pid2 = start_process(),
+    Pid = syn_test_suite_helper:start_process(),
+    Pid2 = syn_test_suite_helper:start_process(),
     %% register
     ok = syn:register(<<"my proc">>, Pid),
     {error, taken} = syn:register(<<"my proc">>, Pid2),
     %% retrieve
     Pid = syn:find_by_key(<<"my proc">>),
     %% kill process
-    kill_process(Pid),
+    syn_test_suite_helper:kill_process(Pid),
     timer:sleep(100),
     %% retrieve
     undefined = syn:find_by_key(<<"my proc">>),
@@ -236,7 +231,7 @@ single_node_when_mnesia_is_ram_re_register_error(_Config) ->
     %% retrieve
     Pid2 = syn:find_by_key(<<"my proc">>),
     %% kill process
-    kill_process(Pid),
+    syn_test_suite_helper:kill_process(Pid),
     timer:sleep(100),
     %% retrieve
     undefined = syn:find_by_pid(Pid).
@@ -247,7 +242,7 @@ single_node_when_mnesia_is_ram_unregister(_Config) ->
     %% start
     ok = syn:start(),
     %% start process
-    Pid = start_process(),
+    Pid = syn_test_suite_helper:start_process(),
     %% unregister
     {error, undefined} = syn:unregister(<<"my proc">>),
     %% register
@@ -260,7 +255,7 @@ single_node_when_mnesia_is_ram_unregister(_Config) ->
     undefined = syn:find_by_key(<<"my proc">>),
     undefined = syn:find_by_pid(Pid),
     %% kill process
-    kill_process(Pid).
+    syn_test_suite_helper:kill_process(Pid).
 
 single_node_when_mnesia_is_disc_find_by_key(_Config) ->
     %% set schema location
@@ -270,7 +265,7 @@ single_node_when_mnesia_is_disc_find_by_key(_Config) ->
     %% start
     ok = syn:start(),
     %% start process
-    Pid = start_process(),
+    Pid = syn_test_suite_helper:start_process(),
     %% retrieve
     undefined = syn:find_by_key(<<"my proc">>),
     %% register
@@ -278,7 +273,7 @@ single_node_when_mnesia_is_disc_find_by_key(_Config) ->
     %% retrieve
     Pid = syn:find_by_key(<<"my proc">>),
     %% kill process
-    kill_process(Pid),
+    syn_test_suite_helper:kill_process(Pid),
     timer:sleep(100),
     %% retrieve
     undefined = syn:find_by_key(<<"my proc">>).
@@ -294,7 +289,7 @@ two_nodes_when_mnesia_is_ram_find_by_key(Config) ->
     ok = rpc:call(SlaveNodeName, syn, start, []),
     timer:sleep(100),
     %% start process
-    Pid = start_process(),
+    Pid = syn_test_suite_helper:start_process(),
     %% retrieve
     undefined = syn:find_by_key(<<"my proc">>),
     undefined = rpc:call(SlaveNodeName, syn, find_by_key, [<<"my proc">>]),
@@ -304,7 +299,7 @@ two_nodes_when_mnesia_is_ram_find_by_key(Config) ->
     Pid = syn:find_by_key(<<"my proc">>),
     Pid = rpc:call(SlaveNodeName, syn, find_by_key, [<<"my proc">>]),
     %% kill process
-    kill_process(Pid),
+    syn_test_suite_helper:kill_process(Pid),
     timer:sleep(100),
     %% retrieve
     undefined = syn:find_by_key(<<"my proc">>),
@@ -323,30 +318,15 @@ two_nodes_when_mnesia_is_disc_find_by_pid(Config) ->
     ok = rpc:call(SlaveNodeName, syn, start, []),
     timer:sleep(100),
     %% start process
-    Pid = start_process(),
+    Pid = syn_test_suite_helper:start_process(),
     %% register
     ok = syn:register(<<"my proc">>, Pid),
     %% retrieve
     <<"my proc">> = syn:find_by_pid(Pid),
     <<"my proc">> = rpc:call(SlaveNodeName, syn, find_by_pid, [Pid]),
     %% kill process
-    kill_process(Pid),
+    syn_test_suite_helper:kill_process(Pid),
     timer:sleep(100),
     %% retrieve
     undefined = syn:find_by_pid(Pid),
     undefined = rpc:call(SlaveNodeName, syn, find_by_pid, [Pid]).
-
-%% ===================================================================
-%% Internal
-%% ===================================================================
-start_process() ->
-    Pid = spawn(?MODULE, process_main, []),
-    Pid.
-
-kill_process(Pid) ->
-    exit(Pid, kill).
-
-process_main() ->
-    receive
-        shutdown -> ok
-    end.

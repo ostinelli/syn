@@ -125,7 +125,7 @@ end_per_suite(_Config) -> ok.
 %% Reason = term()
 %% -------------------------------------------------------------------
 init_per_group(two_nodes_mnesia_creation, Config) ->
-    %% get slave node short name
+    %% start slave
     SlaveNodeShortName = proplists:get_value(slave_node_short_name, Config),
     {ok, SlaveNodeName} = syn_test_suite_helper:start_slave(SlaveNodeShortName),
     %% config
@@ -168,10 +168,8 @@ init_per_testcase(_TestCase, Config) ->
 % ----------------------------------------------------------------------------------------------------------
 end_per_testcase(_TestCase, Config) ->
     %% get slave
-    case proplists:get_value(slave_node_name, Config) of
-        undefined -> syn_test_suite_helper:clean_after_test();
-        SlaveNodeName -> syn_test_suite_helper:clean_after_test(SlaveNodeName)
-    end.
+    SlaveNodeName = proplists:get_value(slave_node_name, Config),
+    syn_test_suite_helper:clean_after_test(SlaveNodeName).
 
 %% ===================================================================
 %% Tests

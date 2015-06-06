@@ -30,7 +30,9 @@
 
 %% API
 -export([start_slave/1, stop_slave/1]).
+-export([connect_node/1, disconnect_node/1]).
 -export([clean_after_test/0, clean_after_test/1]).
+-export([start_process/0, start_process/1, kill_process/1, process_main/0]).
 
 
 %% ===================================================================
@@ -38,16 +40,22 @@
 %% ===================================================================
 start_slave(NodeShortName) ->
     EbinFilePath = filename:join([filename:dirname(code:lib_dir(syn, ebin)), "ebin"]),
+    TestFilePath = filename:join([filename:dirname(code:lib_dir(syn, ebin)), "test"]),
     %% start slave
     {ok, NodeName} = ct_slave:start(NodeShortName, [
         {boot_timeout, 10},
-        {monitor_master, true},
-        {erl_flags, string:concat("-pa ", EbinFilePath)}
+        {erl_flags, lists:concat(["-pa ", EbinFilePath, " ", TestFilePath])}
     ]),
     {ok, NodeName}.
 
 stop_slave(NodeShortName) ->
     {ok, _} = ct_slave:stop(NodeShortName).
+
+connect_node(NodeName) ->
+    net_kernel:connect_node(NodeName).
+
+disconnect_node(NodeName) ->
+    erlang:disconnect_node(NodeName).
 
 clean_after_test() ->
     %% delete table
@@ -59,6 +67,8 @@ clean_after_test() ->
     %% stop syn
     syn:stop().
 
+clean_after_test(undefined) ->
+    clean_after_test();
 clean_after_test(NodeName) ->
     %% delete table
     {atomic, ok} = mnesia:delete_table(syn_processes_table),
@@ -70,3 +80,20 @@ clean_after_test(NodeName) ->
     %% stop syn
     syn:stop(),
     rpc:call(NodeName, syn, stop, []).
+
+start_process() ->
+    Pid = spawn(?MODULE, process_main, []),
+    Pid.
+
+start_process(NodeName) ->
+%%     Pid = rpc:call(NodeName, erlang, spawn, [?MODULE, process_main, []]),
+    Pid = spawn(NodeName, ?MODULE, process_main, []),
+    Pid.
+
+kill_process(Pid) ->
+    exit(Pid, kill).
+
+process_main() ->
+    receive
+        shutdown -> ok
+    end.
