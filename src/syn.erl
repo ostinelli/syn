@@ -30,7 +30,7 @@
 
 %% API
 -export([start/0, stop/0]).
--export([register/2]).
+-export([register/2, unregister/1]).
 -export([find_by_key/1, find_by_pid/1]).
 
 
@@ -50,6 +50,10 @@ stop() ->
 -spec register(Key :: any(), Pid :: pid()) -> ok | {error, key_taken}.
 register(Key, Pid) ->
     syn_backbone:register(Key, Pid).
+
+-spec unregister(Key :: any()) -> ok | {error, undefined}.
+unregister(Key) ->
+    syn_backbone:unregister(Key).
 
 -spec find_by_key(Key :: any()) -> pid() | undefined.
 find_by_key(Key) ->

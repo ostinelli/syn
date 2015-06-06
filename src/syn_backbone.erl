@@ -31,7 +31,7 @@
 
 %% API
 -export([start_link/0]).
--export([register/2]).
+-export([register/2, unregister/1]).
 -export([find_by_key/1, find_by_pid/1]).
 
 %% gen_server callbacks
@@ -66,7 +66,7 @@ find_by_pid(Pid) ->
         _ -> undefined
     end.
 
--spec register(Key :: any(), Pid :: pid()) -> ok | {error, already_taken}.
+-spec register(Key :: any(), Pid :: pid()) -> ok | {error, taken}.
 register(Key, Pid) ->
     case find_by_key(Key) of
         undefined ->
@@ -79,7 +79,18 @@ register(Key, Pid) ->
             %% link
             gen_server:call(?MODULE, {link_process, Pid});
         _ ->
-            {error, already_taken}
+            {error, taken}
+    end.
+
+-spec unregister(Key :: any()) -> ok | {error, undefined}.
+unregister(Key) ->
+    case find_by_key(Key) of
+        undefined ->
+            {error, undefined};
+        Pid ->
+            remove_process_by_key(Key),
+            %% unlink
+            gen_server:call(?MODULE, {unlink_process, Pid})
     end.
 
 %% ===================================================================
@@ -118,6 +129,10 @@ init([]) ->
 
 handle_call({link_process, Pid}, _From, State) ->
     erlang:link(Pid),
+    {reply, ok, State};
+
+handle_call({unlink_process, Pid}, _From, State) ->
+    erlang:unlink(Pid),
     {reply, ok, State};
 
 handle_call(Request, From, State) ->

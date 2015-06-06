@@ -46,10 +46,12 @@ start_slave(NodeShortName) ->
     ]),
     {ok, NodeName}.
 
-stop_slave(NodeName) ->
-    ct_slave:stop(NodeName).
+stop_slave(NodeShortName) ->
+    {ok, _} = ct_slave:stop(NodeShortName).
 
 clean_after_test() ->
+    %% delete table
+    {atomic, ok} = mnesia:delete_table(syn_processes_table),
     %% stop mnesia
     mnesia:stop(),
     %% delete schema
@@ -58,10 +60,13 @@ clean_after_test() ->
     syn:stop().
 
 clean_after_test(NodeName) ->
-    clean_after_test(),
+    %% delete table
+    {atomic, ok} = mnesia:delete_table(syn_processes_table),
     %% stop mnesia
+    mnesia:stop(),
     rpc:call(NodeName, mnesia, stop, []),
     %% delete schema
-    rpc:call(NodeName, mnesia, delete_schema, [NodeName]),
+    mnesia:delete_schema([node(), NodeName]),
     %% stop syn
+    syn:stop(),
     rpc:call(NodeName, syn, stop, []).

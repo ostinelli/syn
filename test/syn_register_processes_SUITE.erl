@@ -32,6 +32,7 @@
 -export([all/0]).
 -export([init_per_suite/1, end_per_suite/1]).
 -export([groups/0, init_per_group/2, end_per_group/2]).
+-export([init_per_testcase/2, end_per_testcase/2]).
 
 %% internal
 -export([process_main/0]).
@@ -41,6 +42,7 @@
     single_node_when_mnesia_is_ram_find_by_key/1,
     single_node_when_mnesia_is_ram_find_by_pid/1,
     single_node_when_mnesia_is_ram_re_register_error/1,
+    single_node_when_mnesia_is_ram_unregister/1,
     single_node_when_mnesia_is_disc_find_by_key/1
 ]).
 -export([
@@ -87,6 +89,7 @@ groups() ->
             single_node_when_mnesia_is_ram_find_by_key,
             single_node_when_mnesia_is_ram_find_by_pid,
             single_node_when_mnesia_is_ram_re_register_error,
+            single_node_when_mnesia_is_ram_unregister,
             single_node_when_mnesia_is_disc_find_by_key
         ]},
         {two_nodes_process_registration, [shuffle], [
@@ -141,13 +144,35 @@ init_per_group(_GroupName, Config) -> Config.
 %% -------------------------------------------------------------------
 end_per_group(two_nodes_mnesia_creation, Config) ->
     %% get slave node name
-    SlaveNodeName = proplists:get_value(slave_node_name, Config),
-    %% clean
-    syn_test_suite_helper:clean_after_test(SlaveNodeName),
+    SlaveNodeShortName = proplists:get_value(slave_node_short_name, Config),
     %% stop slave
-    syn_test_suite_helper:stop_slave(SlaveNodeName);
+    syn_test_suite_helper:stop_slave(SlaveNodeShortName);
 end_per_group(_GroupName, _Config) ->
-    syn_test_suite_helper:clean_after_test().
+    ok.
+
+% ----------------------------------------------------------------------------------------------------------
+% Function: init_per_testcase(TestCase, Config0) ->
+%				Config1 | {skip,Reason} | {skip_and_save,Reason,Config1}
+% TestCase = atom()
+% Config0 = Config1 = [tuple()]
+% Reason = term()
+% ----------------------------------------------------------------------------------------------------------
+init_per_testcase(_TestCase, Config) ->
+    Config.
+
+% ----------------------------------------------------------------------------------------------------------
+% Function: end_per_testcase(TestCase, Config0) ->
+%				void() | {save_config,Config1} | {fail,Reason}
+% TestCase = atom()
+% Config0 = Config1 = [tuple()]
+% Reason = term()
+% ----------------------------------------------------------------------------------------------------------
+end_per_testcase(_TestCase, Config) ->
+    %% get slave
+    case proplists:get_value(slave_node_name, Config) of
+        undefined -> syn_test_suite_helper:clean_after_test();
+        SlaveNodeName -> syn_test_suite_helper:clean_after_test(SlaveNodeName)
+    end.
 
 %% ===================================================================
 %% Tests
@@ -198,7 +223,7 @@ single_node_when_mnesia_is_ram_re_register_error(_Config) ->
     Pid2 = start_process(),
     %% register
     ok = syn:register(<<"my proc">>, Pid),
-    {error, already_taken} = syn:register(<<"my proc">>, Pid2),
+    {error, taken} = syn:register(<<"my proc">>, Pid2),
     %% retrieve
     Pid = syn:find_by_key(<<"my proc">>),
     %% kill process
@@ -215,6 +240,27 @@ single_node_when_mnesia_is_ram_re_register_error(_Config) ->
     timer:sleep(100),
     %% retrieve
     undefined = syn:find_by_pid(Pid).
+
+single_node_when_mnesia_is_ram_unregister(_Config) ->
+    %% set schema location
+    application:set_env(mnesia, schema_location, ram),
+    %% start
+    ok = syn:start(),
+    %% start process
+    Pid = start_process(),
+    %% unregister
+    {error, undefined} = syn:unregister(<<"my proc">>),
+    %% register
+    ok = syn:register(<<"my proc">>, Pid),
+    %% retrieve
+    Pid = syn:find_by_key(<<"my proc">>),
+    %% unregister
+    ok = syn:unregister(<<"my proc">>),
+    %% retrieve
+    undefined = syn:find_by_key(<<"my proc">>),
+    undefined = syn:find_by_pid(Pid),
+    %% kill process
+    kill_process(Pid).
 
 single_node_when_mnesia_is_disc_find_by_key(_Config) ->
     %% set schema location
