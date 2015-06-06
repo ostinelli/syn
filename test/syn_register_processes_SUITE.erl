@@ -139,7 +139,7 @@ init_per_group(_GroupName, Config) -> Config.
 %% GroupName = atom()
 %% Config0 = Config1 = [tuple()]
 %% -------------------------------------------------------------------
-end_per_group(two_nodes_mnesia_creation, Config) ->
+end_per_group(two_nodes_process_registration, Config) ->
     %% get slave node name
     SlaveNodeShortName = proplists:get_value(slave_node_short_name, Config),
     %% stop slave
