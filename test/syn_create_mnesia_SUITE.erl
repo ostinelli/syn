@@ -13,7 +13,10 @@
     single_node_when_mnesia_is_disc/1
 ]).
 -export([
-    two_nodes_when_mnesia_is_ram/1
+    two_nodes_when_mnesia_is_ram/1,
+    two_nodes_when_mnesia_is_opt_disc_no_schema_exists/1,
+    two_nodes_when_mnesia_is_opt_disc_schema_exists/1,
+    two_nodes_when_mnesia_is_disc/1
 ]).
 
 %% include
@@ -33,7 +36,8 @@
 %% -------------------------------------------------------------------
 all() ->
     [
-        {group, mnesia_creation_single_node}
+        {group, mnesia_creation_single_node},
+        {group, mnesia_creation_two_nodes}
     ].
 
 %% -------------------------------------------------------------------
@@ -55,6 +59,12 @@ groups() ->
             single_node_when_mnesia_is_opt_disc_no_schema_exists,
             single_node_when_mnesia_is_opt_disc_schema_exists,
             single_node_when_mnesia_is_disc
+        ]},
+        {mnesia_creation_two_nodes, [shuffle], [
+            two_nodes_when_mnesia_is_ram,
+            two_nodes_when_mnesia_is_opt_disc_no_schema_exists,
+            two_nodes_when_mnesia_is_opt_disc_schema_exists,
+            two_nodes_when_mnesia_is_disc
         ]}
     ].
 %% -------------------------------------------------------------------
@@ -67,7 +77,7 @@ groups() ->
 init_per_suite(Config) ->
     %% config
     [
-        {slave_node_bare_name, syn_slave}
+        {slave_node_short_name, syn_slave}
         | Config
     ].
 
@@ -85,6 +95,15 @@ end_per_suite(_Config) -> ok.
 %% Config0 = Config1 = [tuple()]
 %% Reason = term()
 %% -------------------------------------------------------------------
+init_per_group(mnesia_creation_two_nodes, Config) ->
+    %% get slave node short name
+    SlaveNodeShortName = proplists:get_value(slave_node_short_name, Config),
+    {ok, SlaveNodeName} = syn_test_suite_helper:start_slave(SlaveNodeShortName),
+    %% config
+    [
+        {slave_node_name, SlaveNodeName}
+        | Config
+    ];
 init_per_group(_GroupName, Config) -> Config.
 
 %% -------------------------------------------------------------------
@@ -93,6 +112,13 @@ init_per_group(_GroupName, Config) -> Config.
 %% GroupName = atom()
 %% Config0 = Config1 = [tuple()]
 %% -------------------------------------------------------------------
+end_per_group(mnesia_creation_two_nodes, Config) ->
+    %% get slave node name
+    SlaveNodeName = proplists:get_value(slave_node_name, Config),
+    %% clean
+    clean_after_test(SlaveNodeName),
+    %% stop slave
+    syn_test_suite_helper:stop_slave(SlaveNodeName);
 end_per_group(_GroupName, _Config) ->
     clean_after_test().
 
@@ -135,6 +161,70 @@ single_node_when_mnesia_is_disc(_Config) ->
     %% check table exists
     true = lists:member(syn_processes_table, mnesia:system_info(tables)).
 
+two_nodes_when_mnesia_is_ram(Config) ->
+    %% get slave
+    SlaveNodeName = proplists:get_value(slave_node_name, Config),
+    %% set schema location
+    application:set_env(mnesia, schema_location, ram),
+    rpc:call(SlaveNodeName, mnesia, schema_location, [ram]),
+    %% start
+    ok = syn:start(),
+    ok = rpc:call(SlaveNodeName, syn, start, []),
+    %% check table exists on local
+    true = lists:member(syn_processes_table, mnesia:system_info(tables)),
+    %% check table exists on remote
+    SlaveNodeMnesiaSystemInfo = rpc:call(SlaveNodeName, mnesia, system_info, [tables]),
+    true = rpc:call(SlaveNodeName, lists, member, [syn_processes_table, SlaveNodeMnesiaSystemInfo]).
+
+two_nodes_when_mnesia_is_opt_disc_no_schema_exists(Config) ->
+    %% get slave
+    SlaveNodeName = proplists:get_value(slave_node_name, Config),
+    %% set schema location
+    application:set_env(mnesia, schema_location, opt_disc),
+    rpc:call(SlaveNodeName, mnesia, schema_location, [opt_disc]),
+    %% start
+    ok = syn:start(),
+    ok = rpc:call(SlaveNodeName, syn, start, []),
+    %% check table exists on local
+    true = lists:member(syn_processes_table, mnesia:system_info(tables)),
+    %% check table exists on remote
+    SlaveNodeMnesiaSystemInfo = rpc:call(SlaveNodeName, mnesia, system_info, [tables]),
+    true = rpc:call(SlaveNodeName, lists, member, [syn_processes_table, SlaveNodeMnesiaSystemInfo]).
+
+two_nodes_when_mnesia_is_opt_disc_schema_exists(Config) ->
+    %% get slave
+    SlaveNodeName = proplists:get_value(slave_node_name, Config),
+    %% set schema location
+    application:set_env(mnesia, schema_location, opt_disc),
+    rpc:call(SlaveNodeName, mnesia, schema_location, [opt_disc]),
+    %% create schema
+    mnesia:create_schema([node(), SlaveNodeName]),
+    %% start
+    ok = syn:start(),
+    ok = rpc:call(SlaveNodeName, syn, start, []),
+    %% check table exists on local
+    true = lists:member(syn_processes_table, mnesia:system_info(tables)),
+    %% check table exists on remote
+    SlaveNodeMnesiaSystemInfo = rpc:call(SlaveNodeName, mnesia, system_info, [tables]),
+    true = rpc:call(SlaveNodeName, lists, member, [syn_processes_table, SlaveNodeMnesiaSystemInfo]).
+
+two_nodes_when_mnesia_is_disc(Config) ->
+    %% get slave
+    SlaveNodeName = proplists:get_value(slave_node_name, Config),
+    %% set schema location
+    application:set_env(mnesia, schema_location, disc),
+    rpc:call(SlaveNodeName, mnesia, schema_location, [disc]),
+    %% create schema
+    mnesia:create_schema([node(), SlaveNodeName]),
+    %% start
+    ok = syn:start(),
+    ok = rpc:call(SlaveNodeName, syn, start, []),
+    %% check table exists on local
+    true = lists:member(syn_processes_table, mnesia:system_info(tables)),
+    %% check table exists on remote
+    SlaveNodeMnesiaSystemInfo = rpc:call(SlaveNodeName, mnesia, system_info, [tables]),
+    true = rpc:call(SlaveNodeName, lists, member, [syn_processes_table, SlaveNodeMnesiaSystemInfo]).
+
 %% ===================================================================
 %% Internal
 %% ===================================================================
@@ -145,3 +235,12 @@ clean_after_test() ->
     mnesia:delete_schema([node()]),
     %% stop syn
     syn:stop().
+
+clean_after_test(SlaveNodeName) ->
+    clean_after_test(),
+    %% stop mnesia
+    rpc:call(SlaveNodeName, mnesia, stop, []),
+    %% delete schema
+    rpc:call(SlaveNodeName, mnesia, delete_schema, [SlaveNodeName]),
+    %% stop syn
+    rpc:call(SlaveNodeName, syn, stop, []).

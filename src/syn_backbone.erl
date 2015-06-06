@@ -105,6 +105,7 @@ initdb() ->
     %% ensure all nodes are added - this covers when mnesia is in ram only mode
     mnesia:change_config(extra_db_nodes, [node() | nodes()]),
     %% ensure table exists
+    CurrentNode = node(),
     case mnesia:create_table(syn_processes_table, [
         {type, set},
         {ram_copies, [node() | nodes()]},
@@ -118,6 +119,9 @@ initdb() ->
         {aborted, {already_exists, syn_processes_table}} ->
             %% table already exists, try to add current node as copy
             add_table_copy_to_local_node();
+        {aborted, {already_exists, syn_processes_table, CurrentNode}} ->
+            %% table already exists, try to add current node as copy
+            add_table_copy_to_local_node();
         Other ->
             error_logger:error_msg("Error while creating syn_processes_table: ~p", [Other]),
             {error, Other}
@@ -125,11 +129,15 @@ initdb() ->
 
 -spec add_table_copy_to_local_node() -> ok | {error, any()}.
 add_table_copy_to_local_node() ->
+    CurrentNode = node(),
     case mnesia:add_table_copy(syn_processes_table, node(), ram_copies) of
         {atomic, ok} ->
             error_logger:info_msg("Copy of syn_processes_table was successfully added to current node."),
             ok;
         {aborted, {already_exists, syn_processes_table}} ->
+            %% a copy of syn_processes_table is already added to current node
+            ok;
+        {aborted, {already_exists, syn_processes_table, CurrentNode}} ->
             %% a copy of syn_processes_table is already added to current node
             ok;
         {aborted, Reason} ->
