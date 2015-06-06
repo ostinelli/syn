@@ -30,6 +30,7 @@
 
 %% API
 -export([start_slave/1, stop_slave/1]).
+-export([clean_after_test/0, clean_after_test/1]).
 
 
 %% ===================================================================
@@ -47,3 +48,20 @@ start_slave(NodeShortName) ->
 
 stop_slave(NodeName) ->
     ct_slave:stop(NodeName).
+
+clean_after_test() ->
+    %% stop mnesia
+    mnesia:stop(),
+    %% delete schema
+    mnesia:delete_schema([node()]),
+    %% stop syn
+    syn:stop().
+
+clean_after_test(NodeName) ->
+    clean_after_test(),
+    %% stop mnesia
+    rpc:call(NodeName, mnesia, stop, []),
+    %% delete schema
+    rpc:call(NodeName, mnesia, delete_schema, [NodeName]),
+    %% stop syn
+    rpc:call(NodeName, syn, stop, []).

@@ -66,16 +66,21 @@ find_by_pid(Pid) ->
         _ -> undefined
     end.
 
--spec register(Key :: any(), Pid :: pid()) -> ok | {error, key_taken}.
+-spec register(Key :: any(), Pid :: pid()) -> ok | {error, already_taken}.
 register(Key, Pid) ->
-    %% add to table
-    mnesia:dirty_write(#syn_processes_table{
-        key = Key,
-        pid = Pid,
-        node = node()
-    }),
-    %% link
-    gen_server:call(?MODULE, {link_process, Pid}).
+    case find_by_key(Key) of
+        undefined ->
+            %% add to table
+            mnesia:dirty_write(#syn_processes_table{
+                key = Key,
+                pid = Pid,
+                node = node()
+            }),
+            %% link
+            gen_server:call(?MODULE, {link_process, Pid});
+        _ ->
+            {error, already_taken}
+    end.
 
 %% ===================================================================
 %% Callbacks

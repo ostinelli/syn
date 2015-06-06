@@ -144,11 +144,11 @@ end_per_group(two_nodes_mnesia_creation, Config) ->
     %% get slave node name
     SlaveNodeName = proplists:get_value(slave_node_name, Config),
     %% clean
-    clean_after_test(SlaveNodeName),
+    syn_test_suite_helper:clean_after_test(SlaveNodeName),
     %% stop slave
     syn_test_suite_helper:stop_slave(SlaveNodeName);
 end_per_group(_GroupName, _Config) ->
-    clean_after_test().
+    syn_test_suite_helper:clean_after_test().
 
 %% ===================================================================
 %% Tests
@@ -198,6 +198,7 @@ two_nodes_when_mnesia_is_ram(Config) ->
     %% start
     ok = syn:start(),
     ok = rpc:call(SlaveNodeName, syn, start, []),
+    timer:sleep(100),
     %% check table exists on local
     true = lists:member(syn_processes_table, mnesia:system_info(tables)),
     %% check table exists on remote
@@ -213,6 +214,7 @@ two_nodes_when_mnesia_is_opt_disc_no_schema_exists(Config) ->
     %% start
     ok = syn:start(),
     ok = rpc:call(SlaveNodeName, syn, start, []),
+    timer:sleep(100),
     %% check table exists on local
     true = lists:member(syn_processes_table, mnesia:system_info(tables)),
     %% check table exists on remote
@@ -230,6 +232,7 @@ two_nodes_when_mnesia_is_opt_disc_schema_exists(Config) ->
     %% start
     ok = syn:start(),
     ok = rpc:call(SlaveNodeName, syn, start, []),
+    timer:sleep(100),
     %% check table exists on local
     true = lists:member(syn_processes_table, mnesia:system_info(tables)),
     %% check table exists on remote
@@ -247,28 +250,9 @@ two_nodes_when_mnesia_is_disc(Config) ->
     %% start
     ok = syn:start(),
     ok = rpc:call(SlaveNodeName, syn, start, []),
+    timer:sleep(100),
     %% check table exists on local
     true = lists:member(syn_processes_table, mnesia:system_info(tables)),
     %% check table exists on remote
     SlaveNodeMnesiaSystemInfo = rpc:call(SlaveNodeName, mnesia, system_info, [tables]),
     true = rpc:call(SlaveNodeName, lists, member, [syn_processes_table, SlaveNodeMnesiaSystemInfo]).
-
-%% ===================================================================
-%% Internal
-%% ===================================================================
-clean_after_test() ->
-    %% stop mnesia
-    mnesia:stop(),
-    %% delete schema
-    mnesia:delete_schema([node()]),
-    %% stop syn
-    syn:stop().
-
-clean_after_test(SlaveNodeName) ->
-    clean_after_test(),
-    %% stop mnesia
-    rpc:call(SlaveNodeName, mnesia, stop, []),
-    %% delete schema
-    rpc:call(SlaveNodeName, mnesia, delete_schema, [SlaveNodeName]),
-    %% stop syn
-    rpc:call(SlaveNodeName, syn, stop, []).

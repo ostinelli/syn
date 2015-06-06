@@ -33,10 +33,19 @@
 -export([init_per_suite/1, end_per_suite/1]).
 -export([groups/0, init_per_group/2, end_per_group/2]).
 
+%% internal
+-export([process_main/0]).
+
 %% tests
 -export([
     single_node_when_mnesia_is_ram_find_by_key/1,
-    single_node_when_mnesia_is_ram_find_by_pid/1
+    single_node_when_mnesia_is_ram_find_by_pid/1,
+    single_node_when_mnesia_is_ram_re_register_error/1,
+    single_node_when_mnesia_is_disc_find_by_key/1
+]).
+-export([
+    two_nodes_when_mnesia_is_ram_find_by_key/1,
+    two_nodes_when_mnesia_is_disc_find_by_pid/1
 ]).
 
 %% include
@@ -56,7 +65,8 @@
 %% -------------------------------------------------------------------
 all() ->
     [
-        {group, single_node_process_registration}
+        {group, single_node_process_registration},
+        {group, two_nodes_process_registration}
     ].
 
 %% -------------------------------------------------------------------
@@ -75,7 +85,13 @@ groups() ->
     [
         {single_node_process_registration, [shuffle], [
             single_node_when_mnesia_is_ram_find_by_key,
-            single_node_when_mnesia_is_ram_find_by_pid
+            single_node_when_mnesia_is_ram_find_by_pid,
+            single_node_when_mnesia_is_ram_re_register_error,
+            single_node_when_mnesia_is_disc_find_by_key
+        ]},
+        {two_nodes_process_registration, [shuffle], [
+            two_nodes_when_mnesia_is_ram_find_by_key,
+            two_nodes_when_mnesia_is_disc_find_by_pid
         ]}
     ].
 %% -------------------------------------------------------------------
@@ -106,6 +122,15 @@ end_per_suite(_Config) -> ok.
 %% Config0 = Config1 = [tuple()]
 %% Reason = term()
 %% -------------------------------------------------------------------
+init_per_group(two_nodes_process_registration, Config) ->
+    %% get slave node short name
+    SlaveNodeShortName = proplists:get_value(slave_node_short_name, Config),
+    {ok, SlaveNodeName} = syn_test_suite_helper:start_slave(SlaveNodeShortName),
+    %% config
+    [
+        {slave_node_name, SlaveNodeName}
+        | Config
+    ];
 init_per_group(_GroupName, Config) -> Config.
 
 %% -------------------------------------------------------------------
@@ -114,8 +139,15 @@ init_per_group(_GroupName, Config) -> Config.
 %% GroupName = atom()
 %% Config0 = Config1 = [tuple()]
 %% -------------------------------------------------------------------
+end_per_group(two_nodes_mnesia_creation, Config) ->
+    %% get slave node name
+    SlaveNodeName = proplists:get_value(slave_node_name, Config),
+    %% clean
+    syn_test_suite_helper:clean_after_test(SlaveNodeName),
+    %% stop slave
+    syn_test_suite_helper:stop_slave(SlaveNodeName);
 end_per_group(_GroupName, _Config) ->
-    clean_after_test().
+    syn_test_suite_helper:clean_after_test().
 
 %% ===================================================================
 %% Tests
@@ -130,7 +162,7 @@ single_node_when_mnesia_is_ram_find_by_key(_Config) ->
     %% retrieve
     undefined = syn:find_by_key(<<"my proc">>),
     %% register
-    syn:register(<<"my proc">>, Pid),
+    ok = syn:register(<<"my proc">>, Pid),
     %% retrieve
     Pid = syn:find_by_key(<<"my proc">>),
     %% kill process
@@ -147,7 +179,7 @@ single_node_when_mnesia_is_ram_find_by_pid(_Config) ->
     %% start process
     Pid = start_process(),
     %% register
-    syn:register(<<"my proc">>, Pid),
+    ok = syn:register(<<"my proc">>, Pid),
     %% retrieve
     <<"my proc">> = syn:find_by_pid(Pid),
     %% kill process
@@ -156,17 +188,111 @@ single_node_when_mnesia_is_ram_find_by_pid(_Config) ->
     %% retrieve
     undefined = syn:find_by_pid(Pid).
 
+single_node_when_mnesia_is_ram_re_register_error(_Config) ->
+    %% set schema location
+    application:set_env(mnesia, schema_location, ram),
+    %% start
+    ok = syn:start(),
+    %% start process
+    Pid = start_process(),
+    Pid2 = start_process(),
+    %% register
+    ok = syn:register(<<"my proc">>, Pid),
+    {error, already_taken} = syn:register(<<"my proc">>, Pid2),
+    %% retrieve
+    Pid = syn:find_by_key(<<"my proc">>),
+    %% kill process
+    kill_process(Pid),
+    timer:sleep(100),
+    %% retrieve
+    undefined = syn:find_by_key(<<"my proc">>),
+    %% reuse
+    ok = syn:register(<<"my proc">>, Pid2),
+    %% retrieve
+    Pid2 = syn:find_by_key(<<"my proc">>),
+    %% kill process
+    kill_process(Pid),
+    timer:sleep(100),
+    %% retrieve
+    undefined = syn:find_by_pid(Pid).
+
+single_node_when_mnesia_is_disc_find_by_key(_Config) ->
+    %% set schema location
+    application:set_env(mnesia, schema_location, disc),
+    %% create schema
+    mnesia:create_schema([node()]),
+    %% start
+    ok = syn:start(),
+    %% start process
+    Pid = start_process(),
+    %% retrieve
+    undefined = syn:find_by_key(<<"my proc">>),
+    %% register
+    ok = syn:register(<<"my proc">>, Pid),
+    %% retrieve
+    Pid = syn:find_by_key(<<"my proc">>),
+    %% kill process
+    kill_process(Pid),
+    timer:sleep(100),
+    %% retrieve
+    undefined = syn:find_by_key(<<"my proc">>).
+
+two_nodes_when_mnesia_is_ram_find_by_key(Config) ->
+    %% get slave
+    SlaveNodeName = proplists:get_value(slave_node_name, Config),
+    %% set schema location
+    application:set_env(mnesia, schema_location, ram),
+    rpc:call(SlaveNodeName, mnesia, schema_location, [ram]),
+    %% start
+    ok = syn:start(),
+    ok = rpc:call(SlaveNodeName, syn, start, []),
+    timer:sleep(100),
+    %% start process
+    Pid = start_process(),
+    %% retrieve
+    undefined = syn:find_by_key(<<"my proc">>),
+    undefined = rpc:call(SlaveNodeName, syn, find_by_key, [<<"my proc">>]),
+    %% register
+    ok = syn:register(<<"my proc">>, Pid),
+    %% retrieve
+    Pid = syn:find_by_key(<<"my proc">>),
+    Pid = rpc:call(SlaveNodeName, syn, find_by_key, [<<"my proc">>]),
+    %% kill process
+    kill_process(Pid),
+    timer:sleep(100),
+    %% retrieve
+    undefined = syn:find_by_key(<<"my proc">>),
+    undefined = rpc:call(SlaveNodeName, syn, find_by_key, [<<"my proc">>]).
+
+two_nodes_when_mnesia_is_disc_find_by_pid(Config) ->
+    %% get slave
+    SlaveNodeName = proplists:get_value(slave_node_name, Config),
+    %% set schema location
+    application:set_env(mnesia, schema_location, disc),
+    rpc:call(SlaveNodeName, mnesia, schema_location, [disc]),
+    %% create schema
+    mnesia:create_schema([node(), SlaveNodeName]),
+    %% start
+    ok = syn:start(),
+    ok = rpc:call(SlaveNodeName, syn, start, []),
+    timer:sleep(100),
+    %% start process
+    Pid = start_process(),
+    %% register
+    ok = syn:register(<<"my proc">>, Pid),
+    %% retrieve
+    <<"my proc">> = syn:find_by_pid(Pid),
+    <<"my proc">> = rpc:call(SlaveNodeName, syn, find_by_pid, [Pid]),
+    %% kill process
+    kill_process(Pid),
+    timer:sleep(100),
+    %% retrieve
+    undefined = syn:find_by_pid(Pid),
+    undefined = rpc:call(SlaveNodeName, syn, find_by_pid, [Pid]).
+
 %% ===================================================================
 %% Internal
 %% ===================================================================
-clean_after_test() ->
-    %% stop mnesia
-    mnesia:stop(),
-    %% delete schema
-    mnesia:delete_schema([node()]),
-    %% stop syn
-    syn:stop().
-
 start_process() ->
     Pid = spawn(?MODULE, process_main, []),
     Pid.
