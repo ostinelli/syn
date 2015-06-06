@@ -1,0 +1,15 @@
+{application, syn,
+    [
+        {description, "A global process registry."},
+        {vsn, "0.1.0"},
+        {registered, [
+        ]},
+        {applications, [
+            kernel,
+            stdlib,
+            mnesia
+        ]},
+        {mod, {syn_app, []}},
+        {env, []}
+    ]
+}.
