@@ -36,8 +36,8 @@
 %% -------------------------------------------------------------------
 all() ->
     [
-        {group, mnesia_creation_single_node},
-        {group, mnesia_creation_two_nodes}
+        {group, single_node_mnesia_creation},
+        {group, two_nodes_mnesia_creation}
     ].
 
 %% -------------------------------------------------------------------
@@ -54,13 +54,13 @@ all() ->
 %% -------------------------------------------------------------------
 groups() ->
     [
-        {mnesia_creation_single_node, [shuffle], [
+        {single_node_mnesia_creation, [shuffle], [
             single_node_when_mnesia_is_ram,
             single_node_when_mnesia_is_opt_disc_no_schema_exists,
             single_node_when_mnesia_is_opt_disc_schema_exists,
             single_node_when_mnesia_is_disc
         ]},
-        {mnesia_creation_two_nodes, [shuffle], [
+        {two_nodes_mnesia_creation, [shuffle], [
             two_nodes_when_mnesia_is_ram,
             two_nodes_when_mnesia_is_opt_disc_no_schema_exists,
             two_nodes_when_mnesia_is_opt_disc_schema_exists,
@@ -95,7 +95,7 @@ end_per_suite(_Config) -> ok.
 %% Config0 = Config1 = [tuple()]
 %% Reason = term()
 %% -------------------------------------------------------------------
-init_per_group(mnesia_creation_two_nodes, Config) ->
+init_per_group(two_nodes_mnesia_creation, Config) ->
     %% get slave node short name
     SlaveNodeShortName = proplists:get_value(slave_node_short_name, Config),
     {ok, SlaveNodeName} = syn_test_suite_helper:start_slave(SlaveNodeShortName),
@@ -112,7 +112,7 @@ init_per_group(_GroupName, Config) -> Config.
 %% GroupName = atom()
 %% Config0 = Config1 = [tuple()]
 %% -------------------------------------------------------------------
-end_per_group(mnesia_creation_two_nodes, Config) ->
+end_per_group(two_nodes_mnesia_creation, Config) ->
     %% get slave node name
     SlaveNodeName = proplists:get_value(slave_node_name, Config),
     %% clean
