@@ -3,6 +3,8 @@
 
 %% API
 -export([start_link/0]).
+-export([register/2]).
+-export([find_by_key/1, find_by_pid/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
@@ -22,6 +24,31 @@ start_link() ->
     Options = [],
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], Options).
 
+-spec find_by_key(Key :: any()) -> pid() | undefined.
+find_by_key(Key) ->
+    case mnesia:dirty_read(syn_processes_table, Key) of
+        [Process] -> return_pid_if_on_connected_node(Process);
+        _ -> undefined
+    end.
+
+-spec find_by_pid(Pid :: pid()) -> Key :: any() | undefined.
+find_by_pid(Pid) ->
+    case mnesia:dirty_index_read(syn_processes_table, Pid, #syn_processes_table.pid) of
+        [Process] -> return_key_if_on_connected_node(Process);
+        _ -> undefined
+    end.
+
+-spec register(Key :: any(), Pid :: pid()) -> ok | {error, key_taken}.
+register(Key, Pid) ->
+    %% add to table
+    mnesia:dirty_write(#syn_processes_table{
+        key = Key,
+        pid = Pid,
+        node = node()
+    }),
+    %% link
+    gen_server:call(?MODULE, {link_process, Pid}).
+
 %% ===================================================================
 %% Callbacks
 %% ===================================================================
@@ -35,6 +62,8 @@ start_link() ->
     ignore |
     {stop, Reason :: any()}.
 init([]) ->
+    %% trap linked processes signal
+    process_flag(trap_exit, true),
     %% init
     case initdb() of
         ok ->
@@ -53,6 +82,10 @@ init([]) ->
     {noreply, #state{}, Timeout :: non_neg_integer()} |
     {stop, Reason :: any(), Reply :: any(), #state{}} |
     {stop, Reason :: any(), #state{}}.
+
+handle_call({link_process, Pid}, _From, State) ->
+    erlang:link(Pid),
+    {reply, ok, State};
 
 handle_call(Request, From, State) ->
     error_logger:warning_msg("Received from ~p an unknown call message: ~p", [Request, From]),
@@ -77,6 +110,30 @@ handle_cast(Msg, State) ->
     {noreply, #state{}} |
     {noreply, #state{}, Timeout :: non_neg_integer()} |
     {stop, Reason :: any(), #state{}}.
+
+handle_info({'EXIT', Pid, Reason}, State) ->
+    %% do not lock backbone
+    spawn(fun() ->
+        %% check if pid is in table
+        case find_by_pid(Pid) of
+            undefined ->
+                case Reason of
+                    normal -> ok;
+                    _ -> error_logger:warning_msg("Received a crash message from an unlinked process ~p with reason: ~p", [Pid, Reason])
+                end;
+            Key ->
+                %% delete from table
+                remove_process_by_key(Key),
+                %% log
+                case Reason of
+                    normal -> ok;
+                    killed -> ok;
+                    _ -> error_logger:error_msg("Process with key ~p crashed with reason: ~p", [Key, Reason])
+                end
+        end
+    end),
+    %% return
+    {noreply, State};
 
 handle_info(Info, State) ->
     error_logger:warning_msg("Received an unknown info message: ~p", [Info]),
@@ -144,3 +201,21 @@ add_table_copy_to_local_node() ->
             error_logger:error_msg("Error while creating copy of syn_processes_table: ~p", [Reason]),
             {error, Reason}
     end.
+
+-spec return_pid_if_on_connected_node(Process :: #syn_processes_table{}) -> pid() | undefined.
+return_pid_if_on_connected_node(Process) ->
+    case lists:member(Process#syn_processes_table.node, [node() | nodes()]) of
+        true -> Process#syn_processes_table.pid;
+        _ -> undefined
+    end.
+
+-spec return_key_if_on_connected_node(Process :: #syn_processes_table{}) -> pid() | undefined.
+return_key_if_on_connected_node(Process) ->
+    case lists:member(Process#syn_processes_table.node, [node() | nodes()]) of
+        true -> Process#syn_processes_table.key;
+        _ -> undefined
+    end.
+
+-spec remove_process_by_key(Key :: any()) -> ok.
+remove_process_by_key(Key) ->
+    mnesia:dirty_delete(syn_processes_table, Key).
