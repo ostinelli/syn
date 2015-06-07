@@ -193,12 +193,14 @@ automerge(RemoteNode, ConflictingMode, Message) ->
 
 -spec check_stitch(RemoteNode :: atom(), ConflictingMode :: kill | send_message, Message :: any()) -> ok.
 check_stitch(RemoteNode, ConflictingMode, Message) ->
-    case lists:member(RemoteNode, mnesia:system_info(running_db_nodes)) of
+    case catch lists:member(RemoteNode, mnesia:system_info(running_db_nodes)) of
         true ->
             ok;
         false ->
             stitch(RemoteNode, ConflictingMode, Message),
-            ok
+            ok;
+        Error ->
+            error_logger:error_msg("Could not check if node is stiched: ~p~n", [Error])
     end.
 
 -spec stitch(RemoteNode :: atom(), ConflictingMode :: kill | send_message, Message :: any()) ->
