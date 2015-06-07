@@ -91,9 +91,9 @@ Processes are automatically monitored and removed from the registry if they die.
 ### Conflict resolution
 After a net split, when nodes reconnect, Syn will merge the data from all the nodes in the cluster.
 
-If the same Key was used to register a process on different nodes during a net split, then there will be a conflict. By default, Syn will kill the processes of the node the conflict is being resolved on. By default, the killing of the unwanted process happens by sending a `kill` signal with `exit(Pid, kill)`.
+If the same Key was used to register a process on different nodes during a net split, then there will be a conflict. By default, Syn will discard the processes running on the node the conflict is being resolved on, and will kill it by sending a `kill` signal with `exit(Pid, kill)`.
 
-If this is not desired, you can change the `netsplit_conflicting_mode` to send a message to the discarded process, so that you can trigger any actions on that process (such as a graceful shutdown).
+If this is not desired, you can change the option `netsplit_conflicting_mode` to instruct Syn to send a message to the discarded process, so that you can trigger any actions on that process (such as a graceful shutdown).
 
 To do so, you can use the `syn:options/1` method.
 
@@ -114,7 +114,7 @@ syn:options([
 ]).
 ```
 
-If instead you want theto ensure an `exit` signal is sent to the discarded process:
+If instead you want to ensure that an `exit(Pid, kill)` signal is sent to the discarded process:
 
 ```erlang
 syn:options([

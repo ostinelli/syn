@@ -86,7 +86,6 @@ start_process() ->
     Pid.
 
 start_process(NodeName) ->
-%%     Pid = rpc:call(NodeName, erlang, spawn, [?MODULE, process_main, []]),
     Pid = spawn(NodeName, ?MODULE, process_main, []),
     Pid.
 
