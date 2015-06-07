@@ -38,9 +38,13 @@
 %% internal
 -export([get_processes_info_of_node/1]).
 -export([write_processes_info_to_node/2]).
+-export([conflicting_mode/1]).
 
 %% records
--record(state, {}).
+-record(state, {
+    conflicting_mode = kill :: kill | send_message,
+    message = undefined :: any()
+}).
 
 %% include
 -include("syn.hrl").
@@ -53,6 +57,11 @@
 start_link() ->
     Options = [],
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], Options).
+
+-spec conflicting_mode(undefined | kill | {send_message, any()}) -> ok.
+conflicting_mode(undefined) -> ok;
+conflicting_mode(kill) -> gen_server:call(?MODULE, {conflicting_mode, kill});
+conflicting_mode({send_message, Message}) -> gen_server:call(?MODULE, {conflicting_mode, {send_message, Message}}).
 
 %% ===================================================================
 %% Callbacks
@@ -71,6 +80,7 @@ init([]) ->
     process_flag(trap_exit, true),
     %% monitor mnesia events
     mnesia:subscribe(system),
+    %% init state
     {ok, #state{}}.
 
 %% ----------------------------------------------------------------------------------------------------------
@@ -84,6 +94,16 @@ init([]) ->
     {stop, Reason :: any(), Reply :: any(), #state{}} |
     {stop, Reason :: any(), #state{}}.
 
+handle_call({conflicting_mode, kill}, _From, State) ->
+    {reply, ok, State#state{
+        conflicting_mode = kill,
+        message = undefined
+    }};
+handle_call({conflicting_mode, {send_message, Message}}, _From, State) ->
+    {reply, ok, State#state{
+        conflicting_mode = send_message,
+        message = Message
+    }};
 handle_call(Request, From, State) ->
     error_logger:warning_msg("Received from ~p an unknown call message: ~p~n", [Request, From]),
     {reply, undefined, State}.
@@ -108,9 +128,12 @@ handle_cast(Msg, State) ->
     {noreply, #state{}, Timeout :: non_neg_integer()} |
     {stop, Reason :: any(), #state{}}.
 
-handle_info({mnesia_system_event, {inconsistent_database, Context, Node}}, State) ->
+handle_info({mnesia_system_event, {inconsistent_database, Context, Node}}, #state{
+    conflicting_mode = ConflictingMode,
+    message = Message
+} = State) ->
     error_logger:warning_msg("MNESIA signalled an inconsistent database on node: ~p with context: ~p, initiating automerge~n", [Node, Context]),
-    automerge(Node),
+    automerge(Node, ConflictingMode, Message),
     {noreply, State};
 
 handle_info({mnesia_system_event, {mnesia_down, Node}}, State) when Node =/= node() ->
@@ -159,54 +182,65 @@ delete_pids_of_disconnected_node(Node) ->
         lists:foreach(DelF, NodePids)
     end).
 
--spec automerge(RemoteNode :: atom()) -> ok.
-automerge(RemoteNode) ->
+-spec automerge(RemoteNode :: atom(), ConflictingMode :: kill | send_message, Message :: any()) -> ok.
+automerge(RemoteNode, ConflictingMode, Message) ->
     global:trans({{?MODULE, automerge}, self()},
         fun() ->
             error_logger:warning_msg("AUTOMERGE starting for remote node ~s (global lock is set)~n", [RemoteNode]),
-            check_stitch(RemoteNode),
+            check_stitch(RemoteNode, ConflictingMode, Message),
             error_logger:warning_msg("AUTOMERGE done (global lock will be unset)~n")
         end).
 
--spec check_stitch(RemoteNode :: atom()) -> ok.
-check_stitch(RemoteNode) ->
+-spec check_stitch(RemoteNode :: atom(), ConflictingMode :: kill | send_message, Message :: any()) -> ok.
+check_stitch(RemoteNode, ConflictingMode, Message) ->
     case lists:member(RemoteNode, mnesia:system_info(running_db_nodes)) of
         true ->
             ok;
         false ->
-            stitch(RemoteNode),
+            stitch(RemoteNode, ConflictingMode, Message),
             ok
     end.
 
--spec stitch(RemoteNode :: atom()) -> {'ok', any()} | {'error', any()}.
-stitch(RemoteNode) ->
+-spec stitch(RemoteNode :: atom(), ConflictingMode :: kill | send_message, Message :: any()) ->
+    {'ok', any()} | {'error', any()}.
+stitch(RemoteNode, ConflictingMode, Message) ->
     mnesia_controller:connect_nodes(
         [RemoteNode],
         fun(MergeF) ->
             catch case MergeF([syn_processes_table]) of
                 {merged, _, _} = Res ->
-                    stitch_tab(RemoteNode),
+                    stitch_tab(RemoteNode, ConflictingMode, Message),
                     Res;
                 Other ->
                     Other
             end
         end).
 
--spec stitch_tab(RemoteNode :: atom()) -> ok.
-stitch_tab(RemoteNode) ->
+-spec stitch_tab(RemoteNode :: atom(), ConflictingMode :: kill | send_message, Message :: any()) -> ok.
+stitch_tab(RemoteNode, ConflictingMode, Message) ->
     %% get remote processes info
     RemoteProcessesInfo = rpc:call(RemoteNode, ?MODULE, get_processes_info_of_node, [RemoteNode]),
     %% get local processes info
     LocalProcessesInfo = get_processes_info_of_node(node()),
     %% purge doubles (if any)
-    {LocalProcessesInfo1, RemoteProcessesInfo1} = purge_double_processes_from_local_node(LocalProcessesInfo, RemoteProcessesInfo),
+    {LocalProcessesInfo1, RemoteProcessesInfo1} = purge_double_processes_from_local_node(
+        LocalProcessesInfo,
+        RemoteProcessesInfo,
+        ConflictingMode,
+        Message
+    ),
     %% write
     write_remote_processes_to_local(RemoteNode, RemoteProcessesInfo1),
     write_local_processes_to_remote(RemoteNode, LocalProcessesInfo1).
 
--spec purge_double_processes_from_local_node(LocalProcessesInfo :: list(), RemoteProcessesInfo :: list()) ->
+-spec purge_double_processes_from_local_node(
+    LocalProcessesInfo :: list(),
+    RemoteProcessesInfo :: list(),
+    ConflictingMode :: kill | send_message,
+    Message :: any()
+) ->
     {LocalProcessesInfo :: list(), RemoteProcessesInfo :: list()}.
-purge_double_processes_from_local_node(LocalProcessesInfo, RemoteProcessesInfo) ->
+purge_double_processes_from_local_node(LocalProcessesInfo, RemoteProcessesInfo, ConflictingMode, Message) ->
     %% create ETS table
     Tab = ets:new(syn_automerge_doubles_table, [set]),
 
@@ -223,8 +257,11 @@ purge_double_processes_from_local_node(LocalProcessesInfo, RemoteProcessesInfo) 
                 mnesia:dirty_delete(syn_processes_table, Key),
                 %% remove it from ETS
                 ets:delete(Tab, Key),
-                %% kill the process
-                exit(LocalProcessPid, kill)
+                %% kill or send message
+                case ConflictingMode of
+                    kill -> exit(LocalProcessPid, kill);
+                    send_message -> LocalProcessPid ! Message
+                end
         end
     end,
     lists:foreach(F, RemoteProcessesInfo),

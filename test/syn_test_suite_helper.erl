@@ -95,5 +95,5 @@ kill_process(Pid) ->
 
 process_main() ->
     receive
-        shutdown -> ok
+        {From, shutdown} -> From ! {self(), terminated}
     end.

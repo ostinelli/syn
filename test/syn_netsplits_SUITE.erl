@@ -36,7 +36,8 @@
 %% tests
 -export([
     two_nodes_netsplit_when_there_are_no_conflicts/1,
-    two_nodes_netsplit_when_there_are_conflicts/1
+    two_nodes_netsplit_kill_resolution_when_there_are_conflicts/1,
+    two_nodes_netsplit_message_resolution_when_there_are_conflicts/1
 ]).
 
 %% include
@@ -75,7 +76,8 @@ groups() ->
     [
         {two_nodes_netsplits, [shuffle], [
             two_nodes_netsplit_when_there_are_no_conflicts,
-            two_nodes_netsplit_when_there_are_conflicts
+            two_nodes_netsplit_kill_resolution_when_there_are_conflicts,
+            two_nodes_netsplit_message_resolution_when_there_are_conflicts
         ]}
     ].
 %% -------------------------------------------------------------------
@@ -229,7 +231,7 @@ two_nodes_netsplit_when_there_are_no_conflicts(Config) ->
     syn_test_suite_helper:kill_process(SlavePidLocal),
     syn_test_suite_helper:kill_process(SlavePidSlave).
 
-two_nodes_netsplit_when_there_are_conflicts(Config) ->
+two_nodes_netsplit_kill_resolution_when_there_are_conflicts(Config) ->
     %% get slave
     SlaveNodeName = proplists:get_value(slave_node_name, Config),
     CurrentNode = node(),
@@ -273,8 +275,69 @@ two_nodes_netsplit_when_there_are_conflicts(Config) ->
 
     %% check process
     FoundPid = syn:find_by_key(conflicting_key),
-
     true = lists:member(FoundPid, [LocalPid, SlavePid]),
+
+    %% kill processes
+    syn_test_suite_helper:kill_process(LocalPid),
+    syn_test_suite_helper:kill_process(SlavePid).
+
+two_nodes_netsplit_message_resolution_when_there_are_conflicts(Config) ->
+    %% get slave
+    SlaveNodeName = proplists:get_value(slave_node_name, Config),
+    CurrentNode = node(),
+
+    %% set resolution by message shutdown
+    syn:options([{netsplit_conflicting_mode, {send_message, {self(), shutdown}}}]),
+
+    %% start processes
+    LocalPid = syn_test_suite_helper:start_process(),
+    SlavePid = syn_test_suite_helper:start_process(SlaveNodeName),
+
+    %% register
+    ok = syn:register(conflicting_key, SlavePid),
+    timer:sleep(100),
+
+    %% check tables
+    1 = mnesia:table_info(syn_processes_table, size),
+    1 = rpc:call(SlaveNodeName, mnesia, table_info, [syn_processes_table, size]),
+
+    %% check process
+    SlavePid = syn:find_by_key(conflicting_key),
+
+    %% simulate net split
+    syn_test_suite_helper:disconnect_node(SlaveNodeName),
+    timer:sleep(1000),
+
+    %% check tables
+    0 = mnesia:table_info(syn_processes_table, size),
+    [CurrentNode] = mnesia:table_info(syn_processes_table, active_replicas),
+
+    %% now register the local pid with the same key
+    ok = syn:register(conflicting_key, LocalPid),
+
+    %% check process
+    LocalPid = syn:find_by_key(conflicting_key),
+
+    %% reconnect
+    syn_test_suite_helper:connect_node(SlaveNodeName),
+    timer:sleep(1000),
+
+    %% check tables
+    1 = mnesia:table_info(syn_processes_table, size),
+    1 = rpc:call(SlaveNodeName, mnesia, table_info, [syn_processes_table, size]),
+
+    %% check process
+    FoundPid = syn:find_by_key(conflicting_key),
+    true = lists:member(FoundPid, [LocalPid, SlavePid]),
+
+    %% check message received from killed pid
+    KilledPid = lists:nth(1, lists:delete(FoundPid, [LocalPid, SlavePid])),
+    receive
+        {KilledPid, terminated} -> ok;
+        Other -> ct:pal("WUT?? ~p", [Other])
+    after 5 ->
+        ok = not_received
+    end,
 
     %% kill processes
     syn_test_suite_helper:kill_process(LocalPid),

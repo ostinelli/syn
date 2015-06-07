@@ -48,13 +48,42 @@ syn:start().
 To register a process:
 
 ```erlang
-syn:register(Key, Port)
+syn:register(Key, Pid) -> ok | {error, Error}.
+
+Types:
+	Key = any()
+	Pid = pid()
+	Error = taken
 ```
 
-To retrieve a Pid for a Key:
+To retrieve a Pid from a Key:
 
 ```erlang
-syn:find(Key)
+syn:find_by_key(Key) -> Pid | undefined.
+
+Types:
+	Key = any()
+	Pid = pid()
+```
+
+To retrieve a Key from a Pid:
+
+```erlang
+syn:find_by_pid(Pid) -> Key | undefined.
+
+Types:
+	Pid = pid()
+	Key = any()
+```
+
+To unregister a previously a Key:
+
+```erlang
+syn:unregister(Key) -> ok | {error, Error}.
+
+Types:
+	Key = any()
+	Error = undefined
 ```
 
 Processes are automatically monitored and removed from the registry if they die.
@@ -62,38 +91,38 @@ Processes are automatically monitored and removed from the registry if they die.
 ### Conflict resolution
 After a net split, when nodes reconnect, Syn will merge the data from all the nodes in the cluster.
 
-If the same Key was used to register a process on different nodes during a net split, then there will be a conflict. By default, Syn will kill the processes of the node the conflict is being resolved on. The killing of the unwanted process happens by sending a `kill` signal with `exit(Pid, kill)`.
+If the same Key was used to register a process on different nodes during a net split, then there will be a conflict. By default, Syn will kill the processes of the node the conflict is being resolved on. By default, the killing of the unwanted process happens by sending a `kill` signal with `exit(Pid, kill)`.
 
-If this is not desired, you can set a resolve callback function to be called for the conflicting items. The resolve function is defined as follows:
+If this is not desired, you can change the `netsplit_conflicting_mode` to send a message to the discarded process, so that you can trigger any actions on that process (such as a graceful shutdown).
 
-```erlang
-ResolveFun = fun((Key, {LocalPid, LocalNode}, {RemotePid, RemoteNode}) -> ChosenPid)
-Key = term()
-LocalPid = RemotePid = ChosenPid = pid()
-LocalNode = RemoteNode = atom()
-```
-
-Where:
-  * `Key` is the conflicting Key.
-  * `LocalPid` is the Pid of the process running on the node where the conflict resolution is running (i.e. `LocalNode`, which corresponds to the value returned by `node/1`).
-  * `RemotePid` and `RemoteNode` are the Pid and Node of the other conflicting process.
-
-Once the resolve function is defined, you can set it with `syn:resolve_fun/1`.
-
-The following is an example on how to set a resolve function to choose the process running on the remote node, and send a graceful `shutdown` signal to the local process instead of the abrupt killing of the process.
+To do so, you can use the `syn:options/1` method.
 
 ```erlang
-%% define the resolve fun
-ResolveFun = fun(_Key, {LocalPid, _LocalNode}, {RemotePid, _RemoteNode}) ->
-	%% send a shutdown message to the local pid
-	LocalPid ! shutdown,
-	%% select to keep the remote process
-	RemotePid
-end,
+syn:options(SynOptions) -> ok.
 
-%% set the fun
-syn:resolve_fun(ResolveFun).
+Types:
+	SynOptions = [SynOption]
+	SynOption = NetsplitConflictingMode
+	NetsplitConflictingMode = {netsplit_conflicting_mode, kill | {send_message, any()}}
 ```
+
+For example, if you want the message `shutdown` to be send to the discarded process:
+
+```erlang
+syn:options([
+	{netsplit_conflicting_mode, {send_message, shutdown}}
+]).
+```
+
+If instead you want theto ensure an `exit` signal is sent to the discarded process:
+
+```erlang
+syn:options([
+	{netsplit_conflicting_mode, kill}
+]).
+```
+
+This is the default, so you do not have to specify this behavior if you haven't changed it.
 
 ## Internals
 Under the hood, Syn performs dirty reads and writes into a distributed in-memory Mnesia table, synchronized across nodes.

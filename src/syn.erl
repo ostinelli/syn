@@ -32,6 +32,7 @@
 -export([start/0, stop/0]).
 -export([register/2, unregister/1]).
 -export([find_by_key/1, find_by_pid/1]).
+-export([options/1]).
 
 
 %% ===================================================================
@@ -47,7 +48,7 @@ start() ->
 stop() ->
     ok = application:stop(syn).
 
--spec register(Key :: any(), Pid :: pid()) -> ok | {error, key_taken}.
+-spec register(Key :: any(), Pid :: pid()) -> ok | {error, taken}.
 register(Key, Pid) ->
     syn_backbone:register(Key, Pid).
 
@@ -62,3 +63,15 @@ find_by_key(Key) ->
 -spec find_by_pid(Pid :: pid()) -> Key :: any() | undefined.
 find_by_pid(Pid) ->
     syn_backbone:find_by_pid(Pid).
+
+-spec options(list()) -> ok.
+options(Options) ->
+    %% send message
+    case proplists:get_value(netsplit_conflicting_mode, Options) of
+        undefined ->
+            ok;
+        kill ->
+            syn_netsplits:conflicting_mode(kill);
+        {send_message, Message} ->
+            syn_netsplits:conflicting_mode({send_message, Message})
+    end.
