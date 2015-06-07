@@ -169,6 +169,7 @@ handle_info({'EXIT', Pid, Reason}, State) ->
             undefined ->
                 case Reason of
                     normal -> ok;
+                    killed -> ok;
                     _ ->
                         error_logger:warning_msg("Received a crash message from an unlinked process ~p with reason: ~p~n", [Pid, Reason])
                 end;
