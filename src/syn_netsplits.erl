@@ -31,6 +31,7 @@
 
 %% API
 -export([start_link/0]).
+-export([conflicting_mode/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
@@ -38,7 +39,6 @@
 %% internal
 -export([get_processes_info_of_node/1]).
 -export([write_processes_info_to_node/2]).
--export([conflicting_mode/1]).
 
 %% records
 -record(state, {
@@ -58,10 +58,11 @@ start_link() ->
     Options = [],
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], Options).
 
--spec conflicting_mode(undefined | kill | {send_message, any()}) -> ok.
-conflicting_mode(undefined) -> ok;
-conflicting_mode(kill) -> gen_server:call(?MODULE, {conflicting_mode, kill});
-conflicting_mode({send_message, Message}) -> gen_server:call(?MODULE, {conflicting_mode, {send_message, Message}}).
+-spec conflicting_mode(kill | {send_message, any()}) -> ok.
+conflicting_mode(kill) ->
+    gen_server:call(?MODULE, {conflicting_mode, kill});
+conflicting_mode({send_message, Message}) ->
+    gen_server:call(?MODULE, {conflicting_mode, {send_message, Message}}).
 
 %% ===================================================================
 %% Callbacks
