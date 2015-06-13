@@ -31,7 +31,6 @@
 
 %% API
 -export([start_link/0]).
--export([conflicting_mode/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
@@ -58,12 +57,6 @@ start_link() ->
     Options = [],
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], Options).
 
--spec conflicting_mode(kill | {send_message, any()}) -> ok.
-conflicting_mode(kill) ->
-    gen_server:multi_call(?MODULE, {conflicting_mode, kill});
-conflicting_mode({send_message, Message}) ->
-    gen_server:multi_call(?MODULE, {conflicting_mode, {send_message, Message}}).
-
 %% ===================================================================
 %% Callbacks
 %% ===================================================================
@@ -81,8 +74,22 @@ init([]) ->
     process_flag(trap_exit, true),
     %% monitor mnesia events
     mnesia:subscribe(system),
-    %% init state
-    {ok, #state{}}.
+    %% get options
+    {ok, NetsplitSendMessageToProcess} = syn_utils:get_env_value(
+        netsplit_send_message_to_process,
+        syn_do_not_send_any_message_to_conflicting_process
+    ),
+    %% get state params
+    {ConflictingMode, Message} = case NetsplitSendMessageToProcess of
+        syn_do_not_send_any_message_to_conflicting_process -> {kill, undefined};
+        _ -> {send_message, NetsplitSendMessageToProcess}
+
+    end,
+    %% build state
+    {ok, #state{
+        conflicting_mode = ConflictingMode,
+        message = Message
+    }}.
 
 %% ----------------------------------------------------------------------------------------------------------
 %% Call messages
@@ -95,16 +102,6 @@ init([]) ->
     {stop, Reason :: any(), Reply :: any(), #state{}} |
     {stop, Reason :: any(), #state{}}.
 
-handle_call({conflicting_mode, kill}, _From, State) ->
-    {reply, ok, State#state{
-        conflicting_mode = kill,
-        message = undefined
-    }};
-handle_call({conflicting_mode, {send_message, Message}}, _From, State) ->
-    {reply, ok, State#state{
-        conflicting_mode = send_message,
-        message = Message
-    }};
 handle_call(Request, From, State) ->
     error_logger:warning_msg("Received from ~p an unknown call message: ~p~n", [Request, From]),
     {reply, undefined, State}.

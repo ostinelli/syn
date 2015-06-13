@@ -51,6 +51,9 @@
     two_nodes_when_mnesia_is_disc_find_by_pid/1
 ]).
 
+%% internals
+-export([process_exit_callback_dummy/3]).
+
 %% include
 -include_lib("common_test/include/ct.hrl").
 
@@ -291,29 +294,27 @@ single_node_when_mnesia_is_ram_process_count(_Config) ->
     0 = syn:count().
 
 single_node_when_mnesia_is_ram_callback_on_process_exit(_Config) ->
+    CurrentNode = node(),
     %% set schema location
     application:set_env(mnesia, schema_location, ram),
+    %% load configuration variables from syn-test.config => this defines the callback
+    syn_test_suite_helper:set_environment_variables(),
     %% start
     ok = syn:start(),
-    %% define callback
-    Self = self(),
-    CallbackFun = fun(Key, Pid, Reason) ->
-        Self ! {exited, Key, Pid, Reason}
-    end,
-    syn:options([
-        {process_exit_callback, CallbackFun}
-    ]),
+    %% register global process
+    ResultPid = self(),
+    global:register_name(syn_register_process_SUITE_result, ResultPid),
     %% start process
     Pid = syn_test_suite_helper:start_process(),
     %% register
     ok = syn:register(<<"my proc">>, Pid),
     %% kill process
     syn_test_suite_helper:kill_process(Pid),
-    %% check callback was triggered
+    %% check callback were triggered
     receive
-        {exited, <<"my proc">>, Pid, killed} -> ok
+        {exited, CurrentNode, <<"my proc">>, Pid, killed} -> ok
     after 2000 ->
-        ok = process_exit_callback_was_not_called
+        ok = process_exit_callback_was_not_called_from_local_node
     end.
 
 single_node_when_mnesia_is_disc_find_by_key(_Config) ->
@@ -418,18 +419,16 @@ two_nodes_when_mnesia_is_ram_callback_on_process_exit(Config) ->
     %% set schema location
     application:set_env(mnesia, schema_location, ram),
     rpc:call(SlaveNodeName, mnesia, schema_location, [ram]),
+    %% load configuration variables from syn-test.config => this defines the callback
+    syn_test_suite_helper:set_environment_variables(),
+    syn_test_suite_helper:set_environment_variables(SlaveNodeName),
     %% start
     ok = syn:start(),
     ok = rpc:call(SlaveNodeName, syn, start, []),
     timer:sleep(100),
-    %% define callback
-    Self = self(),
-    CallbackFun = fun(Key, _Pid, _Reason) ->
-        Self ! {exited, Key, node()}
-    end,
-    syn:options([
-        {process_exit_callback, CallbackFun}
-    ]),
+    %% register global process
+    ResultPid = self(),
+    global:register_name(syn_register_process_SUITE_result, ResultPid),
     %% start processes
     PidLocal = syn_test_suite_helper:start_process(),
     PidSlave = syn_test_suite_helper:start_process(SlaveNodeName),
@@ -441,12 +440,12 @@ two_nodes_when_mnesia_is_ram_callback_on_process_exit(Config) ->
     syn_test_suite_helper:kill_process(PidSlave),
     %% check callback were triggered
     receive
-        {exited, <<"local">>, CurrentNode} -> ok
+        {exited, CurrentNode, <<"local">>, PidLocal, killed} -> ok
     after 2000 ->
         ok = process_exit_callback_was_not_called_from_local_node
     end,
     receive
-        {exited, <<"slave">>, SlaveNodeName} -> ok
+        {exited, SlaveNodeName, <<"slave">>, PidSlave, killed} -> ok
     after 2000 ->
         ok = process_exit_callback_was_not_called_from_slave_node
     end.
@@ -476,3 +475,9 @@ two_nodes_when_mnesia_is_disc_find_by_pid(Config) ->
     %% retrieve
     undefined = syn:find_by_pid(Pid),
     undefined = rpc:call(SlaveNodeName, syn, find_by_pid, [Pid]).
+
+%% ===================================================================
+%% Internal
+%% ===================================================================
+process_exit_callback_dummy(Key, Pid, Reason) ->
+    global:send(syn_register_process_SUITE_result, {exited, node(), Key, Pid, Reason}).

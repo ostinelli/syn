@@ -40,6 +40,9 @@
     two_nodes_netsplit_message_resolution_when_there_are_conflicts/1
 ]).
 
+%% internal
+-export([process_reply_main/0]).
+
 %% include
 -include_lib("common_test/include/ct.hrl").
 
@@ -140,10 +143,7 @@ init_per_testcase(_TestCase, Config) ->
     %% set schema location
     application:set_env(mnesia, schema_location, ram),
     rpc:call(SlaveNodeName, mnesia, schema_location, [ram]),
-    %% start syn
-    ok = syn:start(),
-    ok = rpc:call(SlaveNodeName, syn, start, []),
-    timer:sleep(100),
+    %% return
     Config.
 
 % ----------------------------------------------------------------------------------------------------------
@@ -165,6 +165,11 @@ two_nodes_netsplit_when_there_are_no_conflicts(Config) ->
     %% get slave
     SlaveNodeName = proplists:get_value(slave_node_name, Config),
     CurrentNode = node(),
+
+    %% start syn
+    ok = syn:start(),
+    ok = rpc:call(SlaveNodeName, syn, start, []),
+    timer:sleep(100),
 
     %% start processes
     LocalPid = syn_test_suite_helper:start_process(),
@@ -236,6 +241,11 @@ two_nodes_netsplit_kill_resolution_when_there_are_conflicts(Config) ->
     SlaveNodeName = proplists:get_value(slave_node_name, Config),
     CurrentNode = node(),
 
+    %% start syn
+    ok = syn:start(),
+    ok = rpc:call(SlaveNodeName, syn, start, []),
+    timer:sleep(100),
+
     %% start processes
     LocalPid = syn_test_suite_helper:start_process(),
     SlavePid = syn_test_suite_helper:start_process(SlaveNodeName),
@@ -286,12 +296,22 @@ two_nodes_netsplit_message_resolution_when_there_are_conflicts(Config) ->
     SlaveNodeName = proplists:get_value(slave_node_name, Config),
     CurrentNode = node(),
 
-    %% set resolution by message shutdown
-    syn:options([{netsplit_conflicting_mode, {send_message, {self(), shutdown}}}]),
+    %% load configuration variables from syn-test.config => this sets the netsplit_send_message_to_process option
+    syn_test_suite_helper:set_environment_variables(),
+    syn_test_suite_helper:set_environment_variables(SlaveNodeName),
+
+    %% start syn
+    ok = syn:start(),
+    ok = rpc:call(SlaveNodeName, syn, start, []),
+    timer:sleep(100),
 
     %% start processes
-    LocalPid = syn_test_suite_helper:start_process(),
-    SlavePid = syn_test_suite_helper:start_process(SlaveNodeName),
+    LocalPid = syn_test_suite_helper:start_process(fun process_reply_main/0),
+    SlavePid = syn_test_suite_helper:start_process(SlaveNodeName, fun process_reply_main/0),
+
+    %% register global process
+    ResultPid = self(),
+    global:register_name(syn_netsplits_SUITE_result, ResultPid),
 
     %% register
     ok = syn:register(conflicting_key, SlavePid),
@@ -333,12 +353,21 @@ two_nodes_netsplit_message_resolution_when_there_are_conflicts(Config) ->
     %% check message received from killed pid
     KilledPid = lists:nth(1, lists:delete(FoundPid, [LocalPid, SlavePid])),
     receive
-        {KilledPid, terminated} -> ok;
-        Other -> ct:pal("WUT?? ~p", [Other])
-    after 5 ->
-        ok = not_received
+        {exited, KilledPid} -> ok
+    after 2000 ->
+        ok = conflicting_process_did_not_receive_message
     end,
 
     %% kill processes
     syn_test_suite_helper:kill_process(LocalPid),
     syn_test_suite_helper:kill_process(SlavePid).
+
+%% ===================================================================
+%% Internal
+%% ===================================================================
+process_reply_main() ->
+    receive
+        shutdown ->
+            timer:sleep(100), %% wait for global processes to propagate
+            global:send(syn_netsplits_SUITE_result, {exited, self()})
+    end.

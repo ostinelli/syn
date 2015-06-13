@@ -31,7 +31,6 @@
 
 %% API
 -export([start_link/0]).
--export([process_exit_callback/1]).
 -export([register/2, unregister/1]).
 -export([find_by_key/1, find_by_pid/1]).
 -export([count/0, count/1]).
@@ -41,7 +40,8 @@
 
 %% records
 -record(state, {
-    process_exit_callback = undefined :: undefined | function()
+    process_exit_callback_module = undefined :: atom(),
+    process_exit_callback_function = undefined :: atom()
 }).
 
 %% include
@@ -55,10 +55,6 @@
 start_link() ->
     Options = [],
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], Options).
-
--spec process_exit_callback(function() | undefined) -> ok.
-process_exit_callback(ProcessExitCallback) ->
-    gen_server:multi_call(?MODULE, {process_exit_callback, ProcessExitCallback}).
 
 -spec find_by_key(Key :: any()) -> pid() | undefined.
 find_by_key(Key) ->
@@ -135,7 +131,16 @@ init([]) ->
     %% init
     case initdb() of
         ok ->
-            {ok, #state{}};
+            %% get options
+            {ok, [ProcessExitCallbackModule, ProcessExitCallbackFunction]} = syn_utils:get_env_value(
+                process_exit_callback,
+                [undefined, undefined]
+            ),
+            %% return
+            {ok, #state{
+                process_exit_callback_module = ProcessExitCallbackModule,
+                process_exit_callback_function = ProcessExitCallbackFunction
+            }};
         Other ->
             {stop, Other}
     end.
@@ -158,10 +163,6 @@ handle_call({link_process, Pid}, _From, State) ->
 handle_call({unlink_process, Pid}, _From, State) ->
     erlang:unlink(Pid),
     {reply, ok, State};
-
-handle_call({process_exit_callback, ProcessExitCallback}, _From, State) ->
-    error_logger:info_msg("process_exit_callback set to: ~p~n", [ProcessExitCallback]),
-    {reply, ok, State#state{process_exit_callback = ProcessExitCallback}};
 
 handle_call(Request, From, State) ->
     error_logger:warning_msg("Received from ~p an unknown call message: ~p~n", [Request, From]),
@@ -188,7 +189,8 @@ handle_cast(Msg, State) ->
     {stop, Reason :: any(), #state{}}.
 
 handle_info({'EXIT', Pid, Reason}, #state{
-    process_exit_callback = ProcessExitCallback
+    process_exit_callback_module = ProcessExitCallbackModule,
+    process_exit_callback_function = ProcessExitCallbackFunction
 } = State) ->
     %% do not lock backbone
     spawn(fun() ->
@@ -212,9 +214,9 @@ handle_info({'EXIT', Pid, Reason}, #state{
                         error_logger:error_msg("Process with key ~p exited with reason: ~p~n", [Key, Reason])
                 end,
                 %% callback
-                case ProcessExitCallback of
+                case ProcessExitCallbackModule of
                     undefined -> ok;
-                    _ -> spawn(fun() -> ProcessExitCallback(Key, Pid, Reason) end)
+                    _ -> spawn(fun() -> ProcessExitCallbackModule:ProcessExitCallbackFunction(Key, Pid, Reason) end)
                 end
         end
     end),
