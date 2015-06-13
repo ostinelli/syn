@@ -33,6 +33,7 @@
 -export([register/2, unregister/1]).
 -export([find_by_key/1, find_by_pid/1]).
 -export([options/1]).
+-export([count/0, count/1]).
 
 
 %% ===================================================================
@@ -75,3 +76,11 @@ options(Options) ->
         {send_message, Message} ->
             syn_netsplits:conflicting_mode({send_message, Message})
     end.
+
+-spec count() -> non_neg_integer().
+count() ->
+    syn_backbone:count().
+
+-spec count(Node :: atom()) -> non_neg_integer().
+count(Node) ->
+    syn_backbone:count(Node).

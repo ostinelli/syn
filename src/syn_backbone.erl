@@ -33,6 +33,7 @@
 -export([start_link/0]).
 -export([register/2, unregister/1]).
 -export([find_by_key/1, find_by_pid/1]).
+-export([count/0, count/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
@@ -94,6 +95,20 @@ unregister(Key) ->
             %% unlink
             gen_server:call(?MODULE, {unlink_process, Pid})
     end.
+
+-spec count() -> non_neg_integer().
+count() ->
+    mnesia:table_info(syn_processes_table, size).
+
+-spec count(Node :: atom()) -> non_neg_integer().
+count(Node) ->
+    %% build match specs
+    MatchHead = #syn_processes_table{node = '$2', _ = '_'},
+    Guard = {'=:=', '$2', Node},
+    Result = '$2',
+    %% select
+    Processes = mnesia:dirty_select(syn_processes_table, [{MatchHead, [Guard], [Result]}]),
+    length(Processes).
 
 %% ===================================================================
 %% Callbacks
