@@ -86,25 +86,70 @@ Types:
 	Error = undefined
 ```
 
+To retrieve the count of total registered processes running in the cluster:
+
+```erlang
+syn:count() -> non_neg_integer().
+```
+
+To retrieve the count of total registered processes running on a specific node:
+
+```erlang
+syn:count(Node) -> non_neg_integer().
+
+Types:
+	Node = atom()
+```
+
 Processes are automatically monitored and removed from the registry if they die.
 
-### Conflict resolution
-After a net split, when nodes reconnect, Syn will merge the data from all the nodes in the cluster.
-
-If the same Key was used to register a process on different nodes during a net split, then there will be a conflict. By default, Syn will discard the processes running on the node the conflict is being resolved on, and will kill it by sending a `kill` signal with `exit(Pid, kill)`.
-
-If this is not desired, you can change the option `netsplit_conflicting_mode` to instruct Syn to send a message to the discarded process, so that you can trigger any actions on that process (such as a graceful shutdown).
-
-To do so, you can use the `syn:options/1` method.
+### Options
+Options can be set at runtime using the `syn:options/1` method.
 
 ```erlang
 syn:options(SynOptions) -> ok.
 
 Types:
 	SynOptions = [SynOption]
-	SynOption = NetsplitConflictingMode
+	SynOption = ProcessExitCallback | NetsplitConflictingMode
+	ProcessExitCallback = {process_exit_callback, function() | undefined}
 	NetsplitConflictingMode = {netsplit_conflicting_mode, kill | {send_message, any()}}
 ```
+
+#### Callbacks
+You can set a callback to be triggered when a process exits. This callback will be called only on the node where the process was running.
+
+Define a callback:
+```erlang
+CallbackFun = fun(Key, Pid, Reason) -> any().
+
+Types:
+	Key = any()
+	Pid = pid()
+	Reason = any()
+```
+The arguments Key and Pid are the ones of the process that exited with Reason.
+
+For instance, if you want to print a log when a process exited:
+
+```erlang
+%% define the callback
+CallbackFun = fun(Key, Pid, Reason) ->
+	error_logger:info_msg("Process with Key ~p and Pid ~p exited with reason ~p~n", [Key, Pid, Reason])
+end,
+
+%% set the option
+syn:options([
+	{process_exit_callback, CallbackFun}
+]).
+```
+
+#### Conflict resolution
+After a net split, when nodes reconnect, Syn will merge the data from all the nodes in the cluster.
+
+If the same Key was used to register a process on different nodes during a net split, then there will be a conflict. By default, Syn will discard the processes running on the node the conflict is being resolved on, and will kill it by sending a `kill` signal with `exit(Pid, kill)`.
+
+If this is not desired, you can change the option `netsplit_conflicting_mode` to instruct Syn to send a message to the discarded process, so that you can trigger any actions on that process (such as a graceful shutdown).
 
 For example, if you want the message `shutdown` to be send to the discarded process:
 
