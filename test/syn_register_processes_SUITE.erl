@@ -47,6 +47,7 @@
 -export([
     two_nodes_when_mnesia_is_ram_find_by_key/1,
     two_nodes_when_mnesia_is_ram_process_count/1,
+    two_nodes_when_mnesia_is_ram_callback_on_process_exit/1,
     two_nodes_when_mnesia_is_disc_find_by_pid/1
 ]).
 
@@ -97,6 +98,7 @@ groups() ->
         {two_nodes_process_registration, [shuffle], [
             two_nodes_when_mnesia_is_ram_find_by_key,
             two_nodes_when_mnesia_is_ram_process_count,
+            two_nodes_when_mnesia_is_ram_callback_on_process_exit,
             two_nodes_when_mnesia_is_disc_find_by_pid
         ]}
     ].
@@ -408,6 +410,46 @@ two_nodes_when_mnesia_is_ram_process_count(Config) ->
     0 = syn:count(SlaveNodeName),
     0 = rpc:call(SlaveNodeName, syn, count, [CurrentNode]),
     0 = rpc:call(SlaveNodeName, syn, count, [SlaveNodeName]).
+
+two_nodes_when_mnesia_is_ram_callback_on_process_exit(Config) ->
+    %% get slave
+    SlaveNodeName = proplists:get_value(slave_node_name, Config),
+    CurrentNode = node(),
+    %% set schema location
+    application:set_env(mnesia, schema_location, ram),
+    rpc:call(SlaveNodeName, mnesia, schema_location, [ram]),
+    %% start
+    ok = syn:start(),
+    ok = rpc:call(SlaveNodeName, syn, start, []),
+    timer:sleep(100),
+    %% define callback
+    Self = self(),
+    CallbackFun = fun(Key, _Pid, _Reason) ->
+        Self ! {exited, Key, node()}
+    end,
+    syn:options([
+        {process_exit_callback, CallbackFun}
+    ]),
+    %% start processes
+    PidLocal = syn_test_suite_helper:start_process(),
+    PidSlave = syn_test_suite_helper:start_process(SlaveNodeName),
+    %% register
+    ok = syn:register(<<"local">>, PidLocal),
+    ok = syn:register(<<"slave">>, PidSlave),
+    %% kill process
+    syn_test_suite_helper:kill_process(PidLocal),
+    syn_test_suite_helper:kill_process(PidSlave),
+    %% check callback were triggered
+    receive
+        {exited, <<"local">>, CurrentNode} -> ok
+    after 2000 ->
+        ok = process_exit_callback_was_not_called_from_local_node
+    end,
+    receive
+        {exited, <<"slave">>, SlaveNodeName} -> ok
+    after 2000 ->
+        ok = process_exit_callback_was_not_called_from_slave_node
+    end.
 
 two_nodes_when_mnesia_is_disc_find_by_pid(Config) ->
     %% get slave

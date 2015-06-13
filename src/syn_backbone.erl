@@ -58,7 +58,7 @@ start_link() ->
 
 -spec process_exit_callback(function() | undefined) -> ok.
 process_exit_callback(ProcessExitCallback) ->
-    gen_server:call(?MODULE, {process_exit_callback, ProcessExitCallback}).
+    gen_server:multi_call(?MODULE, {process_exit_callback, ProcessExitCallback}).
 
 -spec find_by_key(Key :: any()) -> pid() | undefined.
 find_by_key(Key) ->
