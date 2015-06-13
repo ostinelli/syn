@@ -154,7 +154,7 @@ handle_info(Info, State) ->
 %% ----------------------------------------------------------------------------------------------------------
 -spec terminate(Reason :: any(), #state{}) -> terminated.
 terminate(Reason, _State) ->
-    error_logger:info_msg("Terminating syn with reason: ~p~n", [Reason]),
+    error_logger:info_msg("Terminating syn netsplits with reason: ~p~n", [Reason]),
     terminated.
 
 %% ----------------------------------------------------------------------------------------------------------
