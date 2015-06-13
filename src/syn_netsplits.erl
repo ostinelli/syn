@@ -60,9 +60,9 @@ start_link() ->
 
 -spec conflicting_mode(kill | {send_message, any()}) -> ok.
 conflicting_mode(kill) ->
-    gen_server:call(?MODULE, {conflicting_mode, kill});
+    gen_server:multi_call(?MODULE, {conflicting_mode, kill});
 conflicting_mode({send_message, Message}) ->
-    gen_server:call(?MODULE, {conflicting_mode, {send_message, Message}}).
+    gen_server:multi_call(?MODULE, {conflicting_mode, {send_message, Message}}).
 
 %% ===================================================================
 %% Callbacks
