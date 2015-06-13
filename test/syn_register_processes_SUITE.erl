@@ -41,6 +41,7 @@
     single_node_when_mnesia_is_ram_re_register_error/1,
     single_node_when_mnesia_is_ram_unregister/1,
     single_node_when_mnesia_is_ram_process_count/1,
+    single_node_when_mnesia_is_ram_callback_on_process_exit/1,
     single_node_when_mnesia_is_disc_find_by_key/1
 ]).
 -export([
@@ -90,6 +91,7 @@ groups() ->
             single_node_when_mnesia_is_ram_re_register_error,
             single_node_when_mnesia_is_ram_unregister,
             single_node_when_mnesia_is_ram_process_count,
+            single_node_when_mnesia_is_ram_callback_on_process_exit,
             single_node_when_mnesia_is_disc_find_by_key
         ]},
         {two_nodes_process_registration, [shuffle], [
@@ -285,6 +287,32 @@ single_node_when_mnesia_is_ram_process_count(_Config) ->
     timer:sleep(100),
     %% count
     0 = syn:count().
+
+single_node_when_mnesia_is_ram_callback_on_process_exit(_Config) ->
+    %% set schema location
+    application:set_env(mnesia, schema_location, ram),
+    %% start
+    ok = syn:start(),
+    %% define callback
+    Self = self(),
+    CallbackFun = fun(Key, Pid, Reason) ->
+        Self ! {exited, Key, Pid, Reason}
+    end,
+    syn:options([
+        {process_exit_callback, CallbackFun}
+    ]),
+    %% start process
+    Pid = syn_test_suite_helper:start_process(),
+    %% register
+    ok = syn:register(<<"my proc">>, Pid),
+    %% kill process
+    syn_test_suite_helper:kill_process(Pid),
+    %% check callback was triggered
+    receive
+        {exited, <<"my proc">>, Pid, killed} -> ok
+    after 2000 ->
+        ok = process_exit_callback_was_not_called
+    end.
 
 single_node_when_mnesia_is_disc_find_by_key(_Config) ->
     %% set schema location

@@ -67,15 +67,7 @@ find_by_pid(Pid) ->
 
 -spec options(list()) -> ok.
 options(Options) ->
-    %% send message
-    case proplists:get_value(netsplit_conflicting_mode, Options) of
-        undefined ->
-            ok;
-        kill ->
-            syn_netsplits:conflicting_mode(kill);
-        {send_message, Message} ->
-            syn_netsplits:conflicting_mode({send_message, Message})
-    end.
+    set_options(Options).
 
 -spec count() -> non_neg_integer().
 count() ->
@@ -84,3 +76,30 @@ count() ->
 -spec count(Node :: atom()) -> non_neg_integer().
 count(Node) ->
     syn_backbone:count(Node).
+
+%% ===================================================================
+%% Internal
+%% ===================================================================
+set_options([]) -> ok;
+set_options([{netsplit_conflicting_mode, Mode} | Options]) ->
+    case Mode of
+        kill ->
+            syn_netsplits:conflicting_mode(kill);
+        {send_message, Message} ->
+            syn_netsplits:conflicting_mode({send_message, Message});
+        _ ->
+            error(invalid_syn_option, {netsplit_conflicting_mode, Mode})
+    end,
+    set_options(Options);
+set_options([{process_exit_callback, ProcessExitCallback} | Options]) ->
+    case ProcessExitCallback of
+        undefined ->
+            syn_backbone:process_exit_callback(undefined);
+        _ when is_function(ProcessExitCallback) ->
+            syn_backbone:process_exit_callback(ProcessExitCallback);
+        _ ->
+            error(invalid_syn_option, {process_exit_callback, ProcessExitCallback})
+    end,
+    set_options(Options);
+set_options([InvalidSynOption | _Options]) ->
+    error(invalid_syn_option, InvalidSynOption).

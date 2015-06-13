@@ -31,6 +31,7 @@
 
 %% API
 -export([start_link/0]).
+-export([process_exit_callback/1]).
 -export([register/2, unregister/1]).
 -export([find_by_key/1, find_by_pid/1]).
 -export([count/0, count/1]).
@@ -39,7 +40,9 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
 %% records
--record(state, {}).
+-record(state, {
+    process_exit_callback = undefined :: undefined | function()
+}).
 
 %% include
 -include("syn.hrl").
@@ -52,6 +55,10 @@
 start_link() ->
     Options = [],
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], Options).
+
+-spec process_exit_callback(function() | undefined) -> ok.
+process_exit_callback(ProcessExitCallback) ->
+    gen_server:call(?MODULE, {process_exit_callback, ProcessExitCallback}).
 
 -spec find_by_key(Key :: any()) -> pid() | undefined.
 find_by_key(Key) ->
@@ -152,6 +159,10 @@ handle_call({unlink_process, Pid}, _From, State) ->
     erlang:unlink(Pid),
     {reply, ok, State};
 
+handle_call({process_exit_callback, ProcessExitCallback}, _From, State) ->
+    error_logger:info_msg("process_exit_callback set to: ~p~n", [ProcessExitCallback]),
+    {reply, ok, State#state{process_exit_callback = ProcessExitCallback}};
+
 handle_call(Request, From, State) ->
     error_logger:warning_msg("Received from ~p an unknown call message: ~p~n", [Request, From]),
     {reply, undefined, State}.
@@ -176,7 +187,9 @@ handle_cast(Msg, State) ->
     {noreply, #state{}, Timeout :: non_neg_integer()} |
     {stop, Reason :: any(), #state{}}.
 
-handle_info({'EXIT', Pid, Reason}, State) ->
+handle_info({'EXIT', Pid, Reason}, #state{
+    process_exit_callback = ProcessExitCallback
+} = State) ->
     %% do not lock backbone
     spawn(fun() ->
         %% check if pid is in table
@@ -186,7 +199,7 @@ handle_info({'EXIT', Pid, Reason}, State) ->
                     normal -> ok;
                     killed -> ok;
                     _ ->
-                        error_logger:warning_msg("Received a crash message from an unlinked process ~p with reason: ~p~n", [Pid, Reason])
+                        error_logger:warning_msg("Received an exit message from an unlinked process ~p with reason: ~p~n", [Pid, Reason])
                 end;
             Key ->
                 %% delete from table
@@ -195,7 +208,13 @@ handle_info({'EXIT', Pid, Reason}, State) ->
                 case Reason of
                     normal -> ok;
                     killed -> ok;
-                    _ -> error_logger:error_msg("Process with key ~p crashed with reason: ~p~n", [Key, Reason])
+                    _ ->
+                        error_logger:error_msg("Process with key ~p exited with reason: ~p~n", [Key, Reason])
+                end,
+                %% callback
+                case ProcessExitCallback of
+                    undefined -> ok;
+                    _ -> spawn(fun() -> ProcessExitCallback(Key, Pid, Reason) end)
                 end
         end
     end),
