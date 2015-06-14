@@ -8,12 +8,13 @@ Syn is a process registry that has the following features:
  * Any term can be used as Key.
  * Fast writes.
  * Automatically handles net splits.
+ * Configurable callbacks.
 
 
 ## Notes
 In any distributed system you are faced with a consistency challenge, which is often resolved by having one master arbiter performing all write operations (chosen with a mechanism of [leader election](http://en.wikipedia.org/wiki/Leader_election)), or through [atomic transactions](http://en.wikipedia.org/wiki/Atomicity_(database_systems)).
 
-Syn was born for applications of the [IoT](http://en.wikipedia.org/wiki/Internet_of_Things) field. In this context, Keys used to identify a process are often the physical object's unique identifier (for instance, its serial or mac address), and are therefore already defined and unique _before_ hitting the system.  The consistency challenge is less of a problem in this case, since the likelihood of concurrent incoming requests that would register processes with the same Key on different nodes is extremely low and, in most cases, acceptable.
+Syn was born for applications of the [IoT](http://en.wikipedia.org/wiki/Internet_of_Things) field. In this context, Keys used to identify a process are often the physical object's unique identifier (for instance, its serial or mac address), and are therefore already defined and unique _before_ hitting the system.  The consistency challenge is less of a problem in this case, since the likelihood of concurrent incoming requests that would register processes with the same Key is extremely low and, in most cases, acceptable.
 
 In addition, write speeds were a determining factor in the architecture of Syn.
 
@@ -22,7 +23,7 @@ Therefore, Availability has been chosen over Consistency and Syn is [eventually 
 
 ## Install
 
-If you're using [rebar](https://github.com/rebar/rebar) , add `syn` as a dependency in your project's `rebar.config` file:
+If you're using [rebar](https://github.com/rebar/rebar), add `syn` as a dependency in your project's `rebar.config` file:
 
 ```erlang
 {syn, ".*", {git, "git://github.com/ostinelli/syn.git", "master"}}
@@ -76,7 +77,7 @@ Types:
 	Key = any()
 ```
 
-To unregister a previously a Key:
+To unregister a previously registered Key:
 
 ```erlang
 syn:unregister(Key) -> ok | {error, Error}.
@@ -104,22 +105,23 @@ Types:
 Processes are automatically monitored and removed from the registry if they die.
 
 ### Options
-Options can be set at runtime using the `syn:options/1` method.
+Options can be set in the environment variable `syn`. You're probably best off using an application configuration file (in releases, `sys.config`):
 
 ```erlang
-syn:options(SynOptions) -> ok.
+{syn, [
+    %% define callback function
+    {process_exit_callback, [calback_module, callback_function]},
 
-Types:
-	SynOptions = [SynOption]
-	SynOption = ProcessExitCallback | NetsplitConflictingMode
-	ProcessExitCallback = {process_exit_callback, function() | undefined}
-	NetsplitConflictingMode = {netsplit_conflicting_mode, kill | {send_message, any()}}
+    %% send a message to the discarded process (instead of kill)
+    {netsplit_send_message_to_process, shutdown}
+]}
 ```
+These options are explained here below.
 
-#### Callbacks
-You can set a callback to be triggered when a process exits. This callback will be called only on the node where the process was running.
+#### Process Exit Callback
+The `process_exit_callback` option allows you to specify the `module` and the `function` of the callback that will be triggered when a process exits. This callback will be called only on the node where the process was running.
 
-Define a callback:
+The callback function is defined as:
 ```erlang
 CallbackFun = fun(Key, Pid, Reason) -> any().
 
@@ -128,49 +130,50 @@ Types:
 	Pid = pid()
 	Reason = any()
 ```
-The arguments Key and Pid are the ones of the process that exited with Reason.
+The `Key` and `Pid` are the ones of the process that exited with `Reason`.
 
 For instance, if you want to print a log when a process exited:
 
 ```erlang
-%% define the callback
-CallbackFun = fun(Key, Pid, Reason) ->
-	error_logger:info_msg("Process with Key ~p and Pid ~p exited with reason ~p~n", [Key, Pid, Reason])
-end,
+-module(my_callback).
 
-%% set the option
-syn:options([
-	{process_exit_callback, CallbackFun}
-]).
+callback_on_process_exit(Key, Pid, Reason) ->
+	error_logger:info_msg("Process with Key ~p and Pid ~p exited with reason ~p~n", [Key, Pid, Reason])
+end.
 ```
 
-#### Conflict resolution
+Set it in the options:
+```erlang
+{syn, [
+    %% define callback function
+    {process_exit_callback, [my_callback, callback_on_process_exit]}
+]}
+```
+If you don't set this option, no callback will be triggered.
+
+#### Conflict resolution by message sending
 After a net split, when nodes reconnect, Syn will merge the data from all the nodes in the cluster.
 
-If the same Key was used to register a process on different nodes during a net split, then there will be a conflict. By default, Syn will discard the processes running on the node the conflict is being resolved on, and will kill it by sending a `kill` signal with `exit(Pid, kill)`.
+If the same Key was used to register a process on different nodes during a netsplit, then there will be a conflict. By default, Syn will discard the processes running on the node the conflict is being resolved on, and will kill it by sending a `kill` signal with `exit(Pid, kill)`.
 
-If this is not desired, you can change the option `netsplit_conflicting_mode` to instruct Syn to send a message to the discarded process, so that you can trigger any actions on that process (such as a graceful shutdown).
+If this is not desired, you can set the `netsplit_send_message_to_process` option to instruct Syn to send a message to the discarded process, so that you can trigger any actions on that process. In this case, the process will not be killed by Syn, and you'll have to decide what to do with it (for instance, a graceful shutdown).
 
-For example, if you want the message `shutdown` to be send to the discarded process:
-
-```erlang
-syn:options([
-	{netsplit_conflicting_mode, {send_message, shutdown}}
-]).
-```
-
-If instead you want to ensure that an `exit(Pid, kill)` signal is sent to the discarded process:
+For example, if you want the message `shutdown` to be send to the discarded process you can set the option:
 
 ```erlang
-syn:options([
-	{netsplit_conflicting_mode, kill}
-]).
+{syn, [
+    %% define callback function
+    {netsplit_send_message_to_process, shutdown}
+]}
 ```
 
-This is the default, so you do not have to specify this behavior if you haven't changed it.
+If you don't set this option, then the default will apply (i.e. sending the `exit(Pid, kill)` signal).
+
+> Important Note: The conflict resolution method SHOULD BE defined in the same way across all nodes of the cluster. Having different conflict resolution options on different nodes can have unexpected results.
+
 
 ## Internals
-Under the hood, Syn performs dirty reads and writes into a distributed in-memory Mnesia table, synchronized across nodes.
+Under the hood, Syn performs dirty reads and writes into a distributed in-memory Mnesia table, replicated across all the nodes of the cluster.
 
 To automatically handle net splits, Syn implements a specialized and simplified version of the mechanisms used in Ulf Wiger's [unsplit](https://github.com/uwiger/unsplit) framework.
 
