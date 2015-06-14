@@ -40,6 +40,10 @@
     two_nodes_netsplit_message_resolution_when_there_are_conflicts/1
 ]).
 
+-export([
+    three_nodes_netsplit_kill_resolution_when_there_are_conflicts/1
+]).
+
 %% internal
 -export([process_reply_main/0]).
 
@@ -60,7 +64,8 @@
 %% -------------------------------------------------------------------
 all() ->
     [
-        {group, two_nodes_netsplits}
+        {group, two_nodes_netsplits},
+        {group, three_nodes_netsplits}
     ].
 
 %% -------------------------------------------------------------------
@@ -81,6 +86,9 @@ groups() ->
             two_nodes_netsplit_when_there_are_no_conflicts,
             two_nodes_netsplit_kill_resolution_when_there_are_conflicts,
             two_nodes_netsplit_message_resolution_when_there_are_conflicts
+        ]},
+        {three_nodes_netsplits, [shuffle], [
+            three_nodes_netsplit_kill_resolution_when_there_are_conflicts
         ]}
     ].
 %% -------------------------------------------------------------------
@@ -120,6 +128,17 @@ end_per_suite(Config) ->
 %% Config0 = Config1 = [tuple()]
 %% Reason = term()
 %% -------------------------------------------------------------------
+init_per_group(three_nodes_netsplits, Config) ->
+    %% init
+    SlaveNode2ShortName = syn_slave_2,
+    %% start slave 2
+    {ok, SlaveNode2} = syn_test_suite_helper:start_slave(SlaveNode2ShortName),
+    %% config
+    [
+        {slave_node_2_short_name, SlaveNode2ShortName},
+        {slave_node_2, SlaveNode2}
+        | Config
+    ];
 init_per_group(_GroupName, Config) -> Config.
 
 %% -------------------------------------------------------------------
@@ -128,6 +147,11 @@ init_per_group(_GroupName, Config) -> Config.
 %% GroupName = atom()
 %% Config0 = Config1 = [tuple()]
 %% -------------------------------------------------------------------
+end_per_group(three_nodes_netsplits, Config) ->
+    %% get slave node 2 name
+    SlaveNode2ShortName = proplists:get_value(slave_node_2_short_name, Config),
+    %% stop slave
+    syn_test_suite_helper:stop_slave(SlaveNode2ShortName);
 end_per_group(_GroupName, _Config) -> ok.
 
 % ----------------------------------------------------------------------------------------------------------
@@ -361,6 +385,76 @@ two_nodes_netsplit_message_resolution_when_there_are_conflicts(Config) ->
     %% kill processes
     syn_test_suite_helper:kill_process(LocalPid),
     syn_test_suite_helper:kill_process(SlavePid).
+
+three_nodes_netsplit_kill_resolution_when_there_are_conflicts(Config) ->
+    %% get slaves
+    SlaveNode = proplists:get_value(slave_node, Config),
+    SlaveNode2 = proplists:get_value(slave_node_2, Config),
+    CurrentNode = node(),
+
+    %% start syn
+    ok = syn:start(),
+    ok = rpc:call(SlaveNode, syn, start, []),
+    ok = rpc:call(SlaveNode2, syn, start, []),
+    timer:sleep(100),
+
+    %% start processes
+    LocalPid = syn_test_suite_helper:start_process(),
+    SlavePid = syn_test_suite_helper:start_process(SlaveNode),
+    Slave2Pid = syn_test_suite_helper:start_process(SlaveNode2),
+
+    %% register
+    ok = syn:register(conflicting_key, SlavePid),
+    ok = syn:register(slave_2_process, Slave2Pid),
+    timer:sleep(100),
+
+    %% check tables
+    2 = mnesia:table_info(syn_processes_table, size),
+    2 = rpc:call(SlaveNode, mnesia, table_info, [syn_processes_table, size]),
+    2 = rpc:call(SlaveNode2, mnesia, table_info, [syn_processes_table, size]),
+
+    %% check process
+    SlavePid = syn:find_by_key(conflicting_key),
+
+    %% simulate net split
+    syn_test_suite_helper:disconnect_node(SlaveNode),
+    timer:sleep(1000),
+
+    %% check tables
+    1 = mnesia:table_info(syn_processes_table, size),
+    1 = rpc:call(SlaveNode2, mnesia, table_info, [syn_processes_table, size]),
+
+    ActiveReplicaseDuringNetsplit = mnesia:table_info(syn_processes_table, active_replicas),
+    true = lists:member(CurrentNode, ActiveReplicaseDuringNetsplit),
+    true = lists:member(SlaveNode2, ActiveReplicaseDuringNetsplit),
+
+    %% now register the local pid with the same conflicting key
+    ok = syn:register(conflicting_key, LocalPid),
+
+    %% check process
+    LocalPid = syn:find_by_key(conflicting_key),
+
+    %% reconnect
+    syn_test_suite_helper:connect_node(SlaveNode),
+    timer:sleep(1000),
+
+    %% check tables
+    2 = mnesia:table_info(syn_processes_table, size),
+    2 = rpc:call(SlaveNode, mnesia, table_info, [syn_processes_table, size]),
+    2 = rpc:call(SlaveNode2, mnesia, table_info, [syn_processes_table, size]),
+
+    %% check processes
+    FoundPid = syn:find_by_key(conflicting_key),
+    true = lists:member(FoundPid, [LocalPid, SlavePid]),
+
+    Slave2Pid = syn:find_by_key(slave_2_process),
+    Slave2Pid = rpc:call(SlaveNode, syn, find_by_key, [slave_2_process]),
+    Slave2Pid = rpc:call(SlaveNode2, syn, find_by_key, [slave_2_process]),
+
+    %% kill processes
+    syn_test_suite_helper:kill_process(LocalPid),
+    syn_test_suite_helper:kill_process(SlavePid),
+    syn_test_suite_helper:kill_process(Slave2Pid).
 
 %% ===================================================================
 %% Internal
