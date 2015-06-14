@@ -368,6 +368,6 @@ two_nodes_netsplit_message_resolution_when_there_are_conflicts(Config) ->
 process_reply_main() ->
     receive
         shutdown ->
-            timer:sleep(100), %% wait for global processes to propagate
+            timer:sleep(500), %% wait for global processes to propagate
             global:send(syn_netsplits_SUITE_result, {exited, self()})
     end.

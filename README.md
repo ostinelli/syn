@@ -169,7 +169,7 @@ For example, if you want the message `shutdown` to be send to the discarded proc
 
 If you don't set this option, then the default will apply (i.e. sending the `exit(Pid, kill)` signal).
 
-> Important Note: The conflict resolution method SHOULD BE defined in the same way across all nodes of the cluster. Having different conflict resolution options on different nodes can have unexpected results.
+> Important Note: The conflict resolution method SHOULD be defined in the same way across all nodes of the cluster. Having different conflict resolution options on different nodes can have unexpected results.
 
 
 ## Internals
