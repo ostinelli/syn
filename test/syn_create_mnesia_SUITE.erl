@@ -127,10 +127,10 @@ end_per_suite(_Config) -> ok.
 init_per_group(two_nodes_mnesia_creation, Config) ->
     %% start slave
     SlaveNodeShortName = proplists:get_value(slave_node_short_name, Config),
-    {ok, SlaveNodeName} = syn_test_suite_helper:start_slave(SlaveNodeShortName),
+    {ok, SlaveNode} = syn_test_suite_helper:start_slave(SlaveNodeShortName),
     %% config
     [
-        {slave_node_name, SlaveNodeName}
+        {slave_node, SlaveNode}
         | Config
     ];
 init_per_group(_GroupName, Config) -> Config.
@@ -168,8 +168,8 @@ init_per_testcase(_TestCase, Config) ->
 % ----------------------------------------------------------------------------------------------------------
 end_per_testcase(_TestCase, Config) ->
     %% get slave
-    SlaveNodeName = proplists:get_value(slave_node_name, Config),
-    syn_test_suite_helper:clean_after_test(SlaveNodeName).
+    SlaveNode = proplists:get_value(slave_node, Config),
+    syn_test_suite_helper:clean_after_test(SlaveNode).
 
 %% ===================================================================
 %% Tests
@@ -212,68 +212,68 @@ single_node_when_mnesia_is_disc(_Config) ->
 
 two_nodes_when_mnesia_is_ram(Config) ->
     %% get slave
-    SlaveNodeName = proplists:get_value(slave_node_name, Config),
+    SlaveNode = proplists:get_value(slave_node, Config),
     %% set schema location
     application:set_env(mnesia, schema_location, ram),
-    rpc:call(SlaveNodeName, mnesia, schema_location, [ram]),
+    rpc:call(SlaveNode, mnesia, schema_location, [ram]),
     %% start
     ok = syn:start(),
-    ok = rpc:call(SlaveNodeName, syn, start, []),
+    ok = rpc:call(SlaveNode, syn, start, []),
     timer:sleep(100),
     %% check table exists on local
     true = lists:member(syn_processes_table, mnesia:system_info(tables)),
     %% check table exists on remote
-    SlaveNodeMnesiaSystemInfo = rpc:call(SlaveNodeName, mnesia, system_info, [tables]),
-    true = rpc:call(SlaveNodeName, lists, member, [syn_processes_table, SlaveNodeMnesiaSystemInfo]).
+    SlaveNodeMnesiaSystemInfo = rpc:call(SlaveNode, mnesia, system_info, [tables]),
+    true = rpc:call(SlaveNode, lists, member, [syn_processes_table, SlaveNodeMnesiaSystemInfo]).
 
 two_nodes_when_mnesia_is_opt_disc_no_schema_exists(Config) ->
     %% get slave
-    SlaveNodeName = proplists:get_value(slave_node_name, Config),
+    SlaveNode = proplists:get_value(slave_node, Config),
     %% set schema location
     application:set_env(mnesia, schema_location, opt_disc),
-    rpc:call(SlaveNodeName, mnesia, schema_location, [opt_disc]),
+    rpc:call(SlaveNode, mnesia, schema_location, [opt_disc]),
     %% start
     ok = syn:start(),
-    ok = rpc:call(SlaveNodeName, syn, start, []),
+    ok = rpc:call(SlaveNode, syn, start, []),
     timer:sleep(100),
     %% check table exists on local
     true = lists:member(syn_processes_table, mnesia:system_info(tables)),
     %% check table exists on remote
-    SlaveNodeMnesiaSystemInfo = rpc:call(SlaveNodeName, mnesia, system_info, [tables]),
-    true = rpc:call(SlaveNodeName, lists, member, [syn_processes_table, SlaveNodeMnesiaSystemInfo]).
+    SlaveNodeMnesiaSystemInfo = rpc:call(SlaveNode, mnesia, system_info, [tables]),
+    true = rpc:call(SlaveNode, lists, member, [syn_processes_table, SlaveNodeMnesiaSystemInfo]).
 
 two_nodes_when_mnesia_is_opt_disc_schema_exists(Config) ->
     %% get slave
-    SlaveNodeName = proplists:get_value(slave_node_name, Config),
+    SlaveNode = proplists:get_value(slave_node, Config),
     %% set schema location
     application:set_env(mnesia, schema_location, opt_disc),
-    rpc:call(SlaveNodeName, mnesia, schema_location, [opt_disc]),
+    rpc:call(SlaveNode, mnesia, schema_location, [opt_disc]),
     %% create schema
-    mnesia:create_schema([node(), SlaveNodeName]),
+    mnesia:create_schema([node(), SlaveNode]),
     %% start
     ok = syn:start(),
-    ok = rpc:call(SlaveNodeName, syn, start, []),
+    ok = rpc:call(SlaveNode, syn, start, []),
     timer:sleep(100),
     %% check table exists on local
     true = lists:member(syn_processes_table, mnesia:system_info(tables)),
     %% check table exists on remote
-    SlaveNodeMnesiaSystemInfo = rpc:call(SlaveNodeName, mnesia, system_info, [tables]),
-    true = rpc:call(SlaveNodeName, lists, member, [syn_processes_table, SlaveNodeMnesiaSystemInfo]).
+    SlaveNodeMnesiaSystemInfo = rpc:call(SlaveNode, mnesia, system_info, [tables]),
+    true = rpc:call(SlaveNode, lists, member, [syn_processes_table, SlaveNodeMnesiaSystemInfo]).
 
 two_nodes_when_mnesia_is_disc(Config) ->
     %% get slave
-    SlaveNodeName = proplists:get_value(slave_node_name, Config),
+    SlaveNode = proplists:get_value(slave_node, Config),
     %% set schema location
     application:set_env(mnesia, schema_location, disc),
-    rpc:call(SlaveNodeName, mnesia, schema_location, [disc]),
+    rpc:call(SlaveNode, mnesia, schema_location, [disc]),
     %% create schema
-    mnesia:create_schema([node(), SlaveNodeName]),
+    mnesia:create_schema([node(), SlaveNode]),
     %% start
     ok = syn:start(),
-    ok = rpc:call(SlaveNodeName, syn, start, []),
+    ok = rpc:call(SlaveNode, syn, start, []),
     timer:sleep(100),
     %% check table exists on local
     true = lists:member(syn_processes_table, mnesia:system_info(tables)),
     %% check table exists on remote
-    SlaveNodeMnesiaSystemInfo = rpc:call(SlaveNodeName, mnesia, system_info, [tables]),
-    true = rpc:call(SlaveNodeName, lists, member, [syn_processes_table, SlaveNodeMnesiaSystemInfo]).
+    SlaveNodeMnesiaSystemInfo = rpc:call(SlaveNode, mnesia, system_info, [tables]),
+    true = rpc:call(SlaveNode, lists, member, [syn_processes_table, SlaveNodeMnesiaSystemInfo]).

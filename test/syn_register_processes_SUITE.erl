@@ -136,10 +136,10 @@ end_per_suite(_Config) -> ok.
 init_per_group(two_nodes_process_registration, Config) ->
     %% start slave
     SlaveNodeShortName = proplists:get_value(slave_node_short_name, Config),
-    {ok, SlaveNodeName} = syn_test_suite_helper:start_slave(SlaveNodeShortName),
+    {ok, SlaveNode} = syn_test_suite_helper:start_slave(SlaveNodeShortName),
     %% config
     [
-        {slave_node_name, SlaveNodeName}
+        {slave_node, SlaveNode}
         | Config
     ];
 init_per_group(_GroupName, Config) -> Config.
@@ -177,8 +177,8 @@ init_per_testcase(_TestCase, Config) ->
 % ----------------------------------------------------------------------------------------------------------
 end_per_testcase(_TestCase, Config) ->
     %% get slave
-    SlaveNodeName = proplists:get_value(slave_node_name, Config),
-    syn_test_suite_helper:clean_after_test(SlaveNodeName).
+    SlaveNode = proplists:get_value(slave_node, Config),
+    syn_test_suite_helper:clean_after_test(SlaveNode).
 
 %% ===================================================================
 %% Tests
@@ -340,53 +340,53 @@ single_node_when_mnesia_is_disc_find_by_key(_Config) ->
 
 two_nodes_when_mnesia_is_ram_find_by_key(Config) ->
     %% get slave
-    SlaveNodeName = proplists:get_value(slave_node_name, Config),
+    SlaveNode = proplists:get_value(slave_node, Config),
     %% set schema location
     application:set_env(mnesia, schema_location, ram),
-    rpc:call(SlaveNodeName, mnesia, schema_location, [ram]),
+    rpc:call(SlaveNode, mnesia, schema_location, [ram]),
     %% start
     ok = syn:start(),
-    ok = rpc:call(SlaveNodeName, syn, start, []),
+    ok = rpc:call(SlaveNode, syn, start, []),
     timer:sleep(100),
     %% start process
     Pid = syn_test_suite_helper:start_process(),
     %% retrieve
     undefined = syn:find_by_key(<<"my proc">>),
-    undefined = rpc:call(SlaveNodeName, syn, find_by_key, [<<"my proc">>]),
+    undefined = rpc:call(SlaveNode, syn, find_by_key, [<<"my proc">>]),
     %% register
     ok = syn:register(<<"my proc">>, Pid),
     %% retrieve
     Pid = syn:find_by_key(<<"my proc">>),
-    Pid = rpc:call(SlaveNodeName, syn, find_by_key, [<<"my proc">>]),
+    Pid = rpc:call(SlaveNode, syn, find_by_key, [<<"my proc">>]),
     %% kill process
     syn_test_suite_helper:kill_process(Pid),
     timer:sleep(100),
     %% retrieve
     undefined = syn:find_by_key(<<"my proc">>),
-    undefined = rpc:call(SlaveNodeName, syn, find_by_key, [<<"my proc">>]).
+    undefined = rpc:call(SlaveNode, syn, find_by_key, [<<"my proc">>]).
 
 two_nodes_when_mnesia_is_ram_process_count(Config) ->
     %% get slave
-    SlaveNodeName = proplists:get_value(slave_node_name, Config),
+    SlaveNode = proplists:get_value(slave_node, Config),
     CurrentNode = node(),
     %% set schema location
     application:set_env(mnesia, schema_location, ram),
-    rpc:call(SlaveNodeName, mnesia, schema_location, [ram]),
+    rpc:call(SlaveNode, mnesia, schema_location, [ram]),
     %% start
     ok = syn:start(),
-    ok = rpc:call(SlaveNodeName, syn, start, []),
+    ok = rpc:call(SlaveNode, syn, start, []),
     timer:sleep(100),
     %% count
     0 = syn:count(),
-    0 = rpc:call(SlaveNodeName, syn, count, []),
+    0 = rpc:call(SlaveNode, syn, count, []),
     0 = syn:count(CurrentNode),
-    0 = syn:count(SlaveNodeName),
-    0 = rpc:call(SlaveNodeName, syn, count, [CurrentNode]),
-    0 = rpc:call(SlaveNodeName, syn, count, [SlaveNodeName]),
+    0 = syn:count(SlaveNode),
+    0 = rpc:call(SlaveNode, syn, count, [CurrentNode]),
+    0 = rpc:call(SlaveNode, syn, count, [SlaveNode]),
     %% start processes
     PidLocal1 = syn_test_suite_helper:start_process(),
     PidLocal2 = syn_test_suite_helper:start_process(),
-    PidSlave = syn_test_suite_helper:start_process(SlaveNodeName),
+    PidSlave = syn_test_suite_helper:start_process(SlaveNode),
     %% register
     ok = syn:register(1, PidLocal1),
     ok = syn:register(2, PidLocal2),
@@ -394,11 +394,11 @@ two_nodes_when_mnesia_is_ram_process_count(Config) ->
     timer:sleep(100),
     %% count
     3 = syn:count(),
-    3 = rpc:call(SlaveNodeName, syn, count, []),
+    3 = rpc:call(SlaveNode, syn, count, []),
     2 = syn:count(CurrentNode),
-    1 = syn:count(SlaveNodeName),
-    2 = rpc:call(SlaveNodeName, syn, count, [CurrentNode]),
-    1 = rpc:call(SlaveNodeName, syn, count, [SlaveNodeName]),
+    1 = syn:count(SlaveNode),
+    2 = rpc:call(SlaveNode, syn, count, [CurrentNode]),
+    1 = rpc:call(SlaveNode, syn, count, [SlaveNode]),
     %% kill processes
     syn_test_suite_helper:kill_process(PidLocal1),
     syn_test_suite_helper:kill_process(PidLocal2),
@@ -406,32 +406,32 @@ two_nodes_when_mnesia_is_ram_process_count(Config) ->
     timer:sleep(100),
     %% count
     0 = syn:count(),
-    0 = rpc:call(SlaveNodeName, syn, count, []),
+    0 = rpc:call(SlaveNode, syn, count, []),
     0 = syn:count(CurrentNode),
-    0 = syn:count(SlaveNodeName),
-    0 = rpc:call(SlaveNodeName, syn, count, [CurrentNode]),
-    0 = rpc:call(SlaveNodeName, syn, count, [SlaveNodeName]).
+    0 = syn:count(SlaveNode),
+    0 = rpc:call(SlaveNode, syn, count, [CurrentNode]),
+    0 = rpc:call(SlaveNode, syn, count, [SlaveNode]).
 
 two_nodes_when_mnesia_is_ram_callback_on_process_exit(Config) ->
     %% get slave
-    SlaveNodeName = proplists:get_value(slave_node_name, Config),
+    SlaveNode = proplists:get_value(slave_node, Config),
     CurrentNode = node(),
     %% set schema location
     application:set_env(mnesia, schema_location, ram),
-    rpc:call(SlaveNodeName, mnesia, schema_location, [ram]),
+    rpc:call(SlaveNode, mnesia, schema_location, [ram]),
     %% load configuration variables from syn-test.config => this defines the callback
     syn_test_suite_helper:set_environment_variables(),
-    syn_test_suite_helper:set_environment_variables(SlaveNodeName),
+    syn_test_suite_helper:set_environment_variables(SlaveNode),
     %% start
     ok = syn:start(),
-    ok = rpc:call(SlaveNodeName, syn, start, []),
+    ok = rpc:call(SlaveNode, syn, start, []),
     timer:sleep(100),
     %% register global process
     ResultPid = self(),
     global:register_name(syn_register_process_SUITE_result, ResultPid),
     %% start processes
     PidLocal = syn_test_suite_helper:start_process(),
-    PidSlave = syn_test_suite_helper:start_process(SlaveNodeName),
+    PidSlave = syn_test_suite_helper:start_process(SlaveNode),
     %% register
     ok = syn:register(<<"local">>, PidLocal),
     ok = syn:register(<<"slave">>, PidSlave),
@@ -445,22 +445,22 @@ two_nodes_when_mnesia_is_ram_callback_on_process_exit(Config) ->
         ok = process_exit_callback_was_not_called_from_local_node
     end,
     receive
-        {exited, SlaveNodeName, <<"slave">>, PidSlave, killed} -> ok
+        {exited, SlaveNode, <<"slave">>, PidSlave, killed} -> ok
     after 2000 ->
         ok = process_exit_callback_was_not_called_from_slave_node
     end.
 
 two_nodes_when_mnesia_is_disc_find_by_pid(Config) ->
     %% get slave
-    SlaveNodeName = proplists:get_value(slave_node_name, Config),
+    SlaveNode = proplists:get_value(slave_node, Config),
     %% set schema location
     application:set_env(mnesia, schema_location, disc),
-    rpc:call(SlaveNodeName, mnesia, schema_location, [disc]),
+    rpc:call(SlaveNode, mnesia, schema_location, [disc]),
     %% create schema
-    mnesia:create_schema([node(), SlaveNodeName]),
+    mnesia:create_schema([node(), SlaveNode]),
     %% start
     ok = syn:start(),
-    ok = rpc:call(SlaveNodeName, syn, start, []),
+    ok = rpc:call(SlaveNode, syn, start, []),
     timer:sleep(100),
     %% start process
     Pid = syn_test_suite_helper:start_process(),
@@ -468,13 +468,13 @@ two_nodes_when_mnesia_is_disc_find_by_pid(Config) ->
     ok = syn:register(<<"my proc">>, Pid),
     %% retrieve
     <<"my proc">> = syn:find_by_pid(Pid),
-    <<"my proc">> = rpc:call(SlaveNodeName, syn, find_by_pid, [Pid]),
+    <<"my proc">> = rpc:call(SlaveNode, syn, find_by_pid, [Pid]),
     %% kill process
     syn_test_suite_helper:kill_process(Pid),
     timer:sleep(100),
     %% retrieve
     undefined = syn:find_by_pid(Pid),
-    undefined = rpc:call(SlaveNodeName, syn, find_by_pid, [Pid]).
+    undefined = rpc:call(SlaveNode, syn, find_by_pid, [Pid]).
 
 %% ===================================================================
 %% Internal

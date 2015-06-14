@@ -94,11 +94,11 @@ init_per_suite(Config) ->
     %% init
     SlaveNodeShortName = syn_slave,
     %% start slave
-    {ok, SlaveNodeName} = syn_test_suite_helper:start_slave(SlaveNodeShortName),
+    {ok, SlaveNode} = syn_test_suite_helper:start_slave(SlaveNodeShortName),
     %% config
     [
         {slave_node_short_name, SlaveNodeShortName},
-        {slave_node_name, SlaveNodeName}
+        {slave_node, SlaveNode}
         | Config
     ].
 
@@ -139,10 +139,10 @@ end_per_group(_GroupName, _Config) -> ok.
 % ----------------------------------------------------------------------------------------------------------
 init_per_testcase(_TestCase, Config) ->
     %% get slave
-    SlaveNodeName = proplists:get_value(slave_node_name, Config),
+    SlaveNode = proplists:get_value(slave_node, Config),
     %% set schema location
     application:set_env(mnesia, schema_location, ram),
-    rpc:call(SlaveNodeName, mnesia, schema_location, [ram]),
+    rpc:call(SlaveNode, mnesia, schema_location, [ram]),
     %% return
     Config.
 
@@ -155,49 +155,49 @@ init_per_testcase(_TestCase, Config) ->
 % ----------------------------------------------------------------------------------------------------------
 end_per_testcase(_TestCase, Config) ->
     %% get slave
-    SlaveNodeName = proplists:get_value(slave_node_name, Config),
-    syn_test_suite_helper:clean_after_test(SlaveNodeName).
+    SlaveNode = proplists:get_value(slave_node, Config),
+    syn_test_suite_helper:clean_after_test(SlaveNode).
 
 %% ===================================================================
 %% Tests
 %% ===================================================================
 two_nodes_netsplit_when_there_are_no_conflicts(Config) ->
     %% get slave
-    SlaveNodeName = proplists:get_value(slave_node_name, Config),
+    SlaveNode = proplists:get_value(slave_node, Config),
     CurrentNode = node(),
 
     %% start syn
     ok = syn:start(),
-    ok = rpc:call(SlaveNodeName, syn, start, []),
+    ok = rpc:call(SlaveNode, syn, start, []),
     timer:sleep(100),
 
     %% start processes
     LocalPid = syn_test_suite_helper:start_process(),
-    SlavePidLocal = syn_test_suite_helper:start_process(SlaveNodeName),
-    SlavePidSlave = syn_test_suite_helper:start_process(SlaveNodeName),
+    SlavePidLocal = syn_test_suite_helper:start_process(SlaveNode),
+    SlavePidSlave = syn_test_suite_helper:start_process(SlaveNode),
 
     %% register
     ok = syn:register(local_pid, LocalPid),
     ok = syn:register(slave_pid_local, SlavePidLocal),    %% slave registered on local node
-    ok = rpc:call(SlaveNodeName, syn, register, [slave_pid_slave, SlavePidSlave]),    %% slave registered on slave node
+    ok = rpc:call(SlaveNode, syn, register, [slave_pid_slave, SlavePidSlave]),    %% slave registered on slave node
     timer:sleep(100),
 
     %% check tables
     3 = mnesia:table_info(syn_processes_table, size),
-    3 = rpc:call(SlaveNodeName, mnesia, table_info, [syn_processes_table, size]),
+    3 = rpc:call(SlaveNode, mnesia, table_info, [syn_processes_table, size]),
 
     LocalActiveReplicas = mnesia:table_info(syn_processes_table, active_replicas),
     2 = length(LocalActiveReplicas),
-    true = lists:member(SlaveNodeName, LocalActiveReplicas),
+    true = lists:member(SlaveNode, LocalActiveReplicas),
     true = lists:member(CurrentNode, LocalActiveReplicas),
 
-    SlaveActiveReplicas = rpc:call(SlaveNodeName, mnesia, table_info, [syn_processes_table, active_replicas]),
+    SlaveActiveReplicas = rpc:call(SlaveNode, mnesia, table_info, [syn_processes_table, active_replicas]),
     2 = length(SlaveActiveReplicas),
-    true = lists:member(SlaveNodeName, SlaveActiveReplicas),
+    true = lists:member(SlaveNode, SlaveActiveReplicas),
     true = lists:member(CurrentNode, SlaveActiveReplicas),
 
     %% simulate net split
-    syn_test_suite_helper:disconnect_node(SlaveNodeName),
+    syn_test_suite_helper:disconnect_node(SlaveNode),
     timer:sleep(1000),
 
     %% check tables
@@ -205,21 +205,21 @@ two_nodes_netsplit_when_there_are_no_conflicts(Config) ->
     [CurrentNode] = mnesia:table_info(syn_processes_table, active_replicas),
 
     %% reconnect
-    syn_test_suite_helper:connect_node(SlaveNodeName),
+    syn_test_suite_helper:connect_node(SlaveNode),
     timer:sleep(1000),
 
     %% check tables
     3 = mnesia:table_info(syn_processes_table, size),
-    3 = rpc:call(SlaveNodeName, mnesia, table_info, [syn_processes_table, size]),
+    3 = rpc:call(SlaveNode, mnesia, table_info, [syn_processes_table, size]),
 
     LocalActiveReplicas2 = mnesia:table_info(syn_processes_table, active_replicas),
     2 = length(LocalActiveReplicas2),
-    true = lists:member(SlaveNodeName, LocalActiveReplicas2),
+    true = lists:member(SlaveNode, LocalActiveReplicas2),
     true = lists:member(CurrentNode, LocalActiveReplicas2),
 
-    SlaveActiveReplicas2 = rpc:call(SlaveNodeName, mnesia, table_info, [syn_processes_table, active_replicas]),
+    SlaveActiveReplicas2 = rpc:call(SlaveNode, mnesia, table_info, [syn_processes_table, active_replicas]),
     2 = length(SlaveActiveReplicas2),
-    true = lists:member(SlaveNodeName, SlaveActiveReplicas2),
+    true = lists:member(SlaveNode, SlaveActiveReplicas2),
     true = lists:member(CurrentNode, SlaveActiveReplicas2),
 
     %% check processes
@@ -227,9 +227,9 @@ two_nodes_netsplit_when_there_are_no_conflicts(Config) ->
     SlavePidLocal = syn:find_by_key(slave_pid_local),
     SlavePidSlave = syn:find_by_key(slave_pid_slave),
 
-    LocalPid = rpc:call(SlaveNodeName, syn, find_by_key, [local_pid]),
-    SlavePidLocal = rpc:call(SlaveNodeName, syn, find_by_key, [slave_pid_local]),
-    SlavePidSlave = rpc:call(SlaveNodeName, syn, find_by_key, [slave_pid_slave]),
+    LocalPid = rpc:call(SlaveNode, syn, find_by_key, [local_pid]),
+    SlavePidLocal = rpc:call(SlaveNode, syn, find_by_key, [slave_pid_local]),
+    SlavePidSlave = rpc:call(SlaveNode, syn, find_by_key, [slave_pid_slave]),
 
     %% kill processes
     syn_test_suite_helper:kill_process(LocalPid),
@@ -238,17 +238,17 @@ two_nodes_netsplit_when_there_are_no_conflicts(Config) ->
 
 two_nodes_netsplit_kill_resolution_when_there_are_conflicts(Config) ->
     %% get slave
-    SlaveNodeName = proplists:get_value(slave_node_name, Config),
+    SlaveNode = proplists:get_value(slave_node, Config),
     CurrentNode = node(),
 
     %% start syn
     ok = syn:start(),
-    ok = rpc:call(SlaveNodeName, syn, start, []),
+    ok = rpc:call(SlaveNode, syn, start, []),
     timer:sleep(100),
 
     %% start processes
     LocalPid = syn_test_suite_helper:start_process(),
-    SlavePid = syn_test_suite_helper:start_process(SlaveNodeName),
+    SlavePid = syn_test_suite_helper:start_process(SlaveNode),
 
     %% register
     ok = syn:register(conflicting_key, SlavePid),
@@ -256,13 +256,13 @@ two_nodes_netsplit_kill_resolution_when_there_are_conflicts(Config) ->
 
     %% check tables
     1 = mnesia:table_info(syn_processes_table, size),
-    1 = rpc:call(SlaveNodeName, mnesia, table_info, [syn_processes_table, size]),
+    1 = rpc:call(SlaveNode, mnesia, table_info, [syn_processes_table, size]),
 
     %% check process
     SlavePid = syn:find_by_key(conflicting_key),
 
     %% simulate net split
-    syn_test_suite_helper:disconnect_node(SlaveNodeName),
+    syn_test_suite_helper:disconnect_node(SlaveNode),
     timer:sleep(1000),
 
     %% check tables
@@ -276,12 +276,12 @@ two_nodes_netsplit_kill_resolution_when_there_are_conflicts(Config) ->
     LocalPid = syn:find_by_key(conflicting_key),
 
     %% reconnect
-    syn_test_suite_helper:connect_node(SlaveNodeName),
+    syn_test_suite_helper:connect_node(SlaveNode),
     timer:sleep(1000),
 
     %% check tables
     1 = mnesia:table_info(syn_processes_table, size),
-    1 = rpc:call(SlaveNodeName, mnesia, table_info, [syn_processes_table, size]),
+    1 = rpc:call(SlaveNode, mnesia, table_info, [syn_processes_table, size]),
 
     %% check process
     FoundPid = syn:find_by_key(conflicting_key),
@@ -293,21 +293,21 @@ two_nodes_netsplit_kill_resolution_when_there_are_conflicts(Config) ->
 
 two_nodes_netsplit_message_resolution_when_there_are_conflicts(Config) ->
     %% get slave
-    SlaveNodeName = proplists:get_value(slave_node_name, Config),
+    SlaveNode = proplists:get_value(slave_node, Config),
     CurrentNode = node(),
 
     %% load configuration variables from syn-test.config => this sets the netsplit_send_message_to_process option
     syn_test_suite_helper:set_environment_variables(),
-    syn_test_suite_helper:set_environment_variables(SlaveNodeName),
+    syn_test_suite_helper:set_environment_variables(SlaveNode),
 
     %% start syn
     ok = syn:start(),
-    ok = rpc:call(SlaveNodeName, syn, start, []),
+    ok = rpc:call(SlaveNode, syn, start, []),
     timer:sleep(100),
 
     %% start processes
     LocalPid = syn_test_suite_helper:start_process(fun process_reply_main/0),
-    SlavePid = syn_test_suite_helper:start_process(SlaveNodeName, fun process_reply_main/0),
+    SlavePid = syn_test_suite_helper:start_process(SlaveNode, fun process_reply_main/0),
 
     %% register global process
     ResultPid = self(),
@@ -319,13 +319,13 @@ two_nodes_netsplit_message_resolution_when_there_are_conflicts(Config) ->
 
     %% check tables
     1 = mnesia:table_info(syn_processes_table, size),
-    1 = rpc:call(SlaveNodeName, mnesia, table_info, [syn_processes_table, size]),
+    1 = rpc:call(SlaveNode, mnesia, table_info, [syn_processes_table, size]),
 
     %% check process
     SlavePid = syn:find_by_key(conflicting_key),
 
     %% simulate net split
-    syn_test_suite_helper:disconnect_node(SlaveNodeName),
+    syn_test_suite_helper:disconnect_node(SlaveNode),
     timer:sleep(1000),
 
     %% check tables
@@ -339,12 +339,12 @@ two_nodes_netsplit_message_resolution_when_there_are_conflicts(Config) ->
     LocalPid = syn:find_by_key(conflicting_key),
 
     %% reconnect
-    syn_test_suite_helper:connect_node(SlaveNodeName),
+    syn_test_suite_helper:connect_node(SlaveNode),
     timer:sleep(1000),
 
     %% check tables
     1 = mnesia:table_info(syn_processes_table, size),
-    1 = rpc:call(SlaveNodeName, mnesia, table_info, [syn_processes_table, size]),
+    1 = rpc:call(SlaveNode, mnesia, table_info, [syn_processes_table, size]),
 
     %% check process
     FoundPid = syn:find_by_key(conflicting_key),

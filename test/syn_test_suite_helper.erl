@@ -62,20 +62,20 @@ start_slave(NodeShortName) ->
     EbinFilePath = filename:join([filename:dirname(code:lib_dir(syn, ebin)), "ebin"]),
     TestFilePath = filename:join([filename:dirname(code:lib_dir(syn, ebin)), "test"]),
     %% start slave
-    {ok, NodeName} = ct_slave:start(NodeShortName, [
+    {ok, Node} = ct_slave:start(NodeShortName, [
         {boot_timeout, 10},
         {erl_flags, lists:concat(["-pa ", EbinFilePath, " ", TestFilePath])}
     ]),
-    {ok, NodeName}.
+    {ok, Node}.
 
 stop_slave(NodeShortName) ->
     {ok, _} = ct_slave:stop(NodeShortName).
 
-connect_node(NodeName) ->
-    net_kernel:connect_node(NodeName).
+connect_node(Node) ->
+    net_kernel:connect_node(Node).
 
-disconnect_node(NodeName) ->
-    erlang:disconnect_node(NodeName).
+disconnect_node(Node) ->
+    erlang:disconnect_node(Node).
 
 clean_after_test() ->
     %% delete table
@@ -89,29 +89,29 @@ clean_after_test() ->
 
 clean_after_test(undefined) ->
     clean_after_test();
-clean_after_test(NodeName) ->
+clean_after_test(Node) ->
     %% delete table
     {atomic, ok} = mnesia:delete_table(syn_processes_table),
     %% stop mnesia
     mnesia:stop(),
-    rpc:call(NodeName, mnesia, stop, []),
+    rpc:call(Node, mnesia, stop, []),
     %% delete schema
-    mnesia:delete_schema([node(), NodeName]),
+    mnesia:delete_schema([node(), Node]),
     %% stop syn
     syn:stop(),
-    rpc:call(NodeName, syn, stop, []).
+    rpc:call(Node, syn, stop, []).
 
 start_process() ->
     Pid = spawn(fun process_main/0),
     Pid.
-start_process(NodeName) when is_atom(NodeName) ->
-    Pid = spawn(NodeName, fun process_main/0),
+start_process(Node) when is_atom(Node) ->
+    Pid = spawn(Node, fun process_main/0),
     Pid;
 start_process(Loop) when is_function(Loop) ->
     Pid = spawn(Loop),
     Pid.
-start_process(NodeName, Loop)->
-    Pid = spawn(NodeName, Loop),
+start_process(Node, Loop)->
+    Pid = spawn(Node, Loop),
     Pid.
 
 kill_process(Pid) ->
