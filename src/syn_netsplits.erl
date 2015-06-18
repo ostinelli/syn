@@ -70,8 +70,6 @@ start_link() ->
     ignore |
     {stop, Reason :: any()}.
 init([]) ->
-    %% trap linked processes signal
-    process_flag(trap_exit, true),
     %% monitor mnesia events
     mnesia:subscribe(system),
     %% get options
