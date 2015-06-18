@@ -109,11 +109,11 @@ Options can be set in the environment variable `syn`. You're probably best off u
 
 ```erlang
 {syn, [
-    %% define callback function
-    {process_exit_callback, [calback_module, callback_function]},
+    %% define callback function on process exit
+    {process_exit_callback, [module1, function1]},
 
-    %% send a message to the discarded process (instead of kill)
-    {netsplit_send_message_to_process, shutdown}
+    %% define callback function on conflicting process (instead of kill)
+    {netsplit_conflicting_process_callback, [module2, function2]}
 ]}
 ```
 These options are explained here below.
@@ -138,7 +138,10 @@ For instance, if you want to print a log when a process exited:
 -module(my_callback).
 
 callback_on_process_exit(Key, Pid, Reason) ->
-	error_logger:info_msg("Process with Key ~p and Pid ~p exited with reason ~p~n", [Key, Pid, Reason])
+	error_logger:info_msg(
+		"Process with Key ~p and Pid ~p exited with reason ~p~n",
+		[Key, Pid, Reason]
+	)
 ```
 
 Set it in the options:
@@ -155,18 +158,34 @@ After a net split, when nodes reconnect, Syn will merge the data from all the no
 
 If the same Key was used to register a process on different nodes during a netsplit, then there will be a conflict. By default, Syn will discard the processes running on the node the conflict is being resolved on, and will kill it by sending a `kill` signal with `exit(Pid, kill)`.
 
-If this is not desired, you can set the `netsplit_send_message_to_process` option to instruct Syn to send a message to the discarded process, so that you can trigger any actions on that process. In this case, the process will not be killed by Syn, and you'll have to decide what to do with it (for instance, a graceful shutdown).
+If this is not desired, you can set the `netsplit_conflicting_process_callback` option to instruct Syn to trigger a callback, so that you can perform custom operations (such as a graceful shutdown). In this case, the process will not be killed by Syn, and you'll have to decide what to do with it. This callback will be called only on the node where the process is running.
 
-For example, if you want the message `shutdown` to be send to the discarded process you can set the option:
+The callback function is defined as:
+```erlang
+CallbackFun = fun(Key, Pid) -> any().
+
+Types:
+	Key = any()
+	Pid = pid()
+```
+The `Key` and `Pid` are the ones of the process that is to be discarded.
+
+For instance, if you want to send a `shutdown` message to the discarded process:
 
 ```erlang
-{syn, [
-    %% define callback function
-    {netsplit_send_message_to_process, shutdown}
-]}
+-module(my_callback).
+
+callback_on_netsplit_conflicting_process(_Key, Pid) ->
+	Pid ! shutdown
 ```
 
-If you don't set this option, then the default will apply (i.e. sending the `exit(Pid, kill)` signal).
+Set it in the options:
+```erlang
+{syn, [
+	%% define callback function
+	{netsplit_conflicting_process_callback, [my_callback, callback_on_netsplit_conflicting_process]}
+]}
+```
 
 > Important Note: The conflict resolution method SHOULD be defined in the same way across all nodes of the cluster. Having different conflict resolution options on different nodes can have unexpected results.
 

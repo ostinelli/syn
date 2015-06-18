@@ -136,7 +136,7 @@ init([]) ->
                 process_exit_callback,
                 [undefined, undefined]
             ),
-            %% return
+            %% build state
             {ok, #state{
                 process_exit_callback_module = ProcessExitCallbackModule,
                 process_exit_callback_function = ProcessExitCallbackFunction

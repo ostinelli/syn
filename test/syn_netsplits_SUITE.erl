@@ -37,7 +37,7 @@
 -export([
     two_nodes_netsplit_when_there_are_no_conflicts/1,
     two_nodes_netsplit_kill_resolution_when_there_are_conflicts/1,
-    two_nodes_netsplit_message_resolution_when_there_are_conflicts/1
+    two_nodes_netsplit_callback_resolution_when_there_are_conflicts/1
 ]).
 
 -export([
@@ -46,6 +46,7 @@
 
 %% internal
 -export([process_reply_main/0]).
+-export([netsplit_conflicting_process_callback_dummy/2]).
 
 %% include
 -include_lib("common_test/include/ct.hrl").
@@ -85,7 +86,7 @@ groups() ->
         {two_nodes_netsplits, [shuffle], [
             two_nodes_netsplit_when_there_are_no_conflicts,
             two_nodes_netsplit_kill_resolution_when_there_are_conflicts,
-            two_nodes_netsplit_message_resolution_when_there_are_conflicts
+            two_nodes_netsplit_callback_resolution_when_there_are_conflicts
         ]},
         {three_nodes_netsplits, [shuffle], [
             three_nodes_netsplit_kill_resolution_when_there_are_conflicts
@@ -315,12 +316,12 @@ two_nodes_netsplit_kill_resolution_when_there_are_conflicts(Config) ->
     syn_test_suite_helper:kill_process(LocalPid),
     syn_test_suite_helper:kill_process(SlavePid).
 
-two_nodes_netsplit_message_resolution_when_there_are_conflicts(Config) ->
+two_nodes_netsplit_callback_resolution_when_there_are_conflicts(Config) ->
     %% get slave
     SlaveNode = proplists:get_value(slave_node, Config),
     CurrentNode = node(),
 
-    %% load configuration variables from syn-test.config => this sets the netsplit_send_message_to_process option
+    %% load configuration variables from syn-test.config => this sets the netsplit_conflicting_process_callback option
     syn_test_suite_helper:set_environment_variables(),
     syn_test_suite_helper:set_environment_variables(SlaveNode),
 
@@ -465,3 +466,6 @@ process_reply_main() ->
             timer:sleep(500), %% wait for global processes to propagate
             global:send(syn_netsplits_SUITE_result, {exited, self()})
     end.
+
+netsplit_conflicting_process_callback_dummy(_Key, Pid) ->
+    Pid ! shutdown.
