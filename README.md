@@ -139,7 +139,6 @@ For instance, if you want to print a log when a process exited:
 
 callback_on_process_exit(Key, Pid, Reason) ->
 	error_logger:info_msg("Process with Key ~p and Pid ~p exited with reason ~p~n", [Key, Pid, Reason])
-end.
 ```
 
 Set it in the options:
