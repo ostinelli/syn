@@ -128,8 +128,10 @@ count(Node) ->
 init([]) ->
     %% trap linked processes signal
     process_flag(trap_exit, true),
+    %% monitor mnesia events
+    mnesia:subscribe(system),
     %% init
-    case initdb() of
+    case ensure_mnesia_table_is_configured() of
         ok ->
             %% get options
             {ok, [ProcessExitCallbackModule, ProcessExitCallbackFunction]} = syn_utils:get_env_value(
@@ -223,6 +225,15 @@ handle_info({'EXIT', Pid, Reason}, #state{
     %% return
     {noreply, State};
 
+handle_info({mnesia_system_event, {mnesia_up, Node}}, State) when Node =/= node() ->
+    error_logger:info_msg("Received a MNESIA up event, ensuring db is properly initialized with node ~p~n", [Node]),
+    ensure_mnesia_table_is_configured(),
+    {noreply, State};
+
+handle_info({mnesia_system_event, _MnesiaEvent}, State) ->
+    %% ignore mnesia event
+    {noreply, State};
+
 handle_info(Info, State) ->
     error_logger:warning_msg("Received an unknown info message: ~p~n", [Info]),
     {noreply, State}.
@@ -245,8 +256,8 @@ code_change(_OldVsn, State, _Extra) ->
 %% ===================================================================
 %% Internal
 %% ===================================================================
--spec initdb() -> ok | {error, any()}.
-initdb() ->
+-spec ensure_mnesia_table_is_configured() -> ok | {error, any()}.
+ensure_mnesia_table_is_configured() ->
     %% ensure all nodes are added - this covers when mnesia is in ram only mode
     mnesia:change_config(extra_db_nodes, [node() | nodes()]),
     %% ensure table exists
