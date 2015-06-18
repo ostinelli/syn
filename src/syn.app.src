@@ -3,6 +3,8 @@
         {description, "A global process registry."},
         {vsn, "0.1.0"},
         {registered, [
+            syn_backbone,
+            syn_netsplits
         ]},
         {applications, [
             kernel,
