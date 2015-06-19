@@ -30,6 +30,7 @@
 
 %% API
 -export([start/0, stop/0]).
+-export([init/0]).
 -export([register/2, unregister/1]).
 -export([find_by_key/1, find_by_pid/1]).
 -export([count/0, count/1]).
@@ -47,6 +48,10 @@ start() ->
 -spec stop() -> ok.
 stop() ->
     ok = application:stop(syn).
+
+-spec init() -> ok.
+init() ->
+    ok = syn_backbone:initdb().
 
 -spec register(Key :: any(), Pid :: pid()) -> ok | {error, taken}.
 register(Key, Pid) ->

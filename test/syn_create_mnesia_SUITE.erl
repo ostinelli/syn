@@ -179,6 +179,7 @@ single_node_when_mnesia_is_ram(_Config) ->
     application:set_env(mnesia, schema_location, ram),
     %% start
     ok = syn:start(),
+    ok = syn:init(),
     %% check table exists
     true = lists:member(syn_processes_table, mnesia:system_info(tables)).
 
@@ -187,6 +188,7 @@ single_node_when_mnesia_is_opt_disc_no_schema_exists(_Config) ->
     application:set_env(mnesia, schema_location, opt_disc),
     %% start
     ok = syn:start(),
+    ok = syn:init(),
     %% check table exists
     true = lists:member(syn_processes_table, mnesia:system_info(tables)).
 
@@ -197,6 +199,7 @@ single_node_when_mnesia_is_opt_disc_schema_exists(_Config) ->
     mnesia:create_schema([node()]),
     %% start
     ok = syn:start(),
+    ok = syn:init(),
     %% check table exists
     true = lists:member(syn_processes_table, mnesia:system_info(tables)).
 
@@ -207,6 +210,7 @@ single_node_when_mnesia_is_disc(_Config) ->
     mnesia:create_schema([node()]),
     %% start
     ok = syn:start(),
+    ok = syn:init(),
     %% check table exists
     true = lists:member(syn_processes_table, mnesia:system_info(tables)).
 
@@ -218,7 +222,9 @@ two_nodes_when_mnesia_is_ram(Config) ->
     rpc:call(SlaveNode, mnesia, schema_location, [ram]),
     %% start
     ok = syn:start(),
+    ok = syn:init(),
     ok = rpc:call(SlaveNode, syn, start, []),
+    ok = rpc:call(SlaveNode, syn, init, []),
     timer:sleep(100),
     %% check table exists on local
     true = lists:member(syn_processes_table, mnesia:system_info(tables)),
@@ -234,7 +240,9 @@ two_nodes_when_mnesia_is_opt_disc_no_schema_exists(Config) ->
     rpc:call(SlaveNode, mnesia, schema_location, [opt_disc]),
     %% start
     ok = syn:start(),
+    ok = syn:init(),
     ok = rpc:call(SlaveNode, syn, start, []),
+    ok = rpc:call(SlaveNode, syn, init, []),
     timer:sleep(100),
     %% check table exists on local
     true = lists:member(syn_processes_table, mnesia:system_info(tables)),
@@ -252,7 +260,9 @@ two_nodes_when_mnesia_is_opt_disc_schema_exists(Config) ->
     mnesia:create_schema([node(), SlaveNode]),
     %% start
     ok = syn:start(),
+    ok = syn:init(),
     ok = rpc:call(SlaveNode, syn, start, []),
+    ok = rpc:call(SlaveNode, syn, init, []),
     timer:sleep(100),
     %% check table exists on local
     true = lists:member(syn_processes_table, mnesia:system_info(tables)),
@@ -270,7 +280,9 @@ two_nodes_when_mnesia_is_disc(Config) ->
     mnesia:create_schema([node(), SlaveNode]),
     %% start
     ok = syn:start(),
+    ok = syn:init(),
     ok = rpc:call(SlaveNode, syn, start, []),
+    ok = rpc:call(SlaveNode, syn, init, []),
     timer:sleep(100),
     %% check table exists on local
     true = lists:member(syn_processes_table, mnesia:system_info(tables)),

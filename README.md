@@ -45,6 +45,15 @@ Ensure to start Syn from your application. This can be done by either providing 
 syn:start().
 ```
 
+Your application will need to connect to the nodes in your cluster. Once that is done, ensure to initialize Syn:
+
+```erlang
+syn:init().
+```
+
+Syn is now ready to register processes.
+
+
 ### Basic
 To register a process:
 

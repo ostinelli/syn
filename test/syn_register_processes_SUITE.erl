@@ -188,6 +188,7 @@ single_node_when_mnesia_is_ram_find_by_key(_Config) ->
     application:set_env(mnesia, schema_location, ram),
     %% start
     ok = syn:start(),
+    ok = syn:init(),
     %% start process
     Pid = syn_test_suite_helper:start_process(),
     %% retrieve
@@ -207,6 +208,7 @@ single_node_when_mnesia_is_ram_find_by_pid(_Config) ->
     application:set_env(mnesia, schema_location, ram),
     %% start
     ok = syn:start(),
+    ok = syn:init(),
     %% start process
     Pid = syn_test_suite_helper:start_process(),
     %% register
@@ -224,6 +226,7 @@ single_node_when_mnesia_is_ram_re_register_error(_Config) ->
     application:set_env(mnesia, schema_location, ram),
     %% start
     ok = syn:start(),
+    ok = syn:init(),
     %% start process
     Pid = syn_test_suite_helper:start_process(),
     Pid2 = syn_test_suite_helper:start_process(),
@@ -252,6 +255,7 @@ single_node_when_mnesia_is_ram_unregister(_Config) ->
     application:set_env(mnesia, schema_location, ram),
     %% start
     ok = syn:start(),
+    ok = syn:init(),
     %% start process
     Pid = syn_test_suite_helper:start_process(),
     %% unregister
@@ -273,6 +277,7 @@ single_node_when_mnesia_is_ram_process_count(_Config) ->
     application:set_env(mnesia, schema_location, ram),
     %% start
     ok = syn:start(),
+    ok = syn:init(),
     %% count
     0 = syn:count(),
     %% start process
@@ -301,6 +306,7 @@ single_node_when_mnesia_is_ram_callback_on_process_exit(_Config) ->
     syn_test_suite_helper:set_environment_variables(),
     %% start
     ok = syn:start(),
+    ok = syn:init(),
     %% register global process
     ResultPid = self(),
     global:register_name(syn_register_process_SUITE_result, ResultPid),
@@ -324,6 +330,7 @@ single_node_when_mnesia_is_disc_find_by_key(_Config) ->
     mnesia:create_schema([node()]),
     %% start
     ok = syn:start(),
+    ok = syn:init(),
     %% start process
     Pid = syn_test_suite_helper:start_process(),
     %% retrieve
@@ -346,7 +353,9 @@ two_nodes_when_mnesia_is_ram_find_by_key(Config) ->
     rpc:call(SlaveNode, mnesia, schema_location, [ram]),
     %% start
     ok = syn:start(),
+    ok = syn:init(),
     ok = rpc:call(SlaveNode, syn, start, []),
+    ok = rpc:call(SlaveNode, syn, init, []),
     timer:sleep(100),
     %% start process
     Pid = syn_test_suite_helper:start_process(),
@@ -374,7 +383,9 @@ two_nodes_when_mnesia_is_ram_process_count(Config) ->
     rpc:call(SlaveNode, mnesia, schema_location, [ram]),
     %% start
     ok = syn:start(),
+    ok = syn:init(),
     ok = rpc:call(SlaveNode, syn, start, []),
+    ok = rpc:call(SlaveNode, syn, init, []),
     timer:sleep(100),
     %% count
     0 = syn:count(),
@@ -424,7 +435,9 @@ two_nodes_when_mnesia_is_ram_callback_on_process_exit(Config) ->
     syn_test_suite_helper:set_environment_variables(SlaveNode),
     %% start
     ok = syn:start(),
+    ok = syn:init(),
     ok = rpc:call(SlaveNode, syn, start, []),
+    ok = rpc:call(SlaveNode, syn, init, []),
     timer:sleep(100),
     %% register global process
     ResultPid = self(),
@@ -460,7 +473,9 @@ two_nodes_when_mnesia_is_disc_find_by_pid(Config) ->
     mnesia:create_schema([node(), SlaveNode]),
     %% start
     ok = syn:start(),
+    ok = syn:init(),
     ok = rpc:call(SlaveNode, syn, start, []),
+    ok = rpc:call(SlaveNode, syn, init, []),
     timer:sleep(100),
     %% start process
     Pid = syn_test_suite_helper:start_process(),

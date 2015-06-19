@@ -193,7 +193,9 @@ two_nodes_netsplit_when_there_are_no_conflicts(Config) ->
 
     %% start syn
     ok = syn:start(),
+    ok = syn:init(),
     ok = rpc:call(SlaveNode, syn, start, []),
+    ok = rpc:call(SlaveNode, syn, init, []),
     timer:sleep(100),
 
     %% start processes
@@ -268,7 +270,9 @@ two_nodes_netsplit_kill_resolution_when_there_are_conflicts(Config) ->
 
     %% start syn
     ok = syn:start(),
+    ok = syn:init(),
     ok = rpc:call(SlaveNode, syn, start, []),
+    ok = rpc:call(SlaveNode, syn, init, []),
     timer:sleep(100),
 
     %% start processes
@@ -327,7 +331,9 @@ two_nodes_netsplit_callback_resolution_when_there_are_conflicts(Config) ->
 
     %% start syn
     ok = syn:start(),
+    ok = syn:init(),
     ok = rpc:call(SlaveNode, syn, start, []),
+    ok = rpc:call(SlaveNode, syn, init, []),
     timer:sleep(100),
 
     %% start processes
@@ -395,8 +401,11 @@ three_nodes_netsplit_kill_resolution_when_there_are_conflicts(Config) ->
 
     %% start syn
     ok = syn:start(),
+    ok = syn:init(),
     ok = rpc:call(SlaveNode, syn, start, []),
+    ok = rpc:call(SlaveNode, syn, init, []),
     ok = rpc:call(SlaveNode2, syn, start, []),
+    ok = rpc:call(SlaveNode2, syn, init, []),
     timer:sleep(100),
 
     %% start processes

@@ -31,6 +31,7 @@
 
 %% API
 -export([start_link/0]).
+-export([initdb/0]).
 -export([register/2, unregister/1]).
 -export([find_by_key/1, find_by_pid/1]).
 -export([count/0, count/1]).
@@ -55,6 +56,10 @@
 start_link() ->
     Options = [],
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], Options).
+
+-spec initdb() -> ok | {error, any()}.
+initdb() ->
+    initdb_do().
 
 -spec find_by_key(Key :: any()) -> pid() | undefined.
 find_by_key(Key) ->
@@ -128,24 +133,18 @@ count(Node) ->
 init([]) ->
     %% trap linked processes signal
     process_flag(trap_exit, true),
-    %% monitor mnesia events
-    mnesia:subscribe(system),
-    %% init
-    case ensure_mnesia_table_is_configured() of
-        ok ->
-            %% get options
-            {ok, [ProcessExitCallbackModule, ProcessExitCallbackFunction]} = syn_utils:get_env_value(
-                process_exit_callback,
-                [undefined, undefined]
-            ),
-            %% build state
-            {ok, #state{
-                process_exit_callback_module = ProcessExitCallbackModule,
-                process_exit_callback_function = ProcessExitCallbackFunction
-            }};
-        Other ->
-            {stop, Other}
-    end.
+
+    %% get options
+    {ok, [ProcessExitCallbackModule, ProcessExitCallbackFunction]} = syn_utils:get_env_value(
+        process_exit_callback,
+        [undefined, undefined]
+    ),
+
+    %% build state
+    {ok, #state{
+        process_exit_callback_module = ProcessExitCallbackModule,
+        process_exit_callback_function = ProcessExitCallbackFunction
+    }}.
 
 %% ----------------------------------------------------------------------------------------------------------
 %% Call messages
@@ -225,15 +224,6 @@ handle_info({'EXIT', Pid, Reason}, #state{
     %% return
     {noreply, State};
 
-handle_info({mnesia_system_event, {mnesia_up, Node}}, State) when Node =/= node() ->
-    error_logger:info_msg("Received a MNESIA up event, ensuring db is properly initialized with node ~p~n", [Node]),
-    ensure_mnesia_table_is_configured(),
-    {noreply, State};
-
-handle_info({mnesia_system_event, _MnesiaEvent}, State) ->
-    %% ignore mnesia event
-    {noreply, State};
-
 handle_info(Info, State) ->
     error_logger:warning_msg("Received an unknown info message: ~p~n", [Info]),
     {noreply, State}.
@@ -256,45 +246,50 @@ code_change(_OldVsn, State, _Extra) ->
 %% ===================================================================
 %% Internal
 %% ===================================================================
--spec ensure_mnesia_table_is_configured() -> ok | {error, any()}.
-ensure_mnesia_table_is_configured() ->
-    %% ensure all nodes are added - this covers when mnesia is in ram only mode
-    mnesia:change_config(extra_db_nodes, [node() | nodes()]),
-    %% ensure table exists
+-spec initdb_do() -> ok | {error, any()}.
+initdb_do() ->
+    %% get nodes
     CurrentNode = node(),
+    ClusterNodes = [CurrentNode | nodes()],
+    %% ensure all nodes are added
+    mnesia:change_config(extra_db_nodes, ClusterNodes),
+    %% ensure table exists
     case mnesia:create_table(syn_processes_table, [
         {type, set},
-        {ram_copies, [node() | nodes()]},
+        {ram_copies, ClusterNodes},
         {attributes, record_info(fields, syn_processes_table)},
         {index, [#syn_processes_table.pid]},
         {storage_properties, [{ets, [{read_concurrency, true}]}]}
     ]) of
         {atomic, ok} ->
-            error_logger:info_msg("syn_processes_table was successfully created.~n"),
+            error_logger:info_msg("syn_processes_table was successfully created~n"),
             ok;
         {aborted, {already_exists, syn_processes_table}} ->
             %% table already exists, try to add current node as copy
-            add_table_copy_to_local_node();
+            add_table_copy_to_current_node();
         {aborted, {already_exists, syn_processes_table, CurrentNode}} ->
             %% table already exists, try to add current node as copy
-            add_table_copy_to_local_node();
+            add_table_copy_to_current_node();
         Other ->
             error_logger:error_msg("Error while creating syn_processes_table: ~p~n", [Other]),
             {error, Other}
     end.
 
--spec add_table_copy_to_local_node() -> ok | {error, any()}.
-add_table_copy_to_local_node() ->
+-spec add_table_copy_to_current_node() -> ok | {error, any()}.
+add_table_copy_to_current_node() ->
+    %% wait for table
+    mnesia:wait_for_tables([syn_processes_table], 10000),
+    %% add copy
     CurrentNode = node(),
-    case mnesia:add_table_copy(syn_processes_table, node(), ram_copies) of
+    case mnesia:add_table_copy(syn_processes_table, CurrentNode, ram_copies) of
         {atomic, ok} ->
-            error_logger:info_msg("Copy of syn_processes_table was successfully added to current node.~n"),
+            error_logger:info_msg("Copy of syn_processes_table was successfully added to current node~n"),
             ok;
         {aborted, {already_exists, syn_processes_table}} ->
-            error_logger:info_msg("Copy of syn_processes_table is already added to current node.~n"),
+            error_logger:info_msg("Copy of syn_processes_table is already added to current node~n"),
             ok;
         {aborted, {already_exists, syn_processes_table, CurrentNode}} ->
-            error_logger:info_msg("Copy of syn_processes_table is already added to current node.~n"),
+            error_logger:info_msg("Copy of syn_processes_table is already added to current node~n"),
             ok;
         {aborted, Reason} ->
             error_logger:error_msg("Error while creating copy of syn_processes_table: ~p~n", [Reason]),
