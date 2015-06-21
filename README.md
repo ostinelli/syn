@@ -45,13 +45,40 @@ Ensure to start Syn from your application. This can be done by either providing 
 syn:start().
 ```
 
-Your application will have its own logic on how to connect to the other nodes in the cluster. Once it is, ensure to initialize Syn (this will set up the underlying mnesia backend):
+Your application will have its own logic on how to connect to the other nodes in the cluster. Once it is connected, ensure to initialize Syn (this will set up the underlying mnesia backend):
 
 ```erlang
 syn:init().
 ```
 
-Syn is now ready to register processes.
+The recommended place to initialize Syn is in the `start/2` function in your main application module, something along the lines of:
+
+```erlang
+-module(myapp_app).
+-behaviour(application).
+
+-export([start/2, stop/1]).
+
+start(_StartType, _StartArgs) ->
+    %% connect to nodes
+    connect_nodes(),
+    %% init syn
+    syn:init(),
+    %% start sup
+    myapp_sup:start_link().
+
+connect_nodes() ->
+	%% list of nodes contained in ENV variable `nodes`
+    case application:get_env(nodes) of
+        {ok, Nodes} ->
+            %% connect to node
+            [true = net_kernel:connect_node(Node) || Node <- Nodes];
+        undefined ->
+            ok
+    end.
+```
+
+Syn is then ready to register processes.
 
 
 ### Basic
