@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/ostinelli/syn.svg?branch=master)](https://travis-ci.org/ostinelli/syn)
+
 # Syn
 **Syn** (short for _synonym_) is a global process registry for Erlang.
 

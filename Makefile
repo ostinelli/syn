@@ -1,9 +1,16 @@
 all:
 	@rebar compile
 
+syn:
+	@rebar skip_deps=true compile
+
 clean:
 	@rebar clean
 	@find $(PWD)/. -name "erl_crash\.dump" | xargs rm -f
+
+deps: clean
+	@rebar delete-deps
+	@rebar get-deps
 
 dialyze:
 	@dialyzer -n -c src/*.erl
@@ -17,9 +24,11 @@ run:
 	-mnesia schema_location ram \
 	-eval 'syn:start().'
 
-tests: all
+tests:
 	@mkdir -p /tmp/logs; \
 	ct_run -sname syn -dir test -logdir /tmp/logs -pa ebin; \
 	res=$$?; \
 	rm -rf /tmp/logs; \
 	if [ $$res != 0 ]; then exit $$res; fi;
+
+travis: all tests
