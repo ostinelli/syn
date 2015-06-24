@@ -1,9 +1,6 @@
 all:
 	@rebar compile
 
-syn:
-	@rebar skip_deps=true compile
-
 clean:
 	@rebar clean
 	@find $(PWD)/. -name "erl_crash\.dump" | xargs rm -f
