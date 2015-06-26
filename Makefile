@@ -21,11 +21,11 @@ run:
 	-mnesia schema_location ram \
 	-eval 'syn:start().'
 
-tests:
+tests: all
 	@mkdir -p /tmp/logs; \
 	ct_run -sname syn -dir test -logdir /tmp/logs -pa ebin; \
 	res=$$?; \
 	rm -rf /tmp/logs; \
 	if [ $$res != 0 ]; then exit $$res; fi;
 
-travis: all tests
+travis: tests
