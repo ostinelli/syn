@@ -41,8 +41,8 @@
 
 %% records
 -record(state, {
-    netsplit_conflicting_process_callback_module = undefined :: atom(),
-    netsplit_conflicting_process_callback_function = undefined :: atom()
+    conflicting_process_callback_module = undefined :: atom(),
+    conflicting_process_callback_function = undefined :: atom()
 }).
 
 %% include
@@ -73,14 +73,14 @@ init([]) ->
     %% monitor mnesia events
     mnesia:subscribe(system),
     %% get options
-    {ok, [NetsplitConflictingProcessCallbackModule, NetsplitConflictingProcessCallbackFunction]} = syn_utils:get_env_value(
-        netsplit_conflicting_process_callback,
+    {ok, [ConflictingProcessCallbackModule, ConflictingProcessCallbackFunction]} = syn_utils:get_env_value(
+        conflicting_process_callback,
         [undefined, undefined]
     ),
     %% build state
     {ok, #state{
-        netsplit_conflicting_process_callback_module = NetsplitConflictingProcessCallbackModule,
-        netsplit_conflicting_process_callback_function = NetsplitConflictingProcessCallbackFunction
+        conflicting_process_callback_module = ConflictingProcessCallbackModule,
+        conflicting_process_callback_function = ConflictingProcessCallbackFunction
     }}.
 
 %% ----------------------------------------------------------------------------------------------------------
@@ -119,11 +119,11 @@ handle_cast(Msg, State) ->
     {stop, Reason :: any(), #state{}}.
 
 handle_info({mnesia_system_event, {inconsistent_database, Context, Node}}, #state{
-    netsplit_conflicting_process_callback_module = NetsplitConflictingProcessCallbackModule,
-    netsplit_conflicting_process_callback_function = NetsplitConflictingProcessCallbackFunction
+    conflicting_process_callback_module = ConflictingProcessCallbackModule,
+    conflicting_process_callback_function = ConflictingProcessCallbackFunction
 } = State) ->
     error_logger:warning_msg("MNESIA signalled an inconsistent database on node: ~p with context: ~p, initiating automerge~n", [Node, Context]),
-    automerge(Node, NetsplitConflictingProcessCallbackModule, NetsplitConflictingProcessCallbackFunction),
+    automerge(Node, ConflictingProcessCallbackModule, ConflictingProcessCallbackFunction),
     {noreply, State};
 
 handle_info({mnesia_system_event, {mnesia_down, Node}}, State) when Node =/= node() ->

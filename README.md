@@ -151,7 +151,7 @@ Options can be set in the environment variable `syn`. You're probably best off u
     {process_exit_callback, [module1, function1]},
 
     %% define callback function on conflicting process (instead of kill)
-    {netsplit_conflicting_process_callback, [module2, function2]}
+    {conflicting_process_callback, [module2, function2]}
 ]}
 ```
 These options are explained here below.
@@ -196,7 +196,7 @@ After a net split, when nodes reconnect, Syn will merge the data from all the no
 
 If the same Key was used to register a process on different nodes during a netsplit, then there will be a conflict. By default, Syn will discard the processes running on the node the conflict is being resolved on, and will kill it by sending a `kill` signal with `exit(Pid, kill)`.
 
-If this is not desired, you can set the `netsplit_conflicting_process_callback` option to instruct Syn to trigger a callback, so that you can perform custom operations (such as a graceful shutdown). In this case, the process will not be killed by Syn, and you'll have to decide what to do with it. This callback will be called only on the node where the process is running.
+If this is not desired, you can set the `conflicting_process_callback` option to instruct Syn to trigger a callback, so that you can perform custom operations (such as a graceful shutdown). In this case, the process will not be killed by Syn, and you'll have to decide what to do with it. This callback will be called only on the node where the process is running.
 
 The callback function is defined as:
 ```erlang
@@ -213,7 +213,7 @@ For instance, if you want to send a `shutdown` message to the discarded process:
 ```erlang
 -module(my_callback).
 
-callback_on_netsplit_conflicting_process(_Key, Pid) ->
+callback_on_conflicting_process(_Key, Pid) ->
 	Pid ! shutdown
 ```
 
@@ -221,7 +221,7 @@ Set it in the options:
 ```erlang
 {syn, [
 	%% define callback function
-	{netsplit_conflicting_process_callback, [my_callback, callback_on_netsplit_conflicting_process]}
+	{conflicting_process_callback, [my_callback, callback_on_conflicting_process]}
 ]}
 ```
 
