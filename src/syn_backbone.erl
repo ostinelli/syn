@@ -217,7 +217,7 @@ handle_info({'EXIT', Pid, Reason}, #state{
                 %% callback
                 case ProcessExitCallbackModule of
                     undefined -> ok;
-                    _ -> spawn(fun() -> ProcessExitCallbackModule:ProcessExitCallbackFunction(Key, Pid, Reason) end)
+                    _ -> ProcessExitCallbackModule:ProcessExitCallbackFunction(Key, Pid, Reason)
                 end
         end
     end),
