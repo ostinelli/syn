@@ -71,13 +71,9 @@ start(_StartType, _StartArgs) ->
 
 connect_nodes() ->
 	%% list of nodes contained in ENV variable `nodes`
-    case application:get_env(nodes) of
-        {ok, Nodes} ->
-            %% connect to node
-            [true = net_kernel:connect_node(Node) || Node <- Nodes];
-        undefined ->
-            ok
-    end.
+	Nodes = application:get_env(nodes),
+	%% connect to nodes
+	[true = net_kernel:connect_node(Node) || Node <- Nodes].
 ```
 
 Syn is then ready to register processes.
@@ -156,7 +152,7 @@ Options can be set in the environment variable `syn`. You're probably best off u
 ```
 These options are explained here below.
 
-#### Process Exit Callback
+#### Callback on process exit
 The `process_exit_callback` option allows you to specify the `module` and the `function` of the callback that will be triggered when a process exits. This callback will be called only on the node where the process was running.
 
 The callback function is defined as:
@@ -191,7 +187,7 @@ Set it in the options:
 ```
 If you don't set this option, no callback will be triggered.
 
-#### Conflict resolution by message sending
+#### Conflict resolution by callback
 After a net split, when nodes reconnect, Syn will merge the data from all the nodes in the cluster.
 
 If the same Key was used to register a process on different nodes during a netsplit, then there will be a conflict. By default, Syn will discard the processes running on the node the conflict is being resolved on, and will kill it by sending a `kill` signal with `exit(Pid, kill)`.
