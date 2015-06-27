@@ -98,7 +98,7 @@ init([]) ->
     {stop, Reason :: any(), #state{}}.
 
 handle_call(Request, From, State) ->
-    error_logger:warning_msg("Received from ~p an unknown call message: ~p~n", [Request, From]),
+    error_logger:warning_msg("Received from ~p an unknown call message: ~p", [Request, From]),
     {reply, undefined, State}.
 
 %% ----------------------------------------------------------------------------------------------------------
@@ -110,7 +110,7 @@ handle_call(Request, From, State) ->
     {stop, Reason :: any(), #state{}}.
 
 handle_cast(Msg, State) ->
-    error_logger:warning_msg("Received an unknown cast message: ~p~n", [Msg]),
+    error_logger:warning_msg("Received an unknown cast message: ~p", [Msg]),
     {noreply, State}.
 
 %% ----------------------------------------------------------------------------------------------------------
@@ -125,12 +125,12 @@ handle_info({mnesia_system_event, {inconsistent_database, Context, Node}}, #stat
     conflicting_process_callback_module = ConflictingProcessCallbackModule,
     conflicting_process_callback_function = ConflictingProcessCallbackFunction
 } = State) ->
-    error_logger:warning_msg("MNESIA signalled an inconsistent database on node: ~p with context: ~p, initiating automerge~n", [Node, Context]),
+    error_logger:warning_msg("MNESIA signalled an inconsistent database on node: ~p with context: ~p, initiating automerge", [Node, Context]),
     automerge(Node, ConflictingProcessCallbackModule, ConflictingProcessCallbackFunction),
     {noreply, State};
 
 handle_info({mnesia_system_event, {mnesia_down, Node}}, State) when Node =/= node() ->
-    error_logger:warning_msg("Received a MNESIA down event, removing all pids of node ~p~n", [Node]),
+    error_logger:warning_msg("Received a MNESIA down event, removing all pids of node ~p", [Node]),
     delete_pids_of_disconnected_node(Node),
     {noreply, State};
 
@@ -139,7 +139,7 @@ handle_info({mnesia_system_event, _MnesiaEvent}, State) ->
     {noreply, State};
 
 handle_info(Info, State) ->
-    error_logger:warning_msg("Received an unknown info message: ~p~n", [Info]),
+    error_logger:warning_msg("Received an unknown info message: ~p", [Info]),
     {noreply, State}.
 
 %% ----------------------------------------------------------------------------------------------------------
@@ -147,7 +147,7 @@ handle_info(Info, State) ->
 %% ----------------------------------------------------------------------------------------------------------
 -spec terminate(Reason :: any(), #state{}) -> terminated.
 terminate(Reason, _State) ->
-    error_logger:info_msg("Terminating syn netsplits with reason: ~p~n", [Reason]),
+    error_logger:info_msg("Terminating syn netsplits with reason: ~p", [Reason]),
     terminated.
 
 %% ----------------------------------------------------------------------------------------------------------
@@ -179,9 +179,9 @@ delete_pids_of_disconnected_node(Node) ->
 automerge(RemoteNode, CallbackModule, CallbackFunction) ->
     global:trans({{?MODULE, automerge}, self()},
         fun() ->
-            error_logger:warning_msg("AUTOMERGE starting for remote node ~s (global lock is set)~n", [RemoteNode]),
+            error_logger:warning_msg("AUTOMERGE starting for remote node ~s (global lock is set)", [RemoteNode]),
             check_stitch(RemoteNode, CallbackModule, CallbackFunction),
-            error_logger:warning_msg("AUTOMERGE done (global lock will be unset)~n")
+            error_logger:warning_msg("AUTOMERGE done (global is about to be unset)")
         end).
 
 -spec check_stitch(RemoteNode :: atom(), CallbackModule :: atom(), CallbackFunction :: atom()) -> ok.
@@ -193,7 +193,7 @@ check_stitch(RemoteNode, CallbackModule, CallbackFunction) ->
             stitch(RemoteNode, CallbackModule, CallbackFunction),
             ok;
         Error ->
-            error_logger:error_msg("Could not check if node is stiched: ~p~n", [Error])
+            error_logger:error_msg("Could not check if node is stiched: ~p", [Error])
     end.
 
 -spec stitch(RemoteNode :: atom(), CallbackModule :: atom(), CallbackFunction :: atom()) ->
@@ -247,15 +247,18 @@ purge_double_processes_from_local_node(LocalProcessesInfo, RemoteProcessesInfo, 
         case ets:lookup(Tab, Key) of
             [] -> ok;
             [{Key, LocalProcessPid}] ->
-                error_logger:warning_msg("Found a double process for ~s, killing it on local node~n", [Key]),
                 %% remove it from local mnesia table
                 mnesia:dirty_delete(syn_processes_table, Key),
                 %% remove it from ETS
                 ets:delete(Tab, Key),
                 %% kill or send message
                 case CallbackModule of
-                    undefined -> exit(LocalProcessPid, kill);
-                    _ -> spawn(fun() -> CallbackModule:CallbackFunction(Key, LocalProcessPid) end)
+                    undefined ->
+                        error_logger:warning_msg("Found a double process for ~s, killing it on local node ~p", [Key, node()]),
+                        exit(LocalProcessPid, kill);
+                    _ -> spawn(fun() ->
+                        error_logger:warning_msg("Found a double process for ~s, about to trigger callback on local node ~p", [Key, node()]),
+                        CallbackModule:CallbackFunction(Key, LocalProcessPid) end)
                 end
         end
     end,
