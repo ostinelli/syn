@@ -25,7 +25,7 @@
 %% LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 %% OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 %% THE SOFTWARE.
--module(syn_netsplits_SUITE).
+-module(syn_consistency_SUITE).
 
 %% callbacks
 -export([all/0]).
@@ -342,7 +342,7 @@ two_nodes_netsplit_callback_resolution_when_there_are_conflicts(Config) ->
 
     %% register global process
     ResultPid = self(),
-    global:register_name(syn_netsplits_SUITE_result, ResultPid),
+    global:register_name(syn_consistency_SUITE_result, ResultPid),
 
     %% register
     ok = syn:register(conflicting_key, SlavePid),
@@ -473,7 +473,7 @@ process_reply_main() ->
     receive
         shutdown ->
             timer:sleep(500), %% wait for global processes to propagate
-            global:send(syn_netsplits_SUITE_result, {exited, self()})
+            global:send(syn_consistency_SUITE_result, {exited, self()})
     end.
 
 conflicting_process_callback_dummy(_Key, Pid) ->

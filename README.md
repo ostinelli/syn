@@ -9,7 +9,7 @@ Syn is a process registry that has the following features:
  * Global (i.e. a process is uniquely identified with a Key across all the nodes of a cluster).
  * Any term can be used as Key.
  * Fast writes.
- * Automatically handles net splits.
+ * Automatically handles conflict resolution (such as net splits).
  * Configurable callbacks.
 
 
@@ -188,9 +188,9 @@ Set it in the options:
 If you don't set this option, no callback will be triggered.
 
 #### Conflict resolution by callback
-After a net split, when nodes reconnect, Syn will merge the data from all the nodes in the cluster.
+In case of race conditions, or during net splits, a Key might be registered simultaneously on two different nodes. In this case, the cluster experiences a naming conflict.
 
-If the same Key was used to register a process on different nodes during a netsplit, then there will be a conflict. By default, Syn will discard the processes running on the node the conflict is being resolved on, and will kill it by sending a `kill` signal with `exit(Pid, kill)`.
+When this happens, Syn will resolve this conflict by choosing a single process. Syn will discard the processes running on the node the conflict is being resolved on, and by default will kill it by sending a `kill` signal with `exit(Pid, kill)`.
 
 If this is not desired, you can set the `conflicting_process_callback` option to instruct Syn to trigger a callback, so that you can perform custom operations (such as a graceful shutdown). In this case, the process will not be killed by Syn, and you'll have to decide what to do with it. This callback will be called only on the node where the process is running.
 

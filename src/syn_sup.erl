@@ -54,6 +54,6 @@ start_link() ->
 init([]) ->
     Children = [
         ?CHILD(syn_backbone, worker),
-        ?CHILD(syn_netsplits, worker)
+        ?CHILD(syn_consistency, worker)
     ],
     {ok, {{one_for_one, 10, 10}, Children}}.

@@ -4,7 +4,7 @@
         {vsn, "0.1.0"},
         {registered, [
             syn_backbone,
-            syn_netsplits
+            syn_consistency
         ]},
         {applications, [
             kernel,

@@ -29,7 +29,7 @@
 %% OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 %% THE SOFTWARE.
 %% ==========================================================================================================
--module(syn_netsplits).
+-module(syn_consistency).
 -behaviour(gen_server).
 
 %% API
