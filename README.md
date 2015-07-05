@@ -227,7 +227,7 @@ Set it in the options:
 ## Internals
 Under the hood, Syn performs dirty reads and writes into a distributed in-memory Mnesia table, replicated across all the nodes of the cluster.
 
-To automatically handle net splits, Syn implements a specialized and simplified version of the mechanisms used in Ulf Wiger's [unsplit](https://github.com/uwiger/unsplit) framework.
+To automatically handle conflict resolution, Syn implements a specialized and simplified version of the mechanisms used in Ulf Wiger's [unsplit](https://github.com/uwiger/unsplit) framework.
 
 
 ## Contributing
