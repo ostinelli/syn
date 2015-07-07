@@ -190,7 +190,7 @@ check_stitch(RemoteNode, CallbackModule, CallbackFunction) ->
         true ->
             ok;
         false ->
-            stitch(RemoteNode, CallbackModule, CallbackFunction),
+            catch stitch(RemoteNode, CallbackModule, CallbackFunction),
             ok;
         Error ->
             error_logger:error_msg("Could not check if node is stiched: ~p", [Error])
