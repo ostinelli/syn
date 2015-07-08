@@ -11,10 +11,5 @@ otp_release:
    - R16B03
    - R16B02
    - R16B01
-   - R16B
-   - R15B03-1
-   - R15B02
-   - R15B01
-   - R15B
 
 script: "make travis"
