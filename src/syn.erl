@@ -41,8 +41,8 @@
 %% ===================================================================
 -spec start() -> ok.
 start() ->
-    {ok, _} = application:ensure_all_started(mnesia),
-    {ok, _} = application:ensure_all_started(syn),
+    ok = start_application(mnesia),
+    ok = start_application(syn),
     ok.
 
 -spec stop() -> ok.
@@ -76,3 +76,14 @@ count() ->
 -spec count(Node :: atom()) -> non_neg_integer().
 count(Node) ->
     syn_backbone:count(Node).
+
+%% ===================================================================
+%% Internal
+%% ===================================================================
+-spec start_application(atom()) -> ok | {error, any()}.
+start_application(Application) ->
+    case application:start(Application) of
+        ok -> ok;
+        {error, {already_started, Application}} -> ok;
+        Error -> Error
+    end.
