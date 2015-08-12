@@ -55,7 +55,7 @@
 ]).
 
 %% internals
--export([process_exit_callback_dummy/3]).
+-export([process_exit_callback_dummy/4]).
 
 %% include
 -include_lib("common_test/include/ct.hrl").
@@ -373,12 +373,13 @@ single_node_when_mnesia_is_ram_callback_on_process_exit(_Config) ->
     %% start process
     Pid = syn_test_suite_helper:start_process(),
     %% register
-    ok = syn:register(<<"my proc">>, Pid),
+    Meta = {some, meta},
+    ok = syn:register(<<"my proc">>, Pid, Meta),
     %% kill process
     syn_test_suite_helper:kill_process(Pid),
     %% check callback were triggered
     receive
-        {exited, CurrentNode, <<"my proc">>, Pid, killed} -> ok
+        {exited, CurrentNode, <<"my proc">>, Pid, Meta, killed} -> ok
     after 2000 ->
         ok = process_exit_callback_was_not_called_from_local_node
     end.
@@ -545,19 +546,20 @@ two_nodes_when_mnesia_is_ram_callback_on_process_exit(Config) ->
     PidLocal = syn_test_suite_helper:start_process(),
     PidSlave = syn_test_suite_helper:start_process(SlaveNode),
     %% register
-    ok = syn:register(<<"local">>, PidLocal),
+    Meta = {some, meta},
+    ok = syn:register(<<"local">>, PidLocal, Meta),
     ok = syn:register(<<"slave">>, PidSlave),
     %% kill process
     syn_test_suite_helper:kill_process(PidLocal),
     syn_test_suite_helper:kill_process(PidSlave),
     %% check callback were triggered
     receive
-        {exited, CurrentNode, <<"local">>, PidLocal, killed} -> ok
+        {exited, CurrentNode, <<"local">>, PidLocal, Meta, killed} -> ok
     after 2000 ->
         ok = process_exit_callback_was_not_called_from_local_node
     end,
     receive
-        {exited, SlaveNode, <<"slave">>, PidSlave, killed} -> ok
+        {exited, SlaveNode, <<"slave">>, PidSlave, undefined, killed} -> ok
     after 2000 ->
         ok = process_exit_callback_was_not_called_from_slave_node
     end.
@@ -593,5 +595,5 @@ two_nodes_when_mnesia_is_disc_find_by_pid(Config) ->
 %% ===================================================================
 %% Internal
 %% ===================================================================
-process_exit_callback_dummy(Key, Pid, Reason) ->
-    global:send(syn_register_process_SUITE_result, {exited, node(), Key, Pid, Reason}).
+process_exit_callback_dummy(Key, Pid, Meta, Reason) ->
+    global:send(syn_register_process_SUITE_result, {exited, node(), Key, Pid, Meta, Reason}).

@@ -192,11 +192,12 @@ The `process_exit_callback` option allows you to specify the `module` and the `f
 
 The callback function is defined as:
 ```erlang
-CallbackFun = fun(Key, Pid, Reason) -> any().
+CallbackFun = fun(Key, Pid, Metadata, Reason) -> any().
 
 Types:
 	Key = any()
 	Pid = pid()
+	Metadata = any()
 	Reason = any()
 ```
 The `Key` and `Pid` are the ones of the process that exited with `Reason`.
@@ -205,11 +206,12 @@ For instance, if you want to print a log when a process exited:
 
 ```erlang
 -module(my_callback).
+-export([callback_on_process_exit/4]).
 
-callback_on_process_exit(Key, Pid, Reason) ->
+callback_on_process_exit(Key, Pid, Metadata, Reason) ->
 	error_logger:info_msg(
-		"Process with Key ~p and Pid ~p exited with reason ~p~n",
-		[Key, Pid, Reason]
+		"Process with Key ~p, Pid ~p and Metadata ~p exited with reason ~p~n",
+		[Key, Pid, Metadata, Reason]
 	)
 ```
 

@@ -231,7 +231,7 @@ handle_info({'EXIT', Pid, Reason}, #state{
     %% do not lock backbone
     spawn(fun() ->
         %% check if pid is in table
-        case find_by_pid(Pid) of
+        case find_by_pid(Pid, with_meta) of
             undefined ->
                 case Reason of
                     normal -> ok;
@@ -239,7 +239,7 @@ handle_info({'EXIT', Pid, Reason}, #state{
                     _ ->
                         error_logger:warning_msg("Received an exit message from an unlinked process ~p with reason: ~p", [Pid, Reason])
                 end;
-            Key ->
+            {Key, Meta} ->
                 %% delete from table
                 remove_process_by_key(Key),
                 %% log
@@ -252,7 +252,7 @@ handle_info({'EXIT', Pid, Reason}, #state{
                 %% callback
                 case ProcessExitCallbackModule of
                     undefined -> ok;
-                    _ -> ProcessExitCallbackModule:ProcessExitCallbackFunction(Key, Pid, Reason)
+                    _ -> ProcessExitCallbackModule:ProcessExitCallbackFunction(Key, Pid, Meta, Reason)
                 end
         end
     end),
