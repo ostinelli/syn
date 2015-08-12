@@ -93,21 +93,7 @@ find_by_pid(Pid, with_meta) ->
 
 -spec register(Key :: any(), Pid :: pid()) -> ok | {error, taken}.
 register(Key, Pid) ->
-    case find_by_key(Key) of
-        undefined ->
-            %% get processes's node
-            Node = node(Pid),
-            %% add to table
-            mnesia:dirty_write(#syn_processes_table{
-                key = Key,
-                pid = Pid,
-                node = Node
-            }),
-            %% link
-            gen_server:call({?MODULE, Node}, {link_process, Pid});
-        _ ->
-            {error, taken}
-    end.
+    register(Key, Pid, undefined).
 
 -spec register(Key :: any(), Pid :: pid(), Meta :: any()) -> ok | {error, taken}.
 register(Key, Pid, Meta) ->
