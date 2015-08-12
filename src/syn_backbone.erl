@@ -345,7 +345,7 @@ i_find_by_pid(Pid) ->
         _ -> undefined
     end.
 
--spec return_if_on_connected_node(Process :: #syn_processes_table{}) -> boolean().
+-spec return_if_on_connected_node(Process :: #syn_processes_table{}) -> Process :: #syn_processes_table{} | undefined.
 return_if_on_connected_node(Process) ->
     case lists:member(Process#syn_processes_table.node, [node() | nodes()]) of
         true -> Process;

@@ -50,7 +50,7 @@ start_link() ->
 %% Callbacks
 %% ===================================================================
 -spec init([]) ->
-    {ok, {{supervisor:strategy(), non_neg_integer(), non_neg_integer()}, [supervisor:child_spec()]}}.
+    {ok, {{supervisor:strategy(), non_neg_integer(), pos_integer()}, [supervisor:child_spec()]}}.
 init([]) ->
     Children = [
         ?CHILD(syn_backbone, worker),
