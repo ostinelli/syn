@@ -181,7 +181,7 @@ automerge(RemoteNode, CallbackModule, CallbackFunction) ->
         fun() ->
             error_logger:warning_msg("AUTOMERGE starting for remote node ~s (global lock is set)", [RemoteNode]),
             check_stitch(RemoteNode, CallbackModule, CallbackFunction),
-            error_logger:warning_msg("AUTOMERGE done (global is about to be unset)")
+            error_logger:warning_msg("AUTOMERGE done (global lock is about to be unset)")
         end).
 
 -spec check_stitch(RemoteNode :: atom(), CallbackModule :: atom(), CallbackFunction :: atom()) -> ok.
@@ -243,10 +243,10 @@ purge_double_processes_from_local_node(LocalProcessesInfo, RemoteProcessesInfo, 
     ets:insert(Tab, LocalProcessesInfo),
 
     %% find doubles
-    F = fun({Key, _RemoteProcessPid}) ->
+    F = fun({Key, _RemoteProcessPid, _RemoteProcessMeta}) ->
         case ets:lookup(Tab, Key) of
             [] -> ok;
-            [{Key, LocalProcessPid}] ->
+            [{Key, LocalProcessPid, LocalProcessMeta}] ->
                 %% remove it from local mnesia table
                 mnesia:dirty_delete(syn_processes_table, Key),
                 %% remove it from ETS
@@ -256,9 +256,11 @@ purge_double_processes_from_local_node(LocalProcessesInfo, RemoteProcessesInfo, 
                     undefined ->
                         error_logger:warning_msg("Found a double process for ~s, killing it on local node ~p", [Key, node()]),
                         exit(LocalProcessPid, kill);
-                    _ -> spawn(fun() ->
-                        error_logger:warning_msg("Found a double process for ~s, about to trigger callback on local node ~p", [Key, node()]),
-                        CallbackModule:CallbackFunction(Key, LocalProcessPid) end)
+                    _ -> spawn(
+                        fun() ->
+                            error_logger:warning_msg("Found a double process for ~s, about to trigger callback on local node ~p", [Key, node()]),
+                            CallbackModule:CallbackFunction(Key, LocalProcessPid, LocalProcessMeta)
+                        end)
                 end
         end
     end,
@@ -282,19 +284,20 @@ write_local_processes_to_remote(RemoteNode, LocalProcessesInfo) ->
 -spec get_processes_info_of_node(Node :: atom()) -> list().
 get_processes_info_of_node(Node) ->
     %% build match specs
-    MatchHead = #syn_processes_table{key = '$1', pid = '$2', node = '$3'},
+    MatchHead = #syn_processes_table{key = '$1', pid = '$2', node = '$3', meta = '$4'},
     Guard = {'=:=', '$3', Node},
-    ProcessInfoFormat = {{'$1', '$2'}},
+    ProcessInfoFormat = {{'$1', '$2', '$4'}},
     %% select
     mnesia:dirty_select(syn_processes_table, [{MatchHead, [Guard], [ProcessInfoFormat]}]).
 
 -spec write_processes_info_to_node(Node :: atom(), ProcessesInfo :: list()) -> ok.
 write_processes_info_to_node(Node, ProcessesInfo) ->
-    FWrite = fun({Key, ProcessPid}) ->
+    FWrite = fun({Key, ProcessPid, ProcessMeta}) ->
         mnesia:dirty_write(#syn_processes_table{
             key = Key,
             pid = ProcessPid,
-            node = Node
+            node = Node,
+            meta = ProcessMeta
         })
     end,
     lists:foreach(FWrite, ProcessesInfo).

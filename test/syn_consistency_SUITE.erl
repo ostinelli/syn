@@ -46,7 +46,7 @@
 
 %% internal
 -export([process_reply_main/0]).
--export([conflicting_process_callback_dummy/2]).
+-export([conflicting_process_callback_dummy/3]).
 
 %% include
 -include_lib("common_test/include/ct.hrl").
@@ -345,7 +345,8 @@ two_nodes_netsplit_callback_resolution_when_there_are_conflicts(Config) ->
     global:register_name(syn_consistency_SUITE_result, ResultPid),
 
     %% register
-    ok = syn:register(conflicting_key, SlavePid),
+    Meta = {some, meta, data},
+    ok = syn:register(conflicting_key, SlavePid, Meta),
     timer:sleep(100),
 
     %% check tables
@@ -364,7 +365,7 @@ two_nodes_netsplit_callback_resolution_when_there_are_conflicts(Config) ->
     [CurrentNode] = mnesia:table_info(syn_processes_table, active_replicas),
 
     %% now register the local pid with the same key
-    ok = syn:register(conflicting_key, LocalPid),
+    ok = syn:register(conflicting_key, LocalPid, Meta),
 
     %% check process
     LocalPid = syn:find_by_key(conflicting_key),
@@ -384,7 +385,7 @@ two_nodes_netsplit_callback_resolution_when_there_are_conflicts(Config) ->
     %% check message received from killed pid
     KilledPid = lists:nth(1, lists:delete(FoundPid, [LocalPid, SlavePid])),
     receive
-        {exited, KilledPid} -> ok
+        {exited, KilledPid, Meta} -> ok
     after 2000 ->
         ok = conflicting_process_did_not_receive_message
     end,
@@ -471,10 +472,10 @@ three_nodes_netsplit_kill_resolution_when_there_are_conflicts(Config) ->
 %% ===================================================================
 process_reply_main() ->
     receive
-        shutdown ->
+        {shutdown, Meta} ->
             timer:sleep(500), %% wait for global processes to propagate
-            global:send(syn_consistency_SUITE_result, {exited, self()})
+            global:send(syn_consistency_SUITE_result, {exited, self(), Meta})
     end.
 
-conflicting_process_callback_dummy(_Key, Pid) ->
-    Pid ! shutdown.
+conflicting_process_callback_dummy(_Key, Pid, Meta) ->
+    Pid ! {shutdown, Meta}.

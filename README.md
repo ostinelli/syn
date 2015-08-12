@@ -233,20 +233,22 @@ If this is not desired, you can set the `conflicting_process_callback` option to
 
 The callback function is defined as:
 ```erlang
-CallbackFun = fun(Key, Pid) -> any().
+CallbackFun = fun(Key, Pid, Metadata) -> any().
 
 Types:
 	Key = any()
 	Pid = pid()
+	Metadata = any()
 ```
-The `Key` and `Pid` are the ones of the process that is to be discarded.
+The `Key`, `Pid` and `Metadata` are the ones of the process that is to be discarded.
 
 For instance, if you want to send a `shutdown` message to the discarded process:
 
 ```erlang
 -module(my_callback).
+-export([callback_on_conflicting_process/3]).
 
-callback_on_conflicting_process(_Key, Pid) ->
+callback_on_conflicting_process(_Key, Pid, _Metadata) ->
 	Pid ! shutdown
 ```
 
