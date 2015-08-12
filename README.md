@@ -192,12 +192,12 @@ The `process_exit_callback` option allows you to specify the `module` and the `f
 
 The callback function is defined as:
 ```erlang
-CallbackFun = fun(Key, Pid, Metadata, Reason) -> any().
+CallbackFun = fun(Key, Pid, Meta, Reason) -> any().
 
 Types:
 	Key = any()
 	Pid = pid()
-	Metadata = any()
+	Meta = any()
 	Reason = any()
 ```
 The `Key` and `Pid` are the ones of the process that exited with `Reason`.
@@ -208,10 +208,10 @@ For instance, if you want to print a log when a process exited:
 -module(my_callback).
 -export([callback_on_process_exit/4]).
 
-callback_on_process_exit(Key, Pid, Metadata, Reason) ->
+callback_on_process_exit(Key, Pid, Meta, Reason) ->
 	error_logger:info_msg(
-		"Process with Key ~p, Pid ~p and Metadata ~p exited with reason ~p~n",
-		[Key, Pid, Metadata, Reason]
+		"Process with Key ~p, Pid ~p and Meta ~p exited with reason ~p~n",
+		[Key, Pid, Meta, Reason]
 	)
 ```
 
@@ -233,14 +233,14 @@ If this is not desired, you can set the `conflicting_process_callback` option to
 
 The callback function is defined as:
 ```erlang
-CallbackFun = fun(Key, Pid, Metadata) -> any().
+CallbackFun = fun(Key, Pid, Meta) -> any().
 
 Types:
 	Key = any()
 	Pid = pid()
-	Metadata = any()
+	Meta = any()
 ```
-The `Key`, `Pid` and `Metadata` are the ones of the process that is to be discarded.
+The `Key`, `Pid` and `Meta` are the ones of the process that is to be discarded.
 
 For instance, if you want to send a `shutdown` message to the discarded process:
 
@@ -248,7 +248,7 @@ For instance, if you want to send a `shutdown` message to the discarded process:
 -module(my_callback).
 -export([callback_on_conflicting_process/3]).
 
-callback_on_conflicting_process(_Key, Pid, _Metadata) ->
+callback_on_conflicting_process(_Key, Pid, _Meta) ->
 	Pid ! shutdown
 ```
 
