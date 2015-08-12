@@ -32,8 +32,10 @@
 %% API
 -export([start_link/0]).
 -export([initdb/0]).
--export([register/2, unregister/1]).
--export([find_by_key/1, find_by_pid/1]).
+-export([register/2, register/3]).
+-export([unregister/1]).
+-export([find_by_key/1, find_by_key/2]).
+-export([find_by_pid/1, find_by_pid/2]).
 -export([count/0, count/1]).
 
 %% gen_server callbacks
@@ -63,16 +65,30 @@ initdb() ->
 
 -spec find_by_key(Key :: any()) -> pid() | undefined.
 find_by_key(Key) ->
-    case mnesia:dirty_read(syn_processes_table, Key) of
-        [Process] -> return_pid_if_on_connected_node(Process);
-        _ -> undefined
+    case i_find_by_key(Key) of
+        undefined -> undefined;
+        Process -> Process#syn_processes_table.pid
+    end.
+
+-spec find_by_key(Key :: any(), with_meta) -> {pid(), Meta :: any()} | undefined.
+find_by_key(Key, with_meta) ->
+    case i_find_by_key(Key) of
+        undefined -> undefined;
+        Process -> {Process#syn_processes_table.pid, Process#syn_processes_table.meta}
     end.
 
 -spec find_by_pid(Pid :: pid()) -> Key :: any() | undefined.
 find_by_pid(Pid) ->
-    case mnesia:dirty_index_read(syn_processes_table, Pid, #syn_processes_table.pid) of
-        [Process] -> return_key_if_on_connected_node(Process);
-        _ -> undefined
+    case i_find_by_pid(Pid) of
+        undefined -> undefined;
+        Process -> Process#syn_processes_table.key
+    end.
+
+-spec find_by_pid(Pid :: pid(), with_meta) -> {Key :: any(), Meta :: any()} | undefined.
+find_by_pid(Pid, with_meta) ->
+    case i_find_by_pid(Pid) of
+        undefined -> undefined;
+        Process -> {Process#syn_processes_table.key, Process#syn_processes_table.meta}
     end.
 
 -spec register(Key :: any(), Pid :: pid()) -> ok | {error, taken}.
@@ -86,6 +102,25 @@ register(Key, Pid) ->
                 key = Key,
                 pid = Pid,
                 node = Node
+            }),
+            %% link
+            gen_server:call({?MODULE, Node}, {link_process, Pid});
+        _ ->
+            {error, taken}
+    end.
+
+-spec register(Key :: any(), Pid :: pid(), Meta :: any()) -> ok | {error, taken}.
+register(Key, Pid, Meta) ->
+    case find_by_key(Key) of
+        undefined ->
+            %% get processes's node
+            Node = node(Pid),
+            %% add to table
+            mnesia:dirty_write(#syn_processes_table{
+                key = Key,
+                pid = Pid,
+                node = Node,
+                meta = Meta
             }),
             %% link
             gen_server:call({?MODULE, Node}, {link_process, Pid});
@@ -296,17 +331,24 @@ add_table_copy_to_current_node() ->
             {error, Reason}
     end.
 
--spec return_pid_if_on_connected_node(Process :: #syn_processes_table{}) -> pid() | undefined.
-return_pid_if_on_connected_node(Process) ->
-    case lists:member(Process#syn_processes_table.node, [node() | nodes()]) of
-        true -> Process#syn_processes_table.pid;
+-spec i_find_by_key(Key :: any()) -> Process :: #syn_processes_table{} | undefined.
+i_find_by_key(Key) ->
+    case mnesia:dirty_read(syn_processes_table, Key) of
+        [Process] -> return_if_on_connected_node(Process);
         _ -> undefined
     end.
 
--spec return_key_if_on_connected_node(Process :: #syn_processes_table{}) -> pid() | undefined.
-return_key_if_on_connected_node(Process) ->
+-spec i_find_by_pid(Pid :: pid()) -> Process :: #syn_processes_table{} | undefined.
+i_find_by_pid(Pid) ->
+    case mnesia:dirty_index_read(syn_processes_table, Pid, #syn_processes_table.pid) of
+        [Process] -> return_if_on_connected_node(Process);
+        _ -> undefined
+    end.
+
+-spec return_if_on_connected_node(Process :: #syn_processes_table{}) -> boolean().
+return_if_on_connected_node(Process) ->
     case lists:member(Process#syn_processes_table.node, [node() | nodes()]) of
-        true -> Process#syn_processes_table.key;
+        true -> Process;
         _ -> undefined
     end.
 

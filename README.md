@@ -91,6 +91,18 @@ Types:
 	Error = taken
 ```
 
+To register a process and attach metadata to it:
+
+```erlang
+syn:register(Key, Pid, Meta) -> ok | {error, Error}.
+
+Types:
+	Key = any()
+	Pid = pid()
+	Meta = any()
+	Error = taken
+```
+
 To retrieve a Pid from a Key:
 
 ```erlang
@@ -101,6 +113,17 @@ Types:
 	Pid = pid()
 ```
 
+To retrieve a Pid from a Key with its metadata:
+
+```erlang
+syn:find_by_key(Key, with_meta) -> {Pid, Meta} | undefined.
+
+Types:
+	Key = any()
+	Pid = pid()
+	Meta = any()
+```
+
 To retrieve a Key from a Pid:
 
 ```erlang
@@ -109,6 +132,18 @@ syn:find_by_pid(Pid) -> Key | undefined.
 Types:
 	Pid = pid()
 	Key = any()
+```
+
+
+To retrieve a Key from a Pid with its metadata:
+
+```erlang
+syn:find_by_pid(Pid, with_meta) -> {Key, Meta} | undefined.
+
+Types:
+	Pid = pid()
+	Key = any()
+	Meta = any()
 ```
 
 To unregister a previously registered Key:

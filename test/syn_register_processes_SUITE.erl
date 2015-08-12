@@ -37,7 +37,9 @@
 %% tests
 -export([
     single_node_when_mnesia_is_ram_find_by_key/1,
+    single_node_when_mnesia_is_ram_find_by_key_with_meta/1,
     single_node_when_mnesia_is_ram_find_by_pid/1,
+    single_node_when_mnesia_is_ram_find_by_pid_with_meta/1,
     single_node_when_mnesia_is_ram_re_register_error/1,
     single_node_when_mnesia_is_ram_unregister/1,
     single_node_when_mnesia_is_ram_process_count/1,
@@ -46,6 +48,7 @@
 ]).
 -export([
     two_nodes_when_mnesia_is_ram_find_by_key/1,
+    two_nodes_when_mnesia_is_ram_find_by_key_with_meta/1,
     two_nodes_when_mnesia_is_ram_process_count/1,
     two_nodes_when_mnesia_is_ram_callback_on_process_exit/1,
     two_nodes_when_mnesia_is_disc_find_by_pid/1
@@ -91,7 +94,9 @@ groups() ->
     [
         {single_node_process_registration, [shuffle], [
             single_node_when_mnesia_is_ram_find_by_key,
+            single_node_when_mnesia_is_ram_find_by_key_with_meta,
             single_node_when_mnesia_is_ram_find_by_pid,
+            single_node_when_mnesia_is_ram_find_by_pid_with_meta,
             single_node_when_mnesia_is_ram_re_register_error,
             single_node_when_mnesia_is_ram_unregister,
             single_node_when_mnesia_is_ram_process_count,
@@ -100,6 +105,7 @@ groups() ->
         ]},
         {two_nodes_process_registration, [shuffle], [
             two_nodes_when_mnesia_is_ram_find_by_key,
+            two_nodes_when_mnesia_is_ram_find_by_key_with_meta,
             two_nodes_when_mnesia_is_ram_process_count,
             two_nodes_when_mnesia_is_ram_callback_on_process_exit,
             two_nodes_when_mnesia_is_disc_find_by_pid
@@ -203,6 +209,33 @@ single_node_when_mnesia_is_ram_find_by_key(_Config) ->
     %% retrieve
     undefined = syn:find_by_key(<<"my proc">>).
 
+single_node_when_mnesia_is_ram_find_by_key_with_meta(_Config) ->
+    %% set schema location
+    application:set_env(mnesia, schema_location, ram),
+    %% start
+    ok = syn:start(),
+    ok = syn:init(),
+    %% start process
+    Pid1 = syn_test_suite_helper:start_process(),
+    Pid2 = syn_test_suite_helper:start_process(),
+    %% retrieve
+    undefined = syn:find_by_key(<<"my proc 1">>, with_meta),
+    undefined = syn:find_by_key(<<"my proc 2">>, with_meta),
+    %% register
+    Meta = [{some, 1}, {meta, <<"data">>}],
+    ok = syn:register(<<"my proc 1">>, Pid1, Meta),
+    ok = syn:register(<<"my proc 2">>, Pid2),
+    %% retrieve
+    {Pid1, Meta} = syn:find_by_key(<<"my proc 1">>, with_meta),
+    {Pid2, undefined} = syn:find_by_key(<<"my proc 2">>, with_meta),
+    %% kill process
+    syn_test_suite_helper:kill_process(Pid1),
+    syn_test_suite_helper:kill_process(Pid2),
+    timer:sleep(100),
+    %% retrieve
+    undefined = syn:find_by_key(<<"my proc 1">>, with_meta),
+    undefined = syn:find_by_key(<<"my proc 2">>, with_meta).
+
 single_node_when_mnesia_is_ram_find_by_pid(_Config) ->
     %% set schema location
     application:set_env(mnesia, schema_location, ram),
@@ -220,6 +253,33 @@ single_node_when_mnesia_is_ram_find_by_pid(_Config) ->
     timer:sleep(100),
     %% retrieve
     undefined = syn:find_by_pid(Pid).
+
+single_node_when_mnesia_is_ram_find_by_pid_with_meta(_Config) ->
+    %% set schema location
+    application:set_env(mnesia, schema_location, ram),
+    %% start
+    ok = syn:start(),
+    ok = syn:init(),
+    %% start process
+    Pid1 = syn_test_suite_helper:start_process(),
+    Pid2 = syn_test_suite_helper:start_process(),
+    %% retrieve
+    undefined = syn:find_by_pid(Pid1, with_meta),
+    undefined = syn:find_by_pid(Pid2, with_meta),
+    %% register
+    Meta = [{some, 1}, {meta, <<"data">>}],
+    ok = syn:register(<<"my proc 1">>, Pid1, Meta),
+    ok = syn:register(<<"my proc 2">>, Pid2),
+    %% retrieve
+    {<<"my proc 1">>, Meta} = syn:find_by_pid(Pid1, with_meta),
+    {<<"my proc 2">>, undefined} = syn:find_by_pid(Pid2, with_meta),
+    %% kill process
+    syn_test_suite_helper:kill_process(Pid1),
+    syn_test_suite_helper:kill_process(Pid2),
+    timer:sleep(100),
+    %% retrieve
+    undefined = syn:find_by_pid(Pid1, with_meta),
+    undefined = syn:find_by_pid(Pid2, with_meta).
 
 single_node_when_mnesia_is_ram_re_register_error(_Config) ->
     %% set schema location
@@ -373,6 +433,45 @@ two_nodes_when_mnesia_is_ram_find_by_key(Config) ->
     %% retrieve
     undefined = syn:find_by_key(<<"my proc">>),
     undefined = rpc:call(SlaveNode, syn, find_by_key, [<<"my proc">>]).
+
+two_nodes_when_mnesia_is_ram_find_by_key_with_meta(Config) ->
+    %% get slave
+    SlaveNode = proplists:get_value(slave_node, Config),
+    %% set schema location
+    application:set_env(mnesia, schema_location, ram),
+    rpc:call(SlaveNode, mnesia, schema_location, [ram]),
+    %% start
+    ok = syn:start(),
+    ok = syn:init(),
+    ok = rpc:call(SlaveNode, syn, start, []),
+    ok = rpc:call(SlaveNode, syn, init, []),
+    timer:sleep(100),
+    %% start process
+    Pid1 = syn_test_suite_helper:start_process(),
+    Pid2 = syn_test_suite_helper:start_process(),
+    %% retrieve
+    undefined = syn:find_by_key(<<"my proc 1">>),
+    undefined = rpc:call(SlaveNode, syn, find_by_key, [<<"my proc 1">>]),
+    undefined = syn:find_by_key(<<"my proc 2">>),
+    undefined = rpc:call(SlaveNode, syn, find_by_key, [<<"my proc 2">>]),
+    %% register
+    Meta = [{some, 1}, {meta, <<"data">>}],
+    ok = syn:register(<<"my proc 1">>, Pid1, Meta),
+    ok = syn:register(<<"my proc 2">>, Pid2),
+    %% retrieve
+    {Pid1, Meta} = syn:find_by_key(<<"my proc 1">>, with_meta),
+    {Pid1, Meta} = rpc:call(SlaveNode, syn, find_by_key, [<<"my proc 1">>, with_meta]),
+    {Pid2, undefined} = syn:find_by_key(<<"my proc 2">>, with_meta),
+    {Pid2, undefined} = rpc:call(SlaveNode, syn, find_by_key, [<<"my proc 2">>, with_meta]),
+    %% kill process
+    syn_test_suite_helper:kill_process(Pid1),
+    syn_test_suite_helper:kill_process(Pid2),
+    timer:sleep(100),
+    %% retrieve
+    undefined = syn:find_by_key(<<"my proc 1">>),
+    undefined = rpc:call(SlaveNode, syn, find_by_key, [<<"my proc 1">>]),
+    undefined = syn:find_by_key(<<"my proc 2">>),
+    undefined = rpc:call(SlaveNode, syn, find_by_key, [<<"my proc 2">>]).
 
 two_nodes_when_mnesia_is_ram_process_count(Config) ->
     %% get slave

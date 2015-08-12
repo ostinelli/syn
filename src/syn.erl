@@ -31,8 +31,10 @@
 %% API
 -export([start/0, stop/0]).
 -export([init/0]).
--export([register/2, unregister/1]).
--export([find_by_key/1, find_by_pid/1]).
+-export([register/2, register/3]).
+-export([unregister/1]).
+-export([find_by_key/1, find_by_key/2]).
+-export([find_by_pid/1, find_by_pid/2]).
 -export([count/0, count/1]).
 
 
@@ -57,6 +59,10 @@ init() ->
 register(Key, Pid) ->
     syn_backbone:register(Key, Pid).
 
+-spec register(Key :: any(), Pid :: pid(), Meta :: any()) -> ok | {error, taken}.
+register(Key, Pid, Meta) ->
+    syn_backbone:register(Key, Pid, Meta).
+
 -spec unregister(Key :: any()) -> ok | {error, undefined}.
 unregister(Key) ->
     syn_backbone:unregister(Key).
@@ -65,9 +71,17 @@ unregister(Key) ->
 find_by_key(Key) ->
     syn_backbone:find_by_key(Key).
 
+-spec find_by_key(Key :: any(), with_meta) -> {pid(), Meta :: any()} | undefined.
+find_by_key(Key, with_meta) ->
+    syn_backbone:find_by_key(Key, with_meta).
+
 -spec find_by_pid(Pid :: pid()) -> Key :: any() | undefined.
 find_by_pid(Pid) ->
     syn_backbone:find_by_pid(Pid).
+
+-spec find_by_pid(Pid :: pid(), with_meta) -> {Key :: any(), Meta :: any()} | undefined.
+find_by_pid(Pid, with_meta) ->
+    syn_backbone:find_by_pid(Pid, with_meta).
 
 -spec count() -> non_neg_integer().
 count() ->
