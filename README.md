@@ -73,7 +73,7 @@ connect_nodes() ->
 	%% list of nodes contained in ENV variable `nodes`
 	Nodes = application:get_env(nodes),
 	%% connect to nodes
-	[true = net_kernel:connect_node(Node) || Node <- Nodes].
+	[net_kernel:connect_node(Node) || Node <- Nodes].
 ```
 
 Syn is then ready to register processes.
