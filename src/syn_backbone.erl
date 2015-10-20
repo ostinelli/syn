@@ -77,18 +77,18 @@ find_by_key(Key, with_meta) ->
         Process -> {Process#syn_processes_table.pid, Process#syn_processes_table.meta}
     end.
 
--spec find_by_pid(Pid :: pid()) -> Key :: any() | undefined.
+-spec find_by_pid(Pid :: pid()) -> [Key :: any()] | undefined.
 find_by_pid(Pid) ->
     case i_find_by_pid(Pid) of
         undefined -> undefined;
-        Process -> Process#syn_processes_table.key
+        Processes -> [Process#syn_processes_table.key|| Process <- Processes]
     end.
 
--spec find_by_pid(Pid :: pid(), with_meta) -> {Key :: any(), Meta :: any()} | undefined.
+-spec find_by_pid(Pid :: pid(), with_meta) -> [{Key :: any(), Meta :: any()}] | undefined.
 find_by_pid(Pid, with_meta) ->
     case i_find_by_pid(Pid) of
         undefined -> undefined;
-        Process -> {Process#syn_processes_table.key, Process#syn_processes_table.meta}
+        Processes -> [{Process#syn_processes_table.key, Process#syn_processes_table.meta}|| Process <- Processes]
     end.
 
 -spec register(Key :: any(), Pid :: pid()) -> ok | {error, taken}.
@@ -327,7 +327,9 @@ i_find_by_key(Key) ->
 -spec i_find_by_pid(Pid :: pid()) -> Process :: #syn_processes_table{} | undefined.
 i_find_by_pid(Pid) ->
     case mnesia:dirty_index_read(syn_processes_table, Pid, #syn_processes_table.pid) of
-        [Process] -> return_if_on_connected_node(Process);
+        Processes when is_list(Processes) -> 
+	    [Process|| Process <- Processes, 
+		       check_on_connected_node(Process)];
         _ -> undefined
     end.
 
@@ -341,3 +343,6 @@ return_if_on_connected_node(Process) ->
 -spec remove_process_by_key(Key :: any()) -> ok.
 remove_process_by_key(Key) ->
     mnesia:dirty_delete(syn_processes_table, Key).
+
+check_on_connected_node(Process) ->
+    lists:member(Process#syn_processes_table.node, [node() | nodes()]).
