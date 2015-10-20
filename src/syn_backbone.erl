@@ -210,10 +210,10 @@ handle_cast(Msg, State) ->
     {noreply, #state{}, Timeout :: non_neg_integer()} |
     {stop, Reason :: any(), #state{}}.
 
-handle_info({'EXIT', Pid, Reason}, #state{
-    process_exit_callback_module = ProcessExitCallbackModule,
-    process_exit_callback_function = ProcessExitCallbackFunction
-} = State) ->
+handle_info({'EXIT', Pid, Reason}, 
+	    #state{
+	       process_exit_callback_module = ProcessExitCallbackModule,
+	       process_exit_callback_function = ProcessExitCallbackFunction} = State) ->
     %% do not lock backbone
     spawn(fun() ->
         %% check if pid is in table
@@ -225,21 +225,23 @@ handle_info({'EXIT', Pid, Reason}, #state{
                     _ ->
                         error_logger:warning_msg("Received an exit message from an unlinked process ~p with reason: ~p", [Pid, Reason])
                 end;
-            {Key, Meta} ->
-                %% delete from table
-                remove_process_by_key(Key),
-                %% log
-                case Reason of
-                    normal -> ok;
-                    killed -> ok;
-                    _ ->
-                        error_logger:error_msg("Process with key ~p exited with reason: ~p", [Key, Reason])
-                end,
-                %% callback
-                case ProcessExitCallbackModule of
-                    undefined -> ok;
-                    _ -> ProcessExitCallbackModule:ProcessExitCallbackFunction(Key, Pid, Meta, Reason)
-                end
+            Data when is_list(Data) ->
+		[begin 
+		     %% delete from table
+		     remove_process_by_key(Key),
+		     %% log
+		     case Reason of
+			 normal -> ok;
+			 killed -> ok;
+			 _ ->
+			     error_logger:error_msg("Process with key ~p exited with reason: ~p", [Key, Reason])
+		     end,
+		     %% callback
+		     case ProcessExitCallbackModule of
+			 undefined -> ok;
+			 _ -> ProcessExitCallbackModule:ProcessExitCallbackFunction(Key, Pid, Meta, Reason)
+		     end
+		 end || {Key, Meta} <- Data]
         end
     end),
     %% return
