@@ -88,7 +88,7 @@ syn:register(Key, Pid) -> ok | {error, Error}.
 Types:
 	Key = any()
 	Pid = pid()
-	Error = taken
+	Error = taken | pid_already_registered
 ```
 
 To register a process and attach metadata to it:

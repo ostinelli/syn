@@ -91,28 +91,14 @@ find_by_pid(Pid, with_meta) ->
         Process -> {Process#syn_processes_table.key, Process#syn_processes_table.meta}
     end.
 
--spec register(Key :: any(), Pid :: pid()) -> ok | {error, taken}.
+-spec register(Key :: any(), Pid :: pid()) -> ok | {error, taken | pid_already_registered}.
 register(Key, Pid) ->
     register(Key, Pid, undefined).
 
 -spec register(Key :: any(), Pid :: pid(), Meta :: any()) -> ok | {error, taken}.
 register(Key, Pid, Meta) ->
-    case find_by_key(Key) of
-        undefined ->
-            %% get processes's node
-            Node = node(Pid),
-            %% add to table
-            mnesia:dirty_write(#syn_processes_table{
-                key = Key,
-                pid = Pid,
-                node = Node,
-                meta = Meta
-            }),
-            %% link
-            gen_server:call({?MODULE, Node}, {link_process, Pid});
-        _ ->
-            {error, taken}
-    end.
+    Node = node(Pid),
+    gen_server:call({?MODULE, Node}, {register_on_node, Key, Pid, Meta}).
 
 -spec unregister(Key :: any()) -> ok | {error, undefined}.
 unregister(Key) ->
@@ -178,9 +164,30 @@ init([]) ->
     {stop, Reason :: any(), Reply :: any(), #state{}} |
     {stop, Reason :: any(), #state{}}.
 
-handle_call({link_process, Pid}, _From, State) ->
-    erlang:link(Pid),
-    {reply, ok, State};
+handle_call({register_on_node, Key, Pid, Meta}, _From, State) ->
+    %% check & register in gen_server process to ensure atomicity at node level without transaction lock
+    %% atomicity is obviously not at cluster level, which is covered by syn_consistency.
+    case i_find_by_key(Key) of
+        undefined ->
+            case i_find_by_pid(Pid) of
+                undefined ->
+                    %% add to table
+                    mnesia:dirty_write(#syn_processes_table{
+                        key = Key,
+                        pid = Pid,
+                        node = node(),
+                        meta = Meta
+                    }),
+                    %% link
+                    erlang:link(Pid),
+                    %% return
+                    {reply, ok, State};
+                _ ->
+                    {reply, {error, pid_already_registered}, State}
+            end;
+        _ ->
+            {reply, {error, taken}, State}
+    end;
 
 handle_call({unlink_process, Pid}, _From, State) ->
     erlang:unlink(Pid),
