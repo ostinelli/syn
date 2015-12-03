@@ -77,18 +77,18 @@ find_by_key(Key, with_meta) ->
         Process -> {Process#syn_processes_table.pid, Process#syn_processes_table.meta}
     end.
 
--spec find_by_pid(Pid :: pid()) -> Key :: any() | undefined.
+-spec find_by_pid(Pid :: pid()) -> [Key :: any()] | undefined.
 find_by_pid(Pid) ->
     case i_find_by_pid(Pid) of
         undefined -> undefined;
-        Process -> Process#syn_processes_table.key
+        Processes -> [Process#syn_processes_table.key|| Process <- Processes]
     end.
 
--spec find_by_pid(Pid :: pid(), with_meta) -> {Key :: any(), Meta :: any()} | undefined.
+-spec find_by_pid(Pid :: pid(), with_meta) -> [{Key :: any(), Meta :: any()}] | undefined.
 find_by_pid(Pid, with_meta) ->
     case i_find_by_pid(Pid) of
         undefined -> undefined;
-        Process -> {Process#syn_processes_table.key, Process#syn_processes_table.meta}
+        Processes -> [{Process#syn_processes_table.key, Process#syn_processes_table.meta}|| Process <- Processes]
     end.
 
 -spec register(Key :: any(), Pid :: pid()) -> ok | {error, taken | pid_already_registered}.
@@ -221,10 +221,10 @@ handle_cast(Msg, State) ->
     {noreply, #state{}, Timeout :: non_neg_integer()} |
     {stop, Reason :: any(), #state{}}.
 
-handle_info({'EXIT', Pid, Reason}, #state{
-    process_exit_callback_module = ProcessExitCallbackModule,
-    process_exit_callback_function = ProcessExitCallbackFunction
-} = State) ->
+handle_info({'EXIT', Pid, Reason}, 
+	    #state{
+	       process_exit_callback_module = ProcessExitCallbackModule,
+	       process_exit_callback_function = ProcessExitCallbackFunction} = State) ->
     %% do not lock backbone
     spawn(fun() ->
         %% check if pid is in table
@@ -236,21 +236,23 @@ handle_info({'EXIT', Pid, Reason}, #state{
                     _ ->
                         error_logger:warning_msg("Received an exit message from an unlinked process ~p with reason: ~p", [Pid, Reason])
                 end;
-            {Key, Meta} ->
-                %% delete from table
-                remove_process_by_key(Key),
-                %% log
-                case Reason of
-                    normal -> ok;
-                    killed -> ok;
-                    _ ->
-                        error_logger:error_msg("Process with key ~p exited with reason: ~p", [Key, Reason])
-                end,
-                %% callback
-                case ProcessExitCallbackModule of
-                    undefined -> ok;
-                    _ -> ProcessExitCallbackModule:ProcessExitCallbackFunction(Key, Pid, Meta, Reason)
-                end
+            Data when is_list(Data) ->
+		[begin 
+		     %% delete from table
+		     remove_process_by_key(Key),
+		     %% log
+		     case Reason of
+			 normal -> ok;
+			 killed -> ok;
+			 _ ->
+			     error_logger:error_msg("Process with key ~p exited with reason: ~p", [Key, Reason])
+		     end,
+		     %% callback
+		     case ProcessExitCallbackModule of
+			 undefined -> ok;
+			 _ -> ProcessExitCallbackModule:ProcessExitCallbackFunction(Key, Pid, Meta, Reason)
+		     end
+		 end || {Key, Meta} <- Data]
         end
     end),
     %% return
@@ -338,7 +340,9 @@ i_find_by_key(Key) ->
 -spec i_find_by_pid(Pid :: pid()) -> Process :: #syn_processes_table{} | undefined.
 i_find_by_pid(Pid) ->
     case mnesia:dirty_index_read(syn_processes_table, Pid, #syn_processes_table.pid) of
-        [Process] -> return_if_on_connected_node(Process);
+        Processes when is_list(Processes) -> 
+	    [Process|| Process <- Processes, 
+		       check_on_connected_node(Process)];
         _ -> undefined
     end.
 
@@ -352,3 +356,6 @@ return_if_on_connected_node(Process) ->
 -spec remove_process_by_key(Key :: any()) -> ok.
 remove_process_by_key(Key) ->
     mnesia:dirty_delete(syn_processes_table, Key).
+
+check_on_connected_node(Process) ->
+    lists:member(Process#syn_processes_table.node, [node() | nodes()]).
