@@ -106,9 +106,8 @@ unregister(Key) ->
         undefined ->
             {error, undefined};
         Pid ->
-            remove_process_by_key(Key),
-            %% unlink
-            gen_server:call(?MODULE, {unlink_process, Pid})
+            Node = node(Pid),
+            gen_server:call({?MODULE, Node}, {unregister_on_node, Key, Pid})
     end.
 
 -spec count() -> non_neg_integer().
@@ -188,6 +187,11 @@ handle_call({register_on_node, Key, Pid, Meta}, _From, State) ->
         _ ->
             {reply, {error, taken}, State}
     end;
+
+handle_call({unregister_on_node, Key, Pid}, _From, State) ->
+    remove_process_by_key(Key),
+    erlang:unlink(Pid),
+    {reply, ok, State};
 
 handle_call({unlink_process, Pid}, _From, State) ->
     erlang:unlink(Pid),
