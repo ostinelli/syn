@@ -100,7 +100,7 @@ Types:
 	Key = any()
 	Pid = pid()
 	Meta = any()
-	Error = taken
+	Error = taken | pid_already_registered
 ```
 
 To retrieve a Pid from a Key:
