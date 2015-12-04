@@ -1,7 +1,7 @@
 {application, syn,
     [
         {description, "A global process registry."},
-        {vsn, "0.8.0"},
+        {vsn, "0.9.0"},
         {registered, [
             syn_backbone,
             syn_consistency
