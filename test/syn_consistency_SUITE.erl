@@ -329,10 +329,8 @@ two_nodes_netsplit_kill_resolution_when_there_are_conflicts(Config) ->
 
     KilledPid = lists:nth(1, lists:delete(FoundPid, [LocalPid, SlavePid])),
     receive
-        {exited, undefined, KilledPid, undefined, killed} -> ok;
-        Other ->
-            ok = Other
-    after 2000 ->
+        {exited, undefined, KilledPid, undefined, killed} -> ok
+    after 3000 ->
         ok = process_exit_callback_was_not_called_from_local_node
     end,
 
