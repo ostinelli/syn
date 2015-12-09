@@ -382,7 +382,9 @@ single_node_when_mnesia_is_ram_callback_on_process_exit(_Config) ->
         {exited, CurrentNode, <<"my proc">>, Pid, Meta, killed} -> ok
     after 2000 ->
         ok = process_exit_callback_was_not_called_from_local_node
-    end.
+    end,
+    %% unregister
+    global:unregister_name(syn_register_process_SUITE_result).
 
 single_node_when_mnesia_is_disc_find_by_key(_Config) ->
     %% set schema location
@@ -562,7 +564,9 @@ two_nodes_when_mnesia_is_ram_callback_on_process_exit(Config) ->
         {exited, SlaveNode, <<"slave">>, PidSlave, undefined, killed} -> ok
     after 2000 ->
         ok = process_exit_callback_was_not_called_from_slave_node
-    end.
+    end,
+    %% unregister
+    global:unregister_name(syn_register_process_SUITE_result).
 
 two_nodes_when_mnesia_is_disc_find_by_pid(Config) ->
     %% get slave
