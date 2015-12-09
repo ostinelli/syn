@@ -1,3 +1,5 @@
+PROJECT_DIR:=$(strip $(shell dirname $(realpath $(lastword $(MAKEFILE_LIST)))))
+
 all:
 	@rebar compile
 
@@ -22,10 +24,7 @@ run:
 	-eval 'syn:start().'
 
 tests: all
-	@mkdir -p /tmp/logs; \
-	ct_run -sname syn -dir test -logdir /tmp/logs -pa ebin; \
-	res=$$?; \
-	rm -rf /tmp/logs; \
-	if [ $$res != 0 ]; then exit $$res; fi;
+	ct_run -dir $(PROJECT_DIR)/test -logdir $(PROJECT_DIR)/test/results \
+	-pa $(PROJECT_DIR)/ebin
 
 travis: tests

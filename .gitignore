@@ -28,3 +28,5 @@ ebin
 erl_crash.dump
 *.beam
 .rebar
+test/results/*
+!test/results/.keep
