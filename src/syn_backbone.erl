@@ -65,28 +65,28 @@ initdb() ->
 
 -spec find_by_key(Key :: any()) -> pid() | undefined.
 find_by_key(Key) ->
-    case i_find_by_key(Key) of
+    case i_find_by_key(on_connected_node, Key) of
         undefined -> undefined;
         Process -> Process#syn_processes_table.pid
     end.
 
 -spec find_by_key(Key :: any(), with_meta) -> {pid(), Meta :: any()} | undefined.
 find_by_key(Key, with_meta) ->
-    case i_find_by_key(Key) of
+    case i_find_by_key(on_connected_node, Key) of
         undefined -> undefined;
         Process -> {Process#syn_processes_table.pid, Process#syn_processes_table.meta}
     end.
 
 -spec find_by_pid(Pid :: pid()) -> Key :: any() | undefined.
 find_by_pid(Pid) ->
-    case i_find_by_pid(Pid) of
+    case i_find_by_pid(on_connected_node, Pid) of
         undefined -> undefined;
         Process -> Process#syn_processes_table.key
     end.
 
 -spec find_by_pid(Pid :: pid(), with_meta) -> {Key :: any(), Meta :: any()} | undefined.
 find_by_pid(Pid, with_meta) ->
-    case i_find_by_pid(Pid) of
+    case i_find_by_pid(on_connected_node, Pid) of
         undefined -> undefined;
         Process -> {Process#syn_processes_table.key, Process#syn_processes_table.meta}
     end.
@@ -328,17 +328,31 @@ add_table_copy_to_current_node() ->
             {error, Reason}
     end.
 
+-spec i_find_by_key(on_connected_node, Key :: any()) -> Process :: #syn_processes_table{} | undefined.
+i_find_by_key(on_connected_node, Key) ->
+    case i_find_by_key(Key) of
+        undefined -> undefined;
+        Process -> return_if_on_connected_node(Process)
+    end.
+
 -spec i_find_by_key(Key :: any()) -> Process :: #syn_processes_table{} | undefined.
 i_find_by_key(Key) ->
     case mnesia:dirty_read(syn_processes_table, Key) of
-        [Process] -> return_if_on_connected_node(Process);
+        [Process] -> Process;
         _ -> undefined
+    end.
+
+-spec i_find_by_pid(on_connected_node, Pid :: pid()) -> Process :: #syn_processes_table{} | undefined.
+i_find_by_pid(on_connected_node, Pid) ->
+    case i_find_by_pid(Pid) of
+        undefined -> undefined;
+        Process -> return_if_on_connected_node(Process)
     end.
 
 -spec i_find_by_pid(Pid :: pid()) -> Process :: #syn_processes_table{} | undefined.
 i_find_by_pid(Pid) ->
     case mnesia:dirty_index_read(syn_processes_table, Pid, #syn_processes_table.pid) of
-        [Process] -> return_if_on_connected_node(Process);
+        [Process] -> Process;
         _ -> undefined
     end.
 
