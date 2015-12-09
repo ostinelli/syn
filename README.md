@@ -224,6 +224,9 @@ Set it in the options:
 ```
 If you don't set this option, no callback will be triggered.
 
+> If a process dies as a consequence of a conflict resolution, the process exit callback will still be called but the Key and Meta values will both be `undefined`.
+
+
 #### Conflict resolution by callback
 In case of race conditions, or during net splits, a Key might be registered simultaneously on two different nodes. In this case, the cluster experiences a naming conflict.
 

@@ -47,6 +47,7 @@
 %% internal
 -export([process_reply_main/0]).
 -export([conflicting_process_callback_dummy/3]).
+-export([process_exit_callback_dummy/4]).
 
 %% include
 -include_lib("common_test/include/ct.hrl").
@@ -268,12 +269,22 @@ two_nodes_netsplit_kill_resolution_when_there_are_conflicts(Config) ->
     SlaveNode = proplists:get_value(slave_node, Config),
     CurrentNode = node(),
 
+    %% set process callback env variable
+    ok = application:set_env(syn, process_exit_callback, [syn_consistency_SUITE, process_exit_callback_dummy]),
+    ok = rpc:call(SlaveNode, application, set_env, [syn, process_exit_callback, [syn_consistency_SUITE, process_exit_callback_dummy]]),
+    ok = application:set_env(syn, is_test, true),
+    ok = rpc:call(SlaveNode, application, set_env, [syn, is_test, true]),
+
     %% start syn
     ok = syn:start(),
     ok = syn:init(),
     ok = rpc:call(SlaveNode, syn, start, []),
     ok = rpc:call(SlaveNode, syn, init, []),
     timer:sleep(100),
+
+    %% register global process
+    ResultPid = self(),
+    global:register_name(syn_consistency_SUITE_result, ResultPid),
 
     %% start processes
     LocalPid = syn_test_suite_helper:start_process(),
@@ -316,9 +327,21 @@ two_nodes_netsplit_kill_resolution_when_there_are_conflicts(Config) ->
     FoundPid = syn:find_by_key(conflicting_key),
     true = lists:member(FoundPid, [LocalPid, SlavePid]),
 
+    KilledPid = lists:nth(1, lists:delete(FoundPid, [LocalPid, SlavePid])),
+    receive
+        {exited, undefined, KilledPid, undefined, killed} -> ok;
+        Other ->
+            ok = Other
+    after 2000 ->
+        ok = process_exit_callback_was_not_called_from_local_node
+    end,
+
     %% kill processes
     syn_test_suite_helper:kill_process(LocalPid),
-    syn_test_suite_helper:kill_process(SlavePid).
+    syn_test_suite_helper:kill_process(SlavePid),
+
+    %% unregister
+    global:unregister_name(syn_consistency_SUITE_result).
 
 two_nodes_netsplit_callback_resolution_when_there_are_conflicts(Config) ->
     %% get slave
@@ -392,7 +415,10 @@ two_nodes_netsplit_callback_resolution_when_there_are_conflicts(Config) ->
 
     %% kill processes
     syn_test_suite_helper:kill_process(LocalPid),
-    syn_test_suite_helper:kill_process(SlavePid).
+    syn_test_suite_helper:kill_process(SlavePid),
+
+    %% unregister
+    global:unregister_name(syn_consistency_SUITE_result).
 
 three_nodes_netsplit_kill_resolution_when_there_are_conflicts(Config) ->
     %% get slaves
@@ -479,3 +505,6 @@ process_reply_main() ->
 
 conflicting_process_callback_dummy(_Key, Pid, Meta) ->
     Pid ! {shutdown, Meta}.
+
+process_exit_callback_dummy(Key, Pid, Meta, Reason) ->
+    global:send(syn_consistency_SUITE_result, {exited, Key, Pid, Meta, Reason}).

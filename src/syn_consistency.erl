@@ -139,6 +139,13 @@ handle_info({purge_double_processes, DoubleProcessesInfo}, #state{
     conflicting_process_callback_module = ConflictingProcessCallbackModule,
     conflicting_process_callback_function = ConflictingProcessCallbackFunction
 } = State) ->
+    %% is in a test environment, wait to ensure we can get the process exit callback messages
+    case application:get_env(is_test) of
+        undefined -> ok;
+        {ok, true} -> timer:sleep(2000);
+        _ -> ok
+    end,
+
     error_logger:warning_msg("About to purge double processes after netsplit"),
     purge_double_processes(ConflictingProcessCallbackModule, ConflictingProcessCallbackFunction, DoubleProcessesInfo),
     {noreply, State};
