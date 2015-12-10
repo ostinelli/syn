@@ -95,7 +95,7 @@ find_by_pid(Pid, with_meta) ->
 register(Key, Pid) ->
     register(Key, Pid, undefined).
 
--spec register(Key :: any(), Pid :: pid(), Meta :: any()) -> ok | {error, taken}.
+-spec register(Key :: any(), Pid :: pid(), Meta :: any()) -> ok | {error, taken | pid_already_registered}.
 register(Key, Pid, Meta) ->
     Node = node(Pid),
     gen_server:call({?MODULE, Node}, {register_on_node, Key, Pid, Meta}).
