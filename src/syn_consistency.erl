@@ -121,14 +121,14 @@ handle_cast(Msg, State) ->
     {noreply, #state{}, Timeout :: non_neg_integer()} |
     {stop, Reason :: any(), #state{}}.
 
-handle_info({mnesia_system_event, {inconsistent_database, Context, Node}}, State) ->
-    error_logger:warning_msg("MNESIA signalled an inconsistent database on node: ~p with context: ~p, initiating automerge", [Node, Context]),
-    automerge(Node),
+handle_info({mnesia_system_event, {inconsistent_database, Context, RemoteNode}}, State) ->
+    error_logger:error_msg("MNESIA signalled an inconsistent database on node ~p for remote node ~p with context: ~p, initiating automerge", [node(), RemoteNode, Context]),
+    automerge(RemoteNode),
     {noreply, State};
 
-handle_info({mnesia_system_event, {mnesia_down, Node}}, State) when Node =/= node() ->
-    error_logger:warning_msg("Received a MNESIA down event, removing all pids of node ~p", [Node]),
-    delete_pids_of_disconnected_node(Node),
+handle_info({mnesia_system_event, {mnesia_down, RemoteNode}}, State) when RemoteNode =/= node() ->
+    error_logger:error_msg("Received a MNESIA down event, removing on node ~p all pids of node ~p", [node(), RemoteNode]),
+    delete_pids_of_disconnected_node(RemoteNode),
     {noreply, State};
 
 handle_info({mnesia_system_event, _MnesiaEvent}, State) ->
