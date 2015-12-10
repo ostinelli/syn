@@ -166,19 +166,16 @@ code_change(_OldVsn, State, _Extra) ->
 %% ===================================================================
 %% Internal
 %% ===================================================================
--spec delete_pids_of_disconnected_node(Node :: atom()) -> pid().
-delete_pids_of_disconnected_node(Node) ->
-    %% don't lock gen server
-    spawn(fun() ->
-        %% build match specs
-        MatchHead = #syn_processes_table{key = '$1', node = '$2', _ = '_'},
-        Guard = {'=:=', '$2', Node},
-        IdFormat = '$1',
-        %% delete
-        DelF = fun(Id) -> mnesia:dirty_delete({syn_processes_table, Id}) end,
-        NodePids = mnesia:dirty_select(syn_processes_table, [{MatchHead, [Guard], [IdFormat]}]),
-        lists:foreach(DelF, NodePids)
-    end).
+-spec delete_pids_of_disconnected_node(RemoteNode :: atom()) -> pid().
+delete_pids_of_disconnected_node(RemoteNode) ->
+    %% build match specs
+    MatchHead = #syn_processes_table{key = '$1', node = '$2', _ = '_'},
+    Guard = {'=:=', '$2', RemoteNode},
+    IdFormat = '$1',
+    %% delete
+    DelF = fun(Id) -> mnesia:dirty_delete({syn_processes_table, Id}) end,
+    NodePids = mnesia:dirty_select(syn_processes_table, [{MatchHead, [Guard], [IdFormat]}]),
+    lists:foreach(DelF, NodePids).
 
 -spec automerge(RemoteNode :: atom()) -> ok.
 automerge(RemoteNode) ->
