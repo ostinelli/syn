@@ -191,7 +191,7 @@ delete_pids_of_disconnected_node(Node) ->
 automerge(RemoteNode) ->
     global:trans({{?MODULE, automerge}, self()},
         fun() ->
-            error_logger:warning_msg("AUTOMERGE starting for remote node ~s (global lock is set)", [RemoteNode]),
+            error_logger:warning_msg("AUTOMERGE starting on node ~p for remote node ~p (global lock is set)", [node(), RemoteNode]),
             check_stitch(RemoteNode),
             error_logger:warning_msg("AUTOMERGE done (global lock about to be unset)")
         end).
@@ -200,6 +200,7 @@ automerge(RemoteNode) ->
 check_stitch(RemoteNode) ->
     case catch lists:member(RemoteNode, mnesia:system_info(running_db_nodes)) of
         true ->
+            error_logger:warning_msg("Remote node ~p is already stitched.", [RemoteNode]),
             ok;
         false ->
             catch stitch(RemoteNode),
