@@ -5,7 +5,7 @@ all:
 
 clean:
 	@rebar clean
-	@find $(PWD)/. -name "erl_crash\.dump" | xargs rm -f
+	@find $(PROJECT_DIR)/. -name "erl_crash\.dump" | xargs rm -f
 
 deps: clean
 	@rebar delete-deps
