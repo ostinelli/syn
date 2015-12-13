@@ -55,11 +55,11 @@ stop() ->
 init() ->
     ok = syn_backbone:initdb().
 
--spec register(Key :: any(), Pid :: pid()) -> ok | {error, taken}.
+-spec register(Key :: any(), Pid :: pid()) -> ok | {error, taken | pid_already_registered}.
 register(Key, Pid) ->
     syn_backbone:register(Key, Pid).
 
--spec register(Key :: any(), Pid :: pid(), Meta :: any()) -> ok | {error, taken}.
+-spec register(Key :: any(), Pid :: pid(), Meta :: any()) -> ok | {error, taken | pid_already_registered}.
 register(Key, Pid, Meta) ->
     syn_backbone:register(Key, Pid, Meta).
 

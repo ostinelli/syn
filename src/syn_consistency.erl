@@ -166,7 +166,7 @@ code_change(_OldVsn, State, _Extra) ->
 %% ===================================================================
 %% Internal
 %% ===================================================================
--spec delete_pids_of_disconnected_node(RemoteNode :: atom()) -> pid().
+-spec delete_pids_of_disconnected_node(RemoteNode :: atom()) -> ok.
 delete_pids_of_disconnected_node(RemoteNode) ->
     %% build match specs
     MatchHead = #syn_processes_table{key = '$1', node = '$2', _ = '_'},
