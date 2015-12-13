@@ -11,6 +11,7 @@ Syn is a process registry that has the following features:
  * Fast writes.
  * Automatically handles conflict resolution (such as net splits).
  * Configurable callbacks.
+ * Processes are automatically monitored and removed from the registry if they die.
 
 
 ## Notes
@@ -103,6 +104,8 @@ Types:
 	Error = taken | pid_already_registered
 ```
 
+> When a process gets registered, Syn will automatically monitor it.
+
 To retrieve a Pid from a Key:
 
 ```erlang
@@ -134,7 +137,6 @@ Types:
 	Key = any()
 ```
 
-
 To retrieve a Key from a Pid with its metadata:
 
 ```erlang
@@ -156,6 +158,8 @@ Types:
 	Error = undefined
 ```
 
+> You don't need to unregister keys of processes that are about to die, since they are monitored by Syn and they will be removed automatically. If you manually unregister a process just before it dies, the callback on process exit (see here below) might not get called.
+
 To retrieve the count of total registered processes running in the cluster:
 
 ```erlang
@@ -170,8 +174,6 @@ syn:count(Node) -> non_neg_integer().
 Types:
 	Node = atom()
 ```
-
-Processes are automatically monitored and removed from the registry if they die.
 
 ### Options
 Options can be set in the environment variable `syn`. You're probably best off using an application configuration file (in releases, `sys.config`):
