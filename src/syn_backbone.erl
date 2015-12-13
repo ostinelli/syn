@@ -238,7 +238,7 @@ handle_info({'EXIT', Pid, Reason}, #state{
     %% do not lock backbone
     spawn(fun() ->
         %% check if pid is in table
-        case i_find_by_pid(Pid) of
+        {Key, Meta} = case i_find_by_pid(Pid) of
             undefined ->
                 %% log
                 case Reason of
@@ -248,35 +248,36 @@ handle_info({'EXIT', Pid, Reason}, #state{
                         error_logger:error_msg("Received an exit message from an unlinked process ~p with reason: ~p", [Pid, Reason])
                 end,
 
-                %% callback
-                case ProcessExitCallbackModule of
-                    undefined -> ok;
-                    _ -> ProcessExitCallbackModule:ProcessExitCallbackFunction(undefined, Pid, undefined, Reason)
-                end;
+                %% return
+                {undefined, undefined};
 
             Process ->
                 %% get process info
-                Key = Process#syn_processes_table.key,
-                Meta = Process#syn_processes_table.meta,
+                Key0 = Process#syn_processes_table.key,
+                Meta0 = Process#syn_processes_table.meta,
 
                 %% log
                 case Reason of
                     normal -> ok;
                     killed -> ok;
                     _ ->
-                        error_logger:error_msg("Process with key ~p and pid ~p exited with reason: ~p", [Key, Pid, Reason])
+                        error_logger:error_msg("Process with key ~p and pid ~p exited with reason: ~p", [Key0, Pid, Reason])
                 end,
 
                 %% delete from table
-                remove_process_by_key(Key),
+                remove_process_by_key(Key0),
 
-                %% callback
-                case ProcessExitCallbackModule of
-                    undefined -> ok;
-                    _ -> ProcessExitCallbackModule:ProcessExitCallbackFunction(Key, Pid, Meta, Reason)
-                end
+                %% return
+                {Key0, Meta0}
+        end,
+
+        %% callback
+        case ProcessExitCallbackModule of
+            undefined -> ok;
+            _ -> ProcessExitCallbackModule:ProcessExitCallbackFunction(Key, Pid, Meta, Reason)
         end
     end),
+    
     %% return
     {noreply, State};
 
