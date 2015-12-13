@@ -102,12 +102,12 @@ register(Key, Pid, Meta) ->
 
 -spec unregister(Key :: any()) -> ok | {error, undefined}.
 unregister(Key) ->
-    case find_by_key(Key) of
+    case i_find_by_key(Key) of
         undefined ->
             {error, undefined};
-        Pid ->
-            Node = node(Pid),
-            gen_server:call({?MODULE, Node}, {unregister_on_node, Key, Pid})
+        Process ->
+            Node = Process#syn_processes_table.node,
+            gen_server:call({?MODULE, Node}, {unregister_on_node, Key})
     end.
 
 -spec count() -> non_neg_integer().
@@ -188,10 +188,20 @@ handle_call({register_on_node, Key, Pid, Meta}, _From, State) ->
             {reply, {error, taken}, State}
     end;
 
-handle_call({unregister_on_node, Key, Pid}, _From, State) ->
-    remove_process_by_key(Key),
-    erlang:unlink(Pid),
-    {reply, ok, State};
+handle_call({unregister_on_node, Key}, _From, State) ->
+    %% we check again for key to return the correct response regardless of race conditions
+    case i_find_by_key(Key) of
+        undefined ->
+            {reply, {error, undefined}, State};
+        Process ->
+            %% remove from table
+            remove_process_by_key(Key),
+            %% unlink
+            Pid = Process#syn_processes_table.pid,
+            erlang:unlink(Pid),
+            %% reply
+            {reply, ok, State}
+    end;
 
 handle_call({unlink_process, Pid}, _From, State) ->
     erlang:unlink(Pid),
