@@ -277,7 +277,7 @@ handle_info({'EXIT', Pid, Reason}, #state{
             _ -> ProcessExitCallbackModule:ProcessExitCallbackFunction(Key, Pid, Meta, Reason)
         end
     end),
-    
+
     %% return
     {noreply, State};
 
