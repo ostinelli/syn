@@ -245,7 +245,7 @@ handle_info({'EXIT', Pid, Reason}, #state{
                     normal -> ok;
                     killed -> ok;
                     _ ->
-                        error_logger:warning_msg("Received an exit message from an unlinked process ~p with reason: ~p", [Pid, Reason])
+                        error_logger:error_msg("Received an exit message from an unlinked process ~p with reason: ~p", [Pid, Reason])
                 end,
 
                 %% callback
@@ -264,7 +264,7 @@ handle_info({'EXIT', Pid, Reason}, #state{
                     normal -> ok;
                     killed -> ok;
                     _ ->
-                        error_logger:error_msg("Process with key ~p exited with reason: ~p", [Key, Reason])
+                        error_logger:error_msg("Process with key ~p and pid ~p exited with reason: ~p", [Key, Pid, Reason])
                 end,
 
                 %% delete from table
