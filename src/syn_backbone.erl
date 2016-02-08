@@ -166,26 +166,21 @@ init([]) ->
 handle_call({register_on_node, Key, Pid, Meta}, _From, State) ->
     %% check & register in gen_server process to ensure atomicity at node level without transaction lock
     %% atomicity is obviously not at cluster level, which is covered by syn_consistency.
-    case i_find_by_key(Key) of
+    case i_find_by_pid(Pid) of
         undefined ->
-            case i_find_by_pid(Pid) of
-                undefined ->
-                    %% add to table
-                    mnesia:dirty_write(#syn_processes_table{
-                        key = Key,
-                        pid = Pid,
-                        node = node(),
-                        meta = Meta
-                    }),
-                    %% link
-                    erlang:link(Pid),
-                    %% return
-                    {reply, ok, State};
-                _ ->
-                    {reply, {error, pid_already_registered}, State}
-            end;
+            %% add to table
+            mnesia:dirty_write(#syn_processes_table{
+                key = Key,
+                pid = Pid,
+                node = node(),
+                meta = Meta
+            }),
+            %% link
+            erlang:link(Pid),
+            %% return
+            {reply, ok, State};
         _ ->
-            {reply, {error, taken}, State}
+            {reply, {error, pid_already_registered}, State}
     end;
 
 handle_call({unregister_on_node, Key}, _From, State) ->
