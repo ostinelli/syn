@@ -54,39 +54,39 @@ init() ->
 
 -spec register(Key :: any(), Pid :: pid()) -> ok | {error, taken | pid_already_registered}.
 register(Key, Pid) ->
-    syn_backbone:register(Key, Pid).
+    syn_global:register(Key, Pid).
 
 -spec register(Key :: any(), Pid :: pid(), Meta :: any()) -> ok | {error, taken | pid_already_registered}.
 register(Key, Pid, Meta) ->
-    syn_backbone:register(Key, Pid, Meta).
+    syn_global:register(Key, Pid, Meta).
 
 -spec unregister(Key :: any()) -> ok | {error, undefined}.
 unregister(Key) ->
-    syn_backbone:unregister(Key).
+    syn_global:unregister(Key).
 
 -spec find_by_key(Key :: any()) -> pid() | undefined.
 find_by_key(Key) ->
-    syn_backbone:find_by_key(Key).
+    syn_global:find_by_key(Key).
 
 -spec find_by_key(Key :: any(), with_meta) -> {pid(), Meta :: any()} | undefined.
 find_by_key(Key, with_meta) ->
-    syn_backbone:find_by_key(Key, with_meta).
+    syn_global:find_by_key(Key, with_meta).
 
 -spec find_by_pid(Pid :: pid()) -> Key :: any() | undefined.
 find_by_pid(Pid) ->
-    syn_backbone:find_by_pid(Pid).
+    syn_global:find_by_pid(Pid).
 
 -spec find_by_pid(Pid :: pid(), with_meta) -> {Key :: any(), Meta :: any()} | undefined.
 find_by_pid(Pid, with_meta) ->
-    syn_backbone:find_by_pid(Pid, with_meta).
+    syn_global:find_by_pid(Pid, with_meta).
 
 -spec count() -> non_neg_integer().
 count() ->
-    syn_backbone:count().
+    syn_global:count().
 
 -spec count(Node :: atom()) -> non_neg_integer().
 count(Node) ->
-    syn_backbone:count(Node).
+    syn_global:count(Node).
 
 %% ===================================================================
 %% Internal
