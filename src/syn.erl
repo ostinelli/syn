@@ -38,6 +38,7 @@
 
 %% PG
 -export([add_to_pg/2]).
+-export([remove_from_pg/2]).
 -export([pg_member/2]).
 -export([pids_of_pg/1]).
 
@@ -97,6 +98,10 @@ registry_count(Node) ->
 -spec add_to_pg(Name :: any(), Pid :: pid()) -> ok | {error, pid_already_in_group}.
 add_to_pg(Name, Pid) ->
     syn_pg:add_to_pg(Name, Pid).
+
+-spec remove_from_pg(Name :: any(), Pid :: pid()) -> ok | {error, undefined | pid_not_in_group}.
+remove_from_pg(Name, Pid) ->
+    syn_pg:remove_from_pg(Name, Pid).
 
 -spec pg_member(Pid :: pid(), Name :: any()) -> boolean().
 pg_member(Pid, Name) ->

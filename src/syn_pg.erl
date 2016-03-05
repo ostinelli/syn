@@ -28,6 +28,7 @@
 %% API
 -export([start_link/0]).
 -export([add_to_pg/2]).
+-export([remove_from_pg/2]).
 -export([pg_member/2]).
 -export([pids_of_pg/1]).
 
@@ -53,6 +54,18 @@ start_link() ->
 add_to_pg(Name, Pid) ->
     Node = node(Pid),
     gen_server:call({?MODULE, Node}, {add_to_pg, Name, Pid}).
+
+-spec remove_from_pg(Name :: any(), Pid :: pid()) -> ok | {error, undefined | pid_not_in_group}.
+remove_from_pg(Name, Pid) ->
+    case i_find_by_pid(Pid) of
+        undefined ->
+            {error, undefined};
+        Process when Process#syn_pg_table.name =/= Name ->
+            {error, pid_not_in_group};
+        Process ->
+            Node = Process#syn_pg_table.node,
+            gen_server:call({?MODULE, Node}, {remove_from_pg, Name, Pid})
+    end.
 
 -spec pg_member(Pid :: pid(), Name :: any()) -> boolean().
 pg_member(Pid, Name) ->
@@ -107,6 +120,22 @@ handle_call({add_to_pg, Name, Pid}, _From, State) ->
             {reply, ok, State};
         _ ->
             {reply, pid_already_in_group, State}
+    end;
+
+handle_call({remove_from_pg, Name, Pid}, _From, State) ->
+    %% we check again to return the correct response regardless of race conditions
+    case i_find_by_pid(Pid) of
+        undefined ->
+            {reply, {error, undefined}, State};
+        Process when Process#syn_pg_table.name =/= Name ->
+            {error, pid_not_in_group};
+        Process ->
+            %% remove from table
+            remove_process(Process),
+            %% unlink
+            erlang:unlink(Pid),
+            %% reply
+            {reply, ok, State}
     end;
 
 handle_call(Request, From, State) ->
@@ -167,9 +196,20 @@ i_pg_member(Pid, Name) ->
         _ -> true
     end.
 
--spec i_pids_of_pg(Name :: any()) -> [Process :: #syn_global_table{}].
+-spec i_pids_of_pg(Name :: any()) -> [Process :: #syn_pg_table{}].
 i_pids_of_pg(Name) ->
     Processes = mnesia:dirty_read(syn_pg_table, Name),
     lists:map(fun(Process) ->
         Process#syn_pg_table.pid
     end, Processes).
+
+-spec i_find_by_pid(Pid :: pid()) -> Process :: #syn_pg_table{} | undefined.
+i_find_by_pid(Pid) ->
+    case mnesia:dirty_index_read(syn_pg_table, Pid, #syn_pg_table.pid) of
+        [Process] -> Process;
+        _ -> undefined
+    end.
+
+-spec remove_process(Process :: #syn_pg_table{}) -> ok.
+remove_process(Process) ->
+    mnesia:dirty_delete_object(syn_pg_table, Process).
