@@ -162,6 +162,35 @@ handle_cast(Msg, State) ->
     {noreply, #state{}, Timeout :: non_neg_integer()} |
     {stop, Reason :: any(), #state{}}.
 
+handle_info({'EXIT', Pid, Reason}, State) ->
+    %% check if pid is in table
+    case i_find_by_pid(Pid) of
+        undefined ->
+            %% log
+            case Reason of
+                normal -> ok;
+                killed -> ok;
+                _ ->
+                    error_logger:error_msg("Received an exit message from an unlinked process ~p with reason: ~p", [Pid, Reason])
+            end;
+
+        Process ->
+            %% get pg
+            Name = Process#syn_pg_table.name,
+            %% log
+            case Reason of
+                normal -> ok;
+                killed -> ok;
+                _ ->
+                    error_logger:error_msg("Process of PG ~p and pid ~p exited with reason: ~p", [Name, Pid, Reason])
+            end,
+            %% delete from table
+            remove_process(Process)
+    end,
+    %% return
+    {noreply, State};
+
+
 handle_info(Info, State) ->
     error_logger:warning_msg("Received an unknown info message: ~p", [Info]),
     {noreply, State}.
