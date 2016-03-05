@@ -165,12 +165,12 @@ code_change(_OldVsn, State, _Extra) ->
 -spec delete_pids_of_disconnected_node(RemoteNode :: atom()) -> ok.
 delete_pids_of_disconnected_node(RemoteNode) ->
     %% build match specs
-    MatchHead = #syn_processes_table{key = '$1', node = '$2', _ = '_'},
+    MatchHead = #syn_global_table{key = '$1', node = '$2', _ = '_'},
     Guard = {'=:=', '$2', RemoteNode},
     IdFormat = '$1',
     %% delete
-    DelF = fun(Id) -> mnesia:dirty_delete({syn_processes_table, Id}) end,
-    NodePids = mnesia:dirty_select(syn_processes_table, [{MatchHead, [Guard], [IdFormat]}]),
+    DelF = fun(Id) -> mnesia:dirty_delete({syn_global_table, Id}) end,
+    NodePids = mnesia:dirty_select(syn_global_table, [{MatchHead, [Guard], [IdFormat]}]),
     lists:foreach(DelF, NodePids).
 
 -spec automerge(RemoteNode :: atom()) -> ok.
@@ -201,7 +201,7 @@ stitch(RemoteNode) ->
     mnesia_controller:connect_nodes(
         [RemoteNode],
         fun(MergeF) ->
-            catch case MergeF([syn_processes_table]) of
+            catch case MergeF([syn_global_table]) of
                 {merged, _, _} = Res ->
                     stitch_tab(RemoteNode),
                     Res;
@@ -243,7 +243,7 @@ purge_double_processes_from_local_mnesia(LocalProcessesInfo, RemoteProcessesInfo
             [] -> Acc;
             [{Key, LocalProcessPid, LocalProcessMeta}] ->
                 %% found a double process, remove it from local mnesia table
-                mnesia:dirty_delete(syn_processes_table, Key),
+                mnesia:dirty_delete(syn_global_table, Key),
                 %% remove it from ETS
                 ets:delete(Tab, Key),
                 %% add it to acc
@@ -273,16 +273,16 @@ write_local_processes_to_remote(RemoteNode, LocalProcessesInfo) ->
 -spec get_processes_info_of_node(Node :: atom()) -> list().
 get_processes_info_of_node(Node) ->
     %% build match specs
-    MatchHead = #syn_processes_table{key = '$1', pid = '$2', node = '$3', meta = '$4'},
+    MatchHead = #syn_global_table{key = '$1', pid = '$2', node = '$3', meta = '$4'},
     Guard = {'=:=', '$3', Node},
     ProcessInfoFormat = {{'$1', '$2', '$4'}},
     %% select
-    mnesia:dirty_select(syn_processes_table, [{MatchHead, [Guard], [ProcessInfoFormat]}]).
+    mnesia:dirty_select(syn_global_table, [{MatchHead, [Guard], [ProcessInfoFormat]}]).
 
 -spec write_processes_info_to_node(Node :: atom(), ProcessesInfo :: list()) -> ok.
 write_processes_info_to_node(Node, ProcessesInfo) ->
     FWrite = fun({Key, ProcessPid, ProcessMeta}) ->
-        mnesia:dirty_write(#syn_processes_table{
+        mnesia:dirty_write(#syn_global_table{
             key = Key,
             pid = ProcessPid,
             node = Node,

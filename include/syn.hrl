@@ -24,7 +24,7 @@
 %% THE SOFTWARE.
 %% ==========================================================================================================
 %% records
--record(syn_processes_table, {
+-record(syn_global_table, {
     key = undefined :: any(),
     pid = undefined :: undefined | pid() | atom(),
     node = undefined :: atom(),

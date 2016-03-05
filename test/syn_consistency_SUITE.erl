@@ -207,15 +207,15 @@ two_nodes_netsplit_when_there_are_no_conflicts(Config) ->
     timer:sleep(100),
 
     %% check tables
-    3 = mnesia:table_info(syn_processes_table, size),
-    3 = rpc:call(SlaveNode, mnesia, table_info, [syn_processes_table, size]),
+    3 = mnesia:table_info(syn_global_table, size),
+    3 = rpc:call(SlaveNode, mnesia, table_info, [syn_global_table, size]),
 
-    LocalActiveReplicas = mnesia:table_info(syn_processes_table, active_replicas),
+    LocalActiveReplicas = mnesia:table_info(syn_global_table, active_replicas),
     2 = length(LocalActiveReplicas),
     true = lists:member(SlaveNode, LocalActiveReplicas),
     true = lists:member(CurrentNode, LocalActiveReplicas),
 
-    SlaveActiveReplicas = rpc:call(SlaveNode, mnesia, table_info, [syn_processes_table, active_replicas]),
+    SlaveActiveReplicas = rpc:call(SlaveNode, mnesia, table_info, [syn_global_table, active_replicas]),
     2 = length(SlaveActiveReplicas),
     true = lists:member(SlaveNode, SlaveActiveReplicas),
     true = lists:member(CurrentNode, SlaveActiveReplicas),
@@ -225,23 +225,23 @@ two_nodes_netsplit_when_there_are_no_conflicts(Config) ->
     timer:sleep(1000),
 
     %% check tables
-    1 = mnesia:table_info(syn_processes_table, size),
-    [CurrentNode] = mnesia:table_info(syn_processes_table, active_replicas),
+    1 = mnesia:table_info(syn_global_table, size),
+    [CurrentNode] = mnesia:table_info(syn_global_table, active_replicas),
 
     %% reconnect
     syn_test_suite_helper:connect_node(SlaveNode),
     timer:sleep(1000),
 
     %% check tables
-    3 = mnesia:table_info(syn_processes_table, size),
-    3 = rpc:call(SlaveNode, mnesia, table_info, [syn_processes_table, size]),
+    3 = mnesia:table_info(syn_global_table, size),
+    3 = rpc:call(SlaveNode, mnesia, table_info, [syn_global_table, size]),
 
-    LocalActiveReplicas2 = mnesia:table_info(syn_processes_table, active_replicas),
+    LocalActiveReplicas2 = mnesia:table_info(syn_global_table, active_replicas),
     2 = length(LocalActiveReplicas2),
     true = lists:member(SlaveNode, LocalActiveReplicas2),
     true = lists:member(CurrentNode, LocalActiveReplicas2),
 
-    SlaveActiveReplicas2 = rpc:call(SlaveNode, mnesia, table_info, [syn_processes_table, active_replicas]),
+    SlaveActiveReplicas2 = rpc:call(SlaveNode, mnesia, table_info, [syn_global_table, active_replicas]),
     2 = length(SlaveActiveReplicas2),
     true = lists:member(SlaveNode, SlaveActiveReplicas2),
     true = lists:member(CurrentNode, SlaveActiveReplicas2),
@@ -281,8 +281,8 @@ two_nodes_netsplit_kill_resolution_when_there_are_conflicts(Config) ->
     timer:sleep(100),
 
     %% check tables
-    1 = mnesia:table_info(syn_processes_table, size),
-    1 = rpc:call(SlaveNode, mnesia, table_info, [syn_processes_table, size]),
+    1 = mnesia:table_info(syn_global_table, size),
+    1 = rpc:call(SlaveNode, mnesia, table_info, [syn_global_table, size]),
 
     %% check process
     SlavePid = syn:find_by_key(conflicting_key),
@@ -292,8 +292,8 @@ two_nodes_netsplit_kill_resolution_when_there_are_conflicts(Config) ->
     timer:sleep(1000),
 
     %% check tables
-    0 = mnesia:table_info(syn_processes_table, size),
-    [CurrentNode] = mnesia:table_info(syn_processes_table, active_replicas),
+    0 = mnesia:table_info(syn_global_table, size),
+    [CurrentNode] = mnesia:table_info(syn_global_table, active_replicas),
 
     %% now register the local pid with the same key
     ok = syn:register(conflicting_key, LocalPid),
@@ -306,8 +306,8 @@ two_nodes_netsplit_kill_resolution_when_there_are_conflicts(Config) ->
     timer:sleep(1000),
 
     %% check tables
-    1 = mnesia:table_info(syn_processes_table, size),
-    1 = rpc:call(SlaveNode, mnesia, table_info, [syn_processes_table, size]),
+    1 = mnesia:table_info(syn_global_table, size),
+    1 = rpc:call(SlaveNode, mnesia, table_info, [syn_global_table, size]),
 
     %% check process
     FoundPid = syn:find_by_key(conflicting_key),
@@ -350,8 +350,8 @@ two_nodes_netsplit_callback_resolution_when_there_are_conflicts(Config) ->
     timer:sleep(100),
 
     %% check tables
-    1 = mnesia:table_info(syn_processes_table, size),
-    1 = rpc:call(SlaveNode, mnesia, table_info, [syn_processes_table, size]),
+    1 = mnesia:table_info(syn_global_table, size),
+    1 = rpc:call(SlaveNode, mnesia, table_info, [syn_global_table, size]),
 
     %% check process
     SlavePid = syn:find_by_key(conflicting_key),
@@ -361,8 +361,8 @@ two_nodes_netsplit_callback_resolution_when_there_are_conflicts(Config) ->
     timer:sleep(1000),
 
     %% check tables
-    0 = mnesia:table_info(syn_processes_table, size),
-    [CurrentNode] = mnesia:table_info(syn_processes_table, active_replicas),
+    0 = mnesia:table_info(syn_global_table, size),
+    [CurrentNode] = mnesia:table_info(syn_global_table, active_replicas),
 
     %% now register the local pid with the same key
     ok = syn:register(conflicting_key, LocalPid, Meta),
@@ -375,8 +375,8 @@ two_nodes_netsplit_callback_resolution_when_there_are_conflicts(Config) ->
     timer:sleep(1000),
 
     %% check tables
-    1 = mnesia:table_info(syn_processes_table, size),
-    1 = rpc:call(SlaveNode, mnesia, table_info, [syn_processes_table, size]),
+    1 = mnesia:table_info(syn_global_table, size),
+    1 = rpc:call(SlaveNode, mnesia, table_info, [syn_global_table, size]),
 
     %% check process
     FoundPid = syn:find_by_key(conflicting_key),
@@ -423,9 +423,9 @@ three_nodes_netsplit_kill_resolution_when_there_are_conflicts(Config) ->
     timer:sleep(100),
 
     %% check tables
-    2 = mnesia:table_info(syn_processes_table, size),
-    2 = rpc:call(SlaveNode, mnesia, table_info, [syn_processes_table, size]),
-    2 = rpc:call(SlaveNode2, mnesia, table_info, [syn_processes_table, size]),
+    2 = mnesia:table_info(syn_global_table, size),
+    2 = rpc:call(SlaveNode, mnesia, table_info, [syn_global_table, size]),
+    2 = rpc:call(SlaveNode2, mnesia, table_info, [syn_global_table, size]),
 
     %% check process
     SlavePid = syn:find_by_key(conflicting_key),
@@ -435,10 +435,10 @@ three_nodes_netsplit_kill_resolution_when_there_are_conflicts(Config) ->
     timer:sleep(1000),
 
     %% check tables
-    1 = mnesia:table_info(syn_processes_table, size),
-    1 = rpc:call(SlaveNode2, mnesia, table_info, [syn_processes_table, size]),
+    1 = mnesia:table_info(syn_global_table, size),
+    1 = rpc:call(SlaveNode2, mnesia, table_info, [syn_global_table, size]),
 
-    ActiveReplicaseDuringNetsplit = mnesia:table_info(syn_processes_table, active_replicas),
+    ActiveReplicaseDuringNetsplit = mnesia:table_info(syn_global_table, active_replicas),
     true = lists:member(CurrentNode, ActiveReplicaseDuringNetsplit),
     true = lists:member(SlaveNode2, ActiveReplicaseDuringNetsplit),
 
@@ -453,9 +453,9 @@ three_nodes_netsplit_kill_resolution_when_there_are_conflicts(Config) ->
     timer:sleep(1000),
 
     %% check tables
-    2 = mnesia:table_info(syn_processes_table, size),
-    2 = rpc:call(SlaveNode, mnesia, table_info, [syn_processes_table, size]),
-    2 = rpc:call(SlaveNode2, mnesia, table_info, [syn_processes_table, size]),
+    2 = mnesia:table_info(syn_global_table, size),
+    2 = rpc:call(SlaveNode, mnesia, table_info, [syn_global_table, size]),
+    2 = rpc:call(SlaveNode2, mnesia, table_info, [syn_global_table, size]),
 
     %% check processes
     FoundPid = syn:find_by_key(conflicting_key),
