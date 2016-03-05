@@ -1,15 +1,11 @@
 %% ==========================================================================================================
 %% Syn - A global process registry.
 %%
-%% Copyright (C) 2015, Roberto Ostinelli <roberto@ostinelli.net>.
-%% Portions of code from Ulf Wiger's unsplit server module:
-%% <https://github.com/uwiger/unsplit/blob/master/src/unsplit_server.erl>
-%%
-%% All rights reserved.
-%%
 %% The MIT License (MIT)
 %%
-%% Copyright (c) 2015 Roberto Ostinelli
+%% Copyright (c) 2016 Roberto Ostinelli <roberto@ostinelli.net> and Neato Robotics, Inc.
+%% Portions of code from Ulf Wiger's unsplit server module:
+%% <https://github.com/uwiger/unsplit/blob/master/src/unsplit_server.erl>
 %%
 %% Permission is hereby granted, free of charge, to any person obtaining a copy
 %% of this software and associated documentation files (the "Software"), to deal
