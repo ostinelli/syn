@@ -27,10 +27,10 @@
 
 %% API
 -export([start_link/0]).
--export([add_to_pg/2]).
--export([remove_from_pg/2]).
--export([pg_member/2]).
--export([pids_of_pg/1]).
+-export([join/2]).
+-export([leave/2]).
+-export([member/2]).
+-export([get_members/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
@@ -50,13 +50,13 @@ start_link() ->
     Options = [],
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], Options).
 
--spec add_to_pg(Name :: any(), Pid :: pid()) -> ok | {error, pid_already_in_group}.
-add_to_pg(Name, Pid) ->
+-spec join(Name :: any(), Pid :: pid()) -> ok | {error, pid_already_in_group}.
+join(Name, Pid) ->
     Node = node(Pid),
-    gen_server:call({?MODULE, Node}, {add_to_pg, Name, Pid}).
+    gen_server:call({?MODULE, Node}, {join, Name, Pid}).
 
--spec remove_from_pg(Name :: any(), Pid :: pid()) -> ok | {error, undefined | pid_not_in_group}.
-remove_from_pg(Name, Pid) ->
+-spec leave(Name :: any(), Pid :: pid()) -> ok | {error, undefined | pid_not_in_group}.
+leave(Name, Pid) ->
     case i_find_by_pid(Pid) of
         undefined ->
             {error, undefined};
@@ -64,16 +64,16 @@ remove_from_pg(Name, Pid) ->
             {error, pid_not_in_group};
         Process ->
             Node = Process#syn_pg_table.node,
-            gen_server:call({?MODULE, Node}, {remove_from_pg, Name, Pid})
+            gen_server:call({?MODULE, Node}, {leave, Name, Pid})
     end.
 
--spec pg_member(Pid :: pid(), Name :: any()) -> boolean().
-pg_member(Pid, Name) ->
-    i_pg_member(Pid, Name).
+-spec member(Pid :: pid(), Name :: any()) -> boolean().
+member(Pid, Name) ->
+    i_member(Pid, Name).
 
--spec pids_of_pg(Name :: any()) -> [pid()].
-pids_of_pg(Name) ->
-    i_pids_of_pg(Name).
+-spec get_members(Name :: any()) -> [pid()].
+get_members(Name) ->
+    i_get_members(Name).
 
 %% ===================================================================
 %% Callbacks
@@ -105,8 +105,8 @@ init([]) ->
     {stop, Reason :: any(), Reply :: any(), #state{}} |
     {stop, Reason :: any(), #state{}}.
 
-handle_call({add_to_pg, Name, Pid}, _From, State) ->
-    case i_pg_member(Pid, Name) of
+handle_call({join, Name, Pid}, _From, State) ->
+    case i_member(Pid, Name) of
         false ->
             %% add to table
             mnesia:dirty_write(#syn_pg_table{
@@ -122,7 +122,7 @@ handle_call({add_to_pg, Name, Pid}, _From, State) ->
             {reply, pid_already_in_group, State}
     end;
 
-handle_call({remove_from_pg, Name, Pid}, _From, State) ->
+handle_call({leave, Name, Pid}, _From, State) ->
     %% we check again to return the correct response regardless of race conditions
     case i_find_by_pid(Pid) of
         undefined ->
@@ -184,8 +184,8 @@ code_change(_OldVsn, State, _Extra) ->
 %% ===================================================================
 %% Internal
 %% ===================================================================
--spec i_pg_member(Pid :: pid(), Name :: any()) -> boolean().
-i_pg_member(Pid, Name) ->
+-spec i_member(Pid :: pid(), Name :: any()) -> boolean().
+i_member(Pid, Name) ->
     %% build match specs
     MatchHead = #syn_pg_table{name = '$1', pid = '$2', _ = '_'},
     Guards = [{'=:=', '$1', Name}, {'=:=', '$2', Pid}],
@@ -196,8 +196,8 @@ i_pg_member(Pid, Name) ->
         _ -> true
     end.
 
--spec i_pids_of_pg(Name :: any()) -> [Process :: #syn_pg_table{}].
-i_pids_of_pg(Name) ->
+-spec i_get_members(Name :: any()) -> [Process :: #syn_pg_table{}].
+i_get_members(Name) ->
     Processes = mnesia:dirty_read(syn_pg_table, Name),
     lists:map(fun(Process) ->
         Process#syn_pg_table.pid

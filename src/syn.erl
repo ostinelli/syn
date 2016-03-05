@@ -37,10 +37,10 @@
 -export([registry_count/0, registry_count/1]).
 
 %% PG
--export([add_to_pg/2]).
--export([remove_from_pg/2]).
--export([pg_member/2]).
--export([pids_of_pg/1]).
+-export([join/2]).
+-export([leave/2]).
+-export([member/2]).
+-export([get_members/1]).
 
 %% ===================================================================
 %% API
@@ -95,21 +95,21 @@ registry_count() ->
 registry_count(Node) ->
     syn_global:count(Node).
 
--spec add_to_pg(Name :: any(), Pid :: pid()) -> ok | {error, pid_already_in_group}.
-add_to_pg(Name, Pid) ->
-    syn_pg:add_to_pg(Name, Pid).
+-spec join(Name :: any(), Pid :: pid()) -> ok | {error, pid_already_in_group}.
+join(Name, Pid) ->
+    syn_pg:join(Name, Pid).
 
--spec remove_from_pg(Name :: any(), Pid :: pid()) -> ok | {error, undefined | pid_not_in_group}.
-remove_from_pg(Name, Pid) ->
-    syn_pg:remove_from_pg(Name, Pid).
+-spec leave(Name :: any(), Pid :: pid()) -> ok | {error, undefined | pid_not_in_group}.
+leave(Name, Pid) ->
+    syn_pg:leave(Name, Pid).
 
--spec pg_member(Pid :: pid(), Name :: any()) -> boolean().
-pg_member(Pid, Name) ->
-    syn_pg:pg_member(Pid, Name).
+-spec member(Pid :: pid(), Name :: any()) -> boolean().
+member(Pid, Name) ->
+    syn_pg:member(Pid, Name).
 
--spec pids_of_pg(Name :: any()) -> [pid()].
-pids_of_pg(Name) ->
-    syn_pg:pids_of_pg(Name).
+-spec get_members(Name :: any()) -> [pid()].
+get_members(Name) ->
+    syn_pg:get_members(Name).
 
 %% ===================================================================
 %% Internal
