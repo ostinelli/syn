@@ -281,7 +281,7 @@ handle_info(Info, State) ->
 %% ----------------------------------------------------------------------------------------------------------
 -spec terminate(Reason :: any(), #state{}) -> terminated.
 terminate(Reason, _State) ->
-    error_logger:info_msg("Terminating syn backbone with reason: ~p", [Reason]),
+    error_logger:info_msg("Terminating syn global with reason: ~p", [Reason]),
     terminated.
 
 %% ----------------------------------------------------------------------------------------------------------
