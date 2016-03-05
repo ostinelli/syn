@@ -1,17 +1,23 @@
 [![Build Status](https://travis-ci.org/ostinelli/syn.svg?branch=master)](https://travis-ci.org/ostinelli/syn)
 
+> THIS IS AN EXPERIMENTAL BRANCH WHICH ADDS SUPPORT FOR PROCESS GROUPS. THIS IS NOT PROPERLY TESTED, DO NOT USE OTHER THAN FOR FEEDBACK.
+>
+> CONFLICT RESOLUTION FOR PG IS NOT YET IMPLEMENTED.
+
 # Syn
-**Syn** (short for _synonym_) is a global process registry for Erlang.
+**Syn** (short for _synonym_) is a global Process Registry and Process Group manager for Erlang.
 
 ## Introduction
 Syn is a process registry that has the following features:
 
- * Global (i.e. a process is uniquely identified with a Key across all the nodes of a cluster).
- * Any term can be used as Key.
+ * Global process registry (i.e. a process is uniquely identified with a Key across all the nodes of a cluster).
+ * Global Process Group manager (i.e. a PG is uniquely identified with a Name across all the nodes of a cluster).
+ * Publish a message to all members of a Process Group (PubSub mechanism).
+ * Any term can be used as Key and Name.
  * Fast writes.
  * Automatically handles conflict resolution (such as net splits).
  * Configurable callbacks.
- * Processes are automatically monitored and removed from the registry if they die.
+ * Processes are automatically monitored and removed from the registry and Process Group if they die.
 
 
 ## Notes
@@ -77,10 +83,11 @@ connect_nodes() ->
 	[net_kernel:connect_node(Node) || Node <- Nodes].
 ```
 
-Syn is then ready to register processes.
+Syn is then ready.
 
 
-### Basic
+### Process Registry
+
 To register a process:
 
 ```erlang
@@ -175,7 +182,7 @@ Types:
 	Node = atom()
 ```
 
-### Options
+#### Options
 Options can be set in the environment variable `syn`. You're probably best off using an application configuration file (in releases, `sys.config`):
 
 ```erlang
@@ -189,7 +196,7 @@ Options can be set in the environment variable `syn`. You're probably best off u
 ```
 These options are explained here below.
 
-#### Callback on process exit
+##### Callback on process exit
 The `process_exit_callback` option allows you to specify the `module` and the `function` of the callback that will be triggered when a process exits. This callback will be called only on the node where the process was running.
 
 The callback function is defined as:
@@ -229,7 +236,7 @@ If you don't set this option, no callback will be triggered.
 > If a process dies as a consequence of a conflict resolution, the process exit callback will still be called but the Key and Meta values will both be `undefined`.
 
 
-#### Conflict resolution by callback
+##### Conflict resolution by callback
 In case of race conditions, or during net splits, a Key might be registered simultaneously on two different nodes. In this case, the cluster experiences a naming conflict.
 
 When this happens, Syn will resolve this conflict by choosing a single process. Syn will discard the processes running on the node the conflict is being resolved on, and by default will kill it by sending a `kill` signal with `exit(Pid, kill)`.
@@ -267,6 +274,61 @@ Set it in the options:
 
 > Important Note: The conflict resolution method SHOULD be defined in the same way across all nodes of the cluster. Having different conflict resolution options on different nodes can have unexpected results.
 
+### Process Groups (PG)
+
+There's no need to manually create / delete Process Groups, Syn will take care of managing those for you.
+
+To add a process to a PG:
+
+```erlang
+syn:join(Name, Pid) -> ok | {error, Error}.
+
+Types:
+	Name = any()
+	Pid = pid()
+	Error = pid_already_in_group
+```
+
+To remove a process from a PG:
+
+```erlang
+syn:leave(Name, Pid) -> ok | {error, Error}.
+
+Types:
+	Name = any()
+	Pid = pid()
+	Error = undefined | pid_not_in_group
+```
+
+To publish a message to all PG members:
+
+```erlang
+syn:publish(Name, Message) -> {ok, RecipientCount}.
+
+Types:
+	Name = any()
+	Message = any()
+	RecipientCount = non_neg_integer()
+```
+
+To get a list of the members of a PG:
+
+```erlang
+syn:get_members(Name) -> [pid()].
+
+Types:
+	Name = any()
+```
+
+To know if a process is a member of a PG:
+
+```erlang
+syn:member(Pid, Name) -> boolean().
+
+Types:
+	Pid = pid()
+	Name = any()
+```
 
 ## Internals
 Under the hood, Syn performs dirty reads and writes into a distributed in-memory Mnesia table, replicated across all the nodes of the cluster.
