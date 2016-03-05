@@ -31,6 +31,7 @@
 -export([leave/2]).
 -export([member/2]).
 -export([get_members/1]).
+-export([publish/2]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
@@ -74,6 +75,15 @@ member(Pid, Name) ->
 -spec get_members(Name :: any()) -> [pid()].
 get_members(Name) ->
     i_get_members(Name).
+
+-spec publish(Name :: any(), Message :: any()) -> {ok, RecipientCount :: non_neg_integer()}.
+publish(Name, Message) ->
+    MemberPids = i_get_members(Name),
+    FSend = fun(Pid) ->
+        Pid ! Message
+    end,
+    lists:foreach(FSend, MemberPids),
+    {ok, length(MemberPids)}.
 
 %% ===================================================================
 %% Callbacks

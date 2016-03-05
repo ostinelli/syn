@@ -41,6 +41,7 @@
 -export([leave/2]).
 -export([member/2]).
 -export([get_members/1]).
+-export([publish/2]).
 
 %% ===================================================================
 %% API
@@ -110,6 +111,10 @@ member(Pid, Name) ->
 -spec get_members(Name :: any()) -> [pid()].
 get_members(Name) ->
     syn_pg:get_members(Name).
+
+-spec publish(Name :: any(), Message :: any()) -> {ok, RecipientCount :: non_neg_integer()}.
+publish(Name, Message) ->
+    syn_pg:publish(Name, Message).
 
 %% ===================================================================
 %% Internal
