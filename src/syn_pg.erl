@@ -28,6 +28,7 @@
 %% API
 -export([start_link/0]).
 -export([add_to_pg/2]).
+-export([pg_member/2]).
 -export([pids_of_pg/1]).
 
 %% gen_server callbacks
@@ -52,6 +53,10 @@ start_link() ->
 add_to_pg(Name, Pid) ->
     Node = node(Pid),
     gen_server:call({?MODULE, Node}, {add_to_pg, Name, Pid}).
+
+-spec pg_member(Pid :: pid(), Name :: any()) -> boolean().
+pg_member(Pid, Name) ->
+    i_pg_member(Pid, Name).
 
 -spec pids_of_pg(Name :: any()) -> [pid()].
 pids_of_pg(Name) ->
@@ -88,8 +93,7 @@ init([]) ->
     {stop, Reason :: any(), #state{}}.
 
 handle_call({add_to_pg, Name, Pid}, _From, State) ->
-    PidsOfPg = i_pids_of_pg(Name),
-    case lists:member(Pid, PidsOfPg) of
+    case i_pg_member(Pid, Name) of
         false ->
             %% add to table
             mnesia:dirty_write(#syn_pg_table{
@@ -151,6 +155,18 @@ code_change(_OldVsn, State, _Extra) ->
 %% ===================================================================
 %% Internal
 %% ===================================================================
+-spec i_pg_member(Pid :: pid(), Name :: any()) -> boolean().
+i_pg_member(Pid, Name) ->
+    %% build match specs
+    MatchHead = #syn_pg_table{name = '$1', pid = '$2', _ = '_'},
+    Guards = [{'=:=', '$1', Name}, {'=:=', '$2', Pid}],
+    Result = '$2',
+    %% select
+    case mnesia:dirty_select(syn_pg_table, [{MatchHead, Guards, [Result]}]) of
+        [] -> false;
+        _ -> true
+    end.
+
 -spec i_pids_of_pg(Name :: any()) -> [Process :: #syn_global_table{}].
 i_pids_of_pg(Name) ->
     Processes = mnesia:dirty_read(syn_pg_table, Name),
