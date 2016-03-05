@@ -38,50 +38,60 @@
 
 -spec initdb() -> ok | {error, any()}.
 initdb() ->
-    %% get nodes
-    CurrentNode = node(),
-    ClusterNodes = [CurrentNode | nodes()],
     %% ensure all nodes are added
+    ClusterNodes = [node() | nodes()],
     mnesia:change_config(extra_db_nodes, ClusterNodes),
-    %% ensure table exists
-    case mnesia:create_table(syn_global_table, [
+    %% create tables
+    create_table(syn_global_table, [
         {type, set},
         {ram_copies, ClusterNodes},
         {attributes, record_info(fields, syn_global_table)},
         {index, [#syn_global_table.pid]},
         {storage_properties, [{ets, [{read_concurrency, true}]}]}
-    ]) of
+    ]),
+    create_table(syn_pg_table, [
+        {type, bag},
+        {ram_copies, ClusterNodes},
+        {attributes, record_info(fields, syn_pg_table)},
+        {index, [#syn_pg_table.pid]},
+        {storage_properties, [{ets, [{read_concurrency, true}]}]}
+    ]).
+
+create_table(TableName, Options) ->
+    CurrentNode = node(),
+    %% ensure table exists
+    case mnesia:create_table(TableName, Options) of
         {atomic, ok} ->
-            error_logger:info_msg("syn_global_table was successfully created"),
+            error_logger:info_msg("~p was successfully created", [TableName]),
             ok;
-        {aborted, {already_exists, syn_global_table}} ->
+        {aborted, {already_exists, TableName}} ->
             %% table already exists, try to add current node as copy
-            add_table_copy_to_current_node();
-        {aborted, {already_exists, syn_global_table, CurrentNode}} ->
+            add_table_copy_to_current_node(TableName);
+        {aborted, {already_exists, TableName, CurrentNode}} ->
             %% table already exists, try to add current node as copy
-            add_table_copy_to_current_node();
+            add_table_copy_to_current_node(TableName);
         Other ->
-            error_logger:error_msg("Error while creating syn_global_table: ~p", [Other]),
+            error_logger:error_msg("Error while creating ~p: ~p", [TableName, Other]),
             {error, Other}
     end.
 
--spec add_table_copy_to_current_node() -> ok | {error, any()}.
-add_table_copy_to_current_node() ->
-    %% wait for table
-    mnesia:wait_for_tables([syn_global_table], 10000),
-    %% add copy
+-spec add_table_copy_to_current_node(TableName :: atom()) -> ok | {error, any()}.
+add_table_copy_to_current_node(TableName) ->
     CurrentNode = node(),
-    case mnesia:add_table_copy(syn_global_table, CurrentNode, ram_copies) of
+    %% wait for table
+    mnesia:wait_for_tables([TableName], 10000),
+    %% add copy
+    case mnesia:add_table_copy(TableName, CurrentNode, ram_copies) of
         {atomic, ok} ->
-            error_logger:info_msg("Copy of syn_global_table was successfully added to current node"),
+            error_logger:info_msg("Copy of ~p was successfully added to current node", [TableName]),
             ok;
-        {aborted, {already_exists, syn_global_table}} ->
-            error_logger:info_msg("Copy of syn_global_table is already added to current node"),
+        {aborted, {already_exists, TableName}} ->
+            error_logger:info_msg("Copy of ~p is already added to current node", [TableName]),
             ok;
-        {aborted, {already_exists, syn_global_table, CurrentNode}} ->
-            error_logger:info_msg("Copy of syn_global_table is already added to current node"),
+        {aborted, {already_exists, TableName, CurrentNode}} ->
+            error_logger:info_msg("Copy of ~p is already added to current node", [TableName]),
             ok;
         {aborted, Reason} ->
-            error_logger:error_msg("Error while creating copy of syn_global_table: ~p", [Reason]),
+            error_logger:error_msg("Error while creating copy of ~p: ~p", [TableName, Reason]),
             {error, Reason}
     end.

@@ -51,6 +51,7 @@ start_link() ->
 init([]) ->
     Children = [
         ?CHILD(syn_global, worker),
+        ?CHILD(syn_pg, worker),
         ?CHILD(syn_consistency, worker)
     ],
     {ok, {{one_for_one, 10, 10}, Children}}.

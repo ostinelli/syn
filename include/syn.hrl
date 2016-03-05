@@ -30,3 +30,8 @@
     node = undefined :: atom(),
     meta = undefined :: any()
 }).
+-record(syn_pg_table, {
+    name = undefined :: any(),
+    pid = undefined :: undefined | pid() | atom(),
+    node = undefined :: atom()
+}).

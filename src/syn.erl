@@ -28,12 +28,17 @@
 %% API
 -export([start/0, stop/0]).
 -export([init/0]).
+
+%% global
 -export([register/2, register/3]).
 -export([unregister/1]).
 -export([find_by_key/1, find_by_key/2]).
 -export([find_by_pid/1, find_by_pid/2]).
 -export([registry_count/0, registry_count/1]).
 
+%% PG
+-export([add_to_pg/2]).
+-export([pids_of_pg/1]).
 
 %% ===================================================================
 %% API
@@ -87,6 +92,14 @@ registry_count() ->
 -spec registry_count(Node :: atom()) -> non_neg_integer().
 registry_count(Node) ->
     syn_global:count(Node).
+
+-spec add_to_pg(Name :: any(), Pid :: pid()) -> ok | {error, pid_already_in_group}.
+add_to_pg(Name, Pid) ->
+    syn_pg:add_to_pg(Name, Pid).
+
+-spec pids_of_pg(Name :: any()) -> [pid()].
+pids_of_pg(Name) ->
+    syn_pg:pids_of_pg(Name).
 
 %% ===================================================================
 %% Internal
