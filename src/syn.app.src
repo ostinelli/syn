@@ -3,7 +3,7 @@
         {description, "A global process registry."},
         {vsn, "1.0.0"},
         {registered, [
-            syn_backbone,
+            syn_global,
             syn_consistency
         ]},
         {applications, [
