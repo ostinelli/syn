@@ -23,7 +23,7 @@
 %% OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 %% THE SOFTWARE.
 %% ==========================================================================================================
--module(syn_pg).
+-module(syn_groups).
 
 %% API
 -export([start_link/0]).
@@ -61,10 +61,10 @@ leave(Name, Pid) ->
     case i_find_by_pid(Pid) of
         undefined ->
             {error, undefined};
-        Process when Process#syn_pg_table.name =/= Name ->
+        Process when Process#syn_groups_table.name =/= Name ->
             {error, pid_not_in_group};
         Process ->
-            Node = Process#syn_pg_table.node,
+            Node = Process#syn_groups_table.node,
             gen_server:call({?MODULE, Node}, {leave, Name, Pid})
     end.
 
@@ -119,7 +119,7 @@ handle_call({join, Name, Pid}, _From, State) ->
     case i_member(Pid, Name) of
         false ->
             %% add to table
-            mnesia:dirty_write(#syn_pg_table{
+            mnesia:dirty_write(#syn_groups_table{
                 name = Name,
                 pid = Pid,
                 node = node()
@@ -137,7 +137,7 @@ handle_call({leave, Name, Pid}, _From, State) ->
     case i_find_by_pid(Pid) of
         undefined ->
             {reply, {error, undefined}, State};
-        Process when Process#syn_pg_table.name =/= Name ->
+        Process when Process#syn_groups_table.name =/= Name ->
             {error, pid_not_in_group};
         Process ->
             %% remove from table
@@ -186,7 +186,7 @@ handle_info({'EXIT', Pid, Reason}, State) ->
 
         Process ->
             %% get pg
-            Name = Process#syn_pg_table.name,
+            Name = Process#syn_groups_table.name,
             %% log
             case Reason of
                 normal -> ok;
@@ -226,29 +226,29 @@ code_change(_OldVsn, State, _Extra) ->
 -spec i_member(Pid :: pid(), Name :: any()) -> boolean().
 i_member(Pid, Name) ->
     %% build match specs
-    MatchHead = #syn_pg_table{name = '$1', pid = '$2', _ = '_'},
+    MatchHead = #syn_groups_table{name = '$1', pid = '$2', _ = '_'},
     Guards = [{'=:=', '$1', Name}, {'=:=', '$2', Pid}],
     Result = '$2',
     %% select
-    case mnesia:dirty_select(syn_pg_table, [{MatchHead, Guards, [Result]}]) of
+    case mnesia:dirty_select(syn_groups_table, [{MatchHead, Guards, [Result]}]) of
         [] -> false;
         _ -> true
     end.
 
--spec i_get_members(Name :: any()) -> [Process :: #syn_pg_table{}].
+-spec i_get_members(Name :: any()) -> [Process :: #syn_groups_table{}].
 i_get_members(Name) ->
-    Processes = mnesia:dirty_read(syn_pg_table, Name),
+    Processes = mnesia:dirty_read(syn_groups_table, Name),
     lists:map(fun(Process) ->
-        Process#syn_pg_table.pid
+        Process#syn_groups_table.pid
     end, Processes).
 
--spec i_find_by_pid(Pid :: pid()) -> Process :: #syn_pg_table{} | undefined.
+-spec i_find_by_pid(Pid :: pid()) -> Process :: #syn_groups_table{} | undefined.
 i_find_by_pid(Pid) ->
-    case mnesia:dirty_index_read(syn_pg_table, Pid, #syn_pg_table.pid) of
+    case mnesia:dirty_index_read(syn_groups_table, Pid, #syn_groups_table.pid) of
         [Process] -> Process;
         _ -> undefined
     end.
 
--spec remove_process(Process :: #syn_pg_table{}) -> ok.
+-spec remove_process(Process :: #syn_groups_table{}) -> ok.
 remove_process(Process) ->
-    mnesia:dirty_delete_object(syn_pg_table, Process).
+    mnesia:dirty_delete_object(syn_groups_table, Process).

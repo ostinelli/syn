@@ -42,18 +42,18 @@ initdb() ->
     ClusterNodes = [node() | nodes()],
     mnesia:change_config(extra_db_nodes, ClusterNodes),
     %% create tables
-    create_table(syn_global_table, [
+    create_table(syn_registry_table, [
         {type, set},
         {ram_copies, ClusterNodes},
-        {attributes, record_info(fields, syn_global_table)},
-        {index, [#syn_global_table.pid]},
+        {attributes, record_info(fields, syn_registry_table)},
+        {index, [#syn_registry_table.pid]},
         {storage_properties, [{ets, [{read_concurrency, true}]}]}
     ]),
-    create_table(syn_pg_table, [
+    create_table(syn_groups_table, [
         {type, bag},
         {ram_copies, ClusterNodes},
-        {attributes, record_info(fields, syn_pg_table)},
-        {index, [#syn_pg_table.pid]},
+        {attributes, record_info(fields, syn_groups_table)},
+        {index, [#syn_groups_table.pid]},
         {storage_properties, [{ets, [{read_concurrency, true}]}]}
     ]).
 

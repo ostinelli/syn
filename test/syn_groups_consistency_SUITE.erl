@@ -22,7 +22,7 @@
 %% LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 %% OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 %% THE SOFTWARE.
--module(syn_process_groups_consistency_SUITE).
+-module(syn_groups_consistency_SUITE).
 
 %% callbacks
 -export([all/0]).
@@ -179,15 +179,15 @@ two_nodes_netsplit_when_there_are_no_conflicts(Config) ->
     timer:sleep(100),
 
     %% check tables
-    3 = mnesia:table_info(syn_pg_table, size),
-    3 = rpc:call(SlaveNode, mnesia, table_info, [syn_pg_table, size]),
+    3 = mnesia:table_info(syn_groups_table, size),
+    3 = rpc:call(SlaveNode, mnesia, table_info, [syn_groups_table, size]),
 
-    LocalActiveReplicas = mnesia:table_info(syn_pg_table, active_replicas),
+    LocalActiveReplicas = mnesia:table_info(syn_groups_table, active_replicas),
     2 = length(LocalActiveReplicas),
     true = lists:member(SlaveNode, LocalActiveReplicas),
     true = lists:member(CurrentNode, LocalActiveReplicas),
 
-    SlaveActiveReplicas = rpc:call(SlaveNode, mnesia, table_info, [syn_pg_table, active_replicas]),
+    SlaveActiveReplicas = rpc:call(SlaveNode, mnesia, table_info, [syn_groups_table, active_replicas]),
     2 = length(SlaveActiveReplicas),
     true = lists:member(SlaveNode, SlaveActiveReplicas),
     true = lists:member(CurrentNode, SlaveActiveReplicas),
@@ -197,23 +197,23 @@ two_nodes_netsplit_when_there_are_no_conflicts(Config) ->
     timer:sleep(1000),
 
     %% check tables
-    1 = mnesia:table_info(syn_pg_table, size),
-    [CurrentNode] = mnesia:table_info(syn_pg_table, active_replicas),
+    1 = mnesia:table_info(syn_groups_table, size),
+    [CurrentNode] = mnesia:table_info(syn_groups_table, active_replicas),
 
     %% reconnect
     syn_test_suite_helper:connect_node(SlaveNode),
     timer:sleep(1000),
 
     %% check tables
-    3 = mnesia:table_info(syn_pg_table, size),
-    3 = rpc:call(SlaveNode, mnesia, table_info, [syn_pg_table, size]),
+    3 = mnesia:table_info(syn_groups_table, size),
+    3 = rpc:call(SlaveNode, mnesia, table_info, [syn_groups_table, size]),
 
-    LocalActiveReplicasAfter = mnesia:table_info(syn_pg_table, active_replicas),
+    LocalActiveReplicasAfter = mnesia:table_info(syn_groups_table, active_replicas),
     2 = length(LocalActiveReplicasAfter),
     true = lists:member(SlaveNode, LocalActiveReplicasAfter),
     true = lists:member(CurrentNode, LocalActiveReplicasAfter),
 
-    SlaveActiveReplicasAfter = rpc:call(SlaveNode, mnesia, table_info, [syn_pg_table, active_replicas]),
+    SlaveActiveReplicasAfter = rpc:call(SlaveNode, mnesia, table_info, [syn_groups_table, active_replicas]),
     2 = length(SlaveActiveReplicasAfter),
     true = lists:member(SlaveNode, SlaveActiveReplicasAfter),
     true = lists:member(CurrentNode, SlaveActiveReplicasAfter),

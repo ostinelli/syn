@@ -23,7 +23,7 @@
 %% OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 %% THE SOFTWARE.
 %% ==========================================================================================================
--module(syn_process_groups_SUITE).
+-module(syn_groups_SUITE).
 
 %% callbacks
 -export([all/0]).

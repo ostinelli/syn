@@ -23,7 +23,7 @@
 %% OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 %% THE SOFTWARE.
 %% ==========================================================================================================
--module(syn_global).
+-module(syn_registry).
 
 %% API
 -export([start_link/0]).
@@ -58,28 +58,28 @@ start_link() ->
 find_by_key(Key) ->
     case i_find_by_key(on_connected_node, Key) of
         undefined -> undefined;
-        Process -> Process#syn_global_table.pid
+        Process -> Process#syn_registry_table.pid
     end.
 
 -spec find_by_key(Key :: any(), with_meta) -> {pid(), Meta :: any()} | undefined.
 find_by_key(Key, with_meta) ->
     case i_find_by_key(on_connected_node, Key) of
         undefined -> undefined;
-        Process -> {Process#syn_global_table.pid, Process#syn_global_table.meta}
+        Process -> {Process#syn_registry_table.pid, Process#syn_registry_table.meta}
     end.
 
 -spec find_by_pid(Pid :: pid()) -> Key :: any() | undefined.
 find_by_pid(Pid) ->
     case i_find_by_pid(on_connected_node, Pid) of
         undefined -> undefined;
-        Process -> Process#syn_global_table.key
+        Process -> Process#syn_registry_table.key
     end.
 
 -spec find_by_pid(Pid :: pid(), with_meta) -> {Key :: any(), Meta :: any()} | undefined.
 find_by_pid(Pid, with_meta) ->
     case i_find_by_pid(on_connected_node, Pid) of
         undefined -> undefined;
-        Process -> {Process#syn_global_table.key, Process#syn_global_table.meta}
+        Process -> {Process#syn_registry_table.key, Process#syn_registry_table.meta}
     end.
 
 -spec register(Key :: any(), Pid :: pid()) -> ok | {error, taken | pid_already_registered}.
@@ -97,22 +97,22 @@ unregister(Key) ->
         undefined ->
             {error, undefined};
         Process ->
-            Node = Process#syn_global_table.node,
+            Node = Process#syn_registry_table.node,
             gen_server:call({?MODULE, Node}, {unregister_on_node, Key})
     end.
 
 -spec count() -> non_neg_integer().
 count() ->
-    mnesia:table_info(syn_global_table, size).
+    mnesia:table_info(syn_registry_table, size).
 
 -spec count(Node :: atom()) -> non_neg_integer().
 count(Node) ->
     %% build match specs
-    MatchHead = #syn_global_table{node = '$2', _ = '_'},
+    MatchHead = #syn_registry_table{node = '$2', _ = '_'},
     Guard = {'=:=', '$2', Node},
     Result = '$2',
     %% select
-    Processes = mnesia:dirty_select(syn_global_table, [{MatchHead, [Guard], [Result]}]),
+    Processes = mnesia:dirty_select(syn_registry_table, [{MatchHead, [Guard], [Result]}]),
     length(Processes).
 
 %% ===================================================================
@@ -162,7 +162,7 @@ handle_call({register_on_node, Key, Pid, Meta}, _From, State) ->
             case i_find_by_pid(Pid) of
                 undefined ->
                     %% add to table
-                    mnesia:dirty_write(#syn_global_table{
+                    mnesia:dirty_write(#syn_registry_table{
                         key = Key,
                         pid = Pid,
                         node = node(),
@@ -188,7 +188,7 @@ handle_call({unregister_on_node, Key}, _From, State) ->
             %% remove from table
             remove_process_by_key(Key),
             %% unlink
-            Pid = Process#syn_global_table.pid,
+            Pid = Process#syn_registry_table.pid,
             erlang:unlink(Pid),
             %% reply
             {reply, ok, State}
@@ -244,8 +244,8 @@ handle_info({'EXIT', Pid, Reason}, #state{
 
             Process ->
                 %% get process info
-                Key0 = Process#syn_global_table.key,
-                Meta0 = Process#syn_global_table.meta,
+                Key0 = Process#syn_registry_table.key,
+                Meta0 = Process#syn_registry_table.meta,
 
                 %% log
                 case Reason of
@@ -294,41 +294,41 @@ code_change(_OldVsn, State, _Extra) ->
 %% ===================================================================
 %% Internal
 %% ===================================================================
--spec i_find_by_key(on_connected_node, Key :: any()) -> Process :: #syn_global_table{} | undefined.
+-spec i_find_by_key(on_connected_node, Key :: any()) -> Process :: #syn_registry_table{} | undefined.
 i_find_by_key(on_connected_node, Key) ->
     case i_find_by_key(Key) of
         undefined -> undefined;
         Process -> return_if_on_connected_node(Process)
     end.
 
--spec i_find_by_key(Key :: any()) -> Process :: #syn_global_table{} | undefined.
+-spec i_find_by_key(Key :: any()) -> Process :: #syn_registry_table{} | undefined.
 i_find_by_key(Key) ->
-    case mnesia:dirty_read(syn_global_table, Key) of
+    case mnesia:dirty_read(syn_registry_table, Key) of
         [Process] -> Process;
         _ -> undefined
     end.
 
--spec i_find_by_pid(on_connected_node, Pid :: pid()) -> Process :: #syn_global_table{} | undefined.
+-spec i_find_by_pid(on_connected_node, Pid :: pid()) -> Process :: #syn_registry_table{} | undefined.
 i_find_by_pid(on_connected_node, Pid) ->
     case i_find_by_pid(Pid) of
         undefined -> undefined;
         Process -> return_if_on_connected_node(Process)
     end.
 
--spec i_find_by_pid(Pid :: pid()) -> Process :: #syn_global_table{} | undefined.
+-spec i_find_by_pid(Pid :: pid()) -> Process :: #syn_registry_table{} | undefined.
 i_find_by_pid(Pid) ->
-    case mnesia:dirty_index_read(syn_global_table, Pid, #syn_global_table.pid) of
+    case mnesia:dirty_index_read(syn_registry_table, Pid, #syn_registry_table.pid) of
         [Process] -> Process;
         _ -> undefined
     end.
 
--spec return_if_on_connected_node(Process :: #syn_global_table{}) -> Process :: #syn_global_table{} | undefined.
+-spec return_if_on_connected_node(Process :: #syn_registry_table{}) -> Process :: #syn_registry_table{} | undefined.
 return_if_on_connected_node(Process) ->
-    case lists:member(Process#syn_global_table.node, [node() | nodes()]) of
+    case lists:member(Process#syn_registry_table.node, [node() | nodes()]) of
         true -> Process;
         _ -> undefined
     end.
 
 -spec remove_process_by_key(Key :: any()) -> ok.
 remove_process_by_key(Key) ->
-    mnesia:dirty_delete(syn_global_table, Key).
+    mnesia:dirty_delete(syn_registry_table, Key).

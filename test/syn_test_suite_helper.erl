@@ -76,7 +76,7 @@ disconnect_node(Node) ->
 
 clean_after_test() ->
     %% delete table
-    {atomic, ok} = mnesia:delete_table(syn_global_table),
+    {atomic, ok} = mnesia:delete_table(syn_registry_table),
     %% stop mnesia
     mnesia:stop(),
     %% delete schema
@@ -88,7 +88,7 @@ clean_after_test(undefined) ->
     clean_after_test();
 clean_after_test(Node) ->
     %% delete table
-    {atomic, ok} = mnesia:delete_table(syn_global_table),
+    {atomic, ok} = mnesia:delete_table(syn_registry_table),
     %% stop mnesia
     mnesia:stop(),
     rpc:call(Node, mnesia, stop, []),

@@ -178,7 +178,7 @@ single_node_when_mnesia_is_ram(_Config) ->
     ok = syn:start(),
     ok = syn:init(),
     %% check table exists
-    true = lists:member(syn_global_table, mnesia:system_info(tables)).
+    true = lists:member(syn_registry_table, mnesia:system_info(tables)).
 
 single_node_when_mnesia_is_opt_disc_no_schema_exists(_Config) ->
     %% set schema location
@@ -187,7 +187,7 @@ single_node_when_mnesia_is_opt_disc_no_schema_exists(_Config) ->
     ok = syn:start(),
     ok = syn:init(),
     %% check table exists
-    true = lists:member(syn_global_table, mnesia:system_info(tables)).
+    true = lists:member(syn_registry_table, mnesia:system_info(tables)).
 
 single_node_when_mnesia_is_opt_disc_schema_exists(_Config) ->
     %% set schema location
@@ -198,7 +198,7 @@ single_node_when_mnesia_is_opt_disc_schema_exists(_Config) ->
     ok = syn:start(),
     ok = syn:init(),
     %% check table exists
-    true = lists:member(syn_global_table, mnesia:system_info(tables)).
+    true = lists:member(syn_registry_table, mnesia:system_info(tables)).
 
 single_node_when_mnesia_is_disc(_Config) ->
     %% set schema location
@@ -209,7 +209,7 @@ single_node_when_mnesia_is_disc(_Config) ->
     ok = syn:start(),
     ok = syn:init(),
     %% check table exists
-    true = lists:member(syn_global_table, mnesia:system_info(tables)).
+    true = lists:member(syn_registry_table, mnesia:system_info(tables)).
 
 two_nodes_when_mnesia_is_ram(Config) ->
     %% get slave
@@ -224,10 +224,10 @@ two_nodes_when_mnesia_is_ram(Config) ->
     ok = rpc:call(SlaveNode, syn, init, []),
     timer:sleep(100),
     %% check table exists on local
-    true = lists:member(syn_global_table, mnesia:system_info(tables)),
+    true = lists:member(syn_registry_table, mnesia:system_info(tables)),
     %% check table exists on remote
     SlaveNodeMnesiaSystemInfo = rpc:call(SlaveNode, mnesia, system_info, [tables]),
-    true = rpc:call(SlaveNode, lists, member, [syn_global_table, SlaveNodeMnesiaSystemInfo]).
+    true = rpc:call(SlaveNode, lists, member, [syn_registry_table, SlaveNodeMnesiaSystemInfo]).
 
 two_nodes_when_mnesia_is_opt_disc_no_schema_exists(Config) ->
     %% get slave
@@ -242,10 +242,10 @@ two_nodes_when_mnesia_is_opt_disc_no_schema_exists(Config) ->
     ok = rpc:call(SlaveNode, syn, init, []),
     timer:sleep(100),
     %% check table exists on local
-    true = lists:member(syn_global_table, mnesia:system_info(tables)),
+    true = lists:member(syn_registry_table, mnesia:system_info(tables)),
     %% check table exists on remote
     SlaveNodeMnesiaSystemInfo = rpc:call(SlaveNode, mnesia, system_info, [tables]),
-    true = rpc:call(SlaveNode, lists, member, [syn_global_table, SlaveNodeMnesiaSystemInfo]).
+    true = rpc:call(SlaveNode, lists, member, [syn_registry_table, SlaveNodeMnesiaSystemInfo]).
 
 two_nodes_when_mnesia_is_opt_disc_schema_exists(Config) ->
     %% get slave
@@ -262,10 +262,10 @@ two_nodes_when_mnesia_is_opt_disc_schema_exists(Config) ->
     ok = rpc:call(SlaveNode, syn, init, []),
     timer:sleep(100),
     %% check table exists on local
-    true = lists:member(syn_global_table, mnesia:system_info(tables)),
+    true = lists:member(syn_registry_table, mnesia:system_info(tables)),
     %% check table exists on remote
     SlaveNodeMnesiaSystemInfo = rpc:call(SlaveNode, mnesia, system_info, [tables]),
-    true = rpc:call(SlaveNode, lists, member, [syn_global_table, SlaveNodeMnesiaSystemInfo]).
+    true = rpc:call(SlaveNode, lists, member, [syn_registry_table, SlaveNodeMnesiaSystemInfo]).
 
 two_nodes_when_mnesia_is_disc(Config) ->
     %% get slave
@@ -282,7 +282,7 @@ two_nodes_when_mnesia_is_disc(Config) ->
     ok = rpc:call(SlaveNode, syn, init, []),
     timer:sleep(100),
     %% check table exists on local
-    true = lists:member(syn_global_table, mnesia:system_info(tables)),
+    true = lists:member(syn_registry_table, mnesia:system_info(tables)),
     %% check table exists on remote
     SlaveNodeMnesiaSystemInfo = rpc:call(SlaveNode, mnesia, system_info, [tables]),
-    true = rpc:call(SlaveNode, lists, member, [syn_global_table, SlaveNodeMnesiaSystemInfo]).
+    true = rpc:call(SlaveNode, lists, member, [syn_registry_table, SlaveNodeMnesiaSystemInfo]).

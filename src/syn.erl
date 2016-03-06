@@ -1,5 +1,5 @@
 %% ==========================================================================================================
-%% Syn - A global process registry.
+%% Syn - A global Process Registry and Process Group manager.
 %%
 %% The MIT License (MIT)
 %%
@@ -29,14 +29,14 @@
 -export([start/0, stop/0]).
 -export([init/0]).
 
-%% global
+%% registry
 -export([register/2, register/3]).
 -export([unregister/1]).
 -export([find_by_key/1, find_by_key/2]).
 -export([find_by_pid/1, find_by_pid/2]).
 -export([registry_count/0, registry_count/1]).
 
-%% PG
+%% groups
 -export([join/2]).
 -export([leave/2]).
 -export([member/2]).
@@ -62,59 +62,59 @@ init() ->
 
 -spec register(Key :: any(), Pid :: pid()) -> ok | {error, taken | pid_already_registered}.
 register(Key, Pid) ->
-    syn_global:register(Key, Pid).
+    syn_registry:register(Key, Pid).
 
 -spec register(Key :: any(), Pid :: pid(), Meta :: any()) -> ok | {error, taken | pid_already_registered}.
 register(Key, Pid, Meta) ->
-    syn_global:register(Key, Pid, Meta).
+    syn_registry:register(Key, Pid, Meta).
 
 -spec unregister(Key :: any()) -> ok | {error, undefined}.
 unregister(Key) ->
-    syn_global:unregister(Key).
+    syn_registry:unregister(Key).
 
 -spec find_by_key(Key :: any()) -> pid() | undefined.
 find_by_key(Key) ->
-    syn_global:find_by_key(Key).
+    syn_registry:find_by_key(Key).
 
 -spec find_by_key(Key :: any(), with_meta) -> {pid(), Meta :: any()} | undefined.
 find_by_key(Key, with_meta) ->
-    syn_global:find_by_key(Key, with_meta).
+    syn_registry:find_by_key(Key, with_meta).
 
 -spec find_by_pid(Pid :: pid()) -> Key :: any() | undefined.
 find_by_pid(Pid) ->
-    syn_global:find_by_pid(Pid).
+    syn_registry:find_by_pid(Pid).
 
 -spec find_by_pid(Pid :: pid(), with_meta) -> {Key :: any(), Meta :: any()} | undefined.
 find_by_pid(Pid, with_meta) ->
-    syn_global:find_by_pid(Pid, with_meta).
+    syn_registry:find_by_pid(Pid, with_meta).
 
 -spec registry_count() -> non_neg_integer().
 registry_count() ->
-    syn_global:count().
+    syn_registry:count().
 
 -spec registry_count(Node :: atom()) -> non_neg_integer().
 registry_count(Node) ->
-    syn_global:count(Node).
+    syn_registry:count(Node).
 
 -spec join(Name :: any(), Pid :: pid()) -> ok | {error, pid_already_in_group}.
 join(Name, Pid) ->
-    syn_pg:join(Name, Pid).
+    syn_groups:join(Name, Pid).
 
 -spec leave(Name :: any(), Pid :: pid()) -> ok | {error, undefined | pid_not_in_group}.
 leave(Name, Pid) ->
-    syn_pg:leave(Name, Pid).
+    syn_groups:leave(Name, Pid).
 
 -spec member(Pid :: pid(), Name :: any()) -> boolean().
 member(Pid, Name) ->
-    syn_pg:member(Pid, Name).
+    syn_groups:member(Pid, Name).
 
 -spec get_members(Name :: any()) -> [pid()].
 get_members(Name) ->
-    syn_pg:get_members(Name).
+    syn_groups:get_members(Name).
 
 -spec publish(Name :: any(), Message :: any()) -> {ok, RecipientCount :: non_neg_integer()}.
 publish(Name, Message) ->
-    syn_pg:publish(Name, Message).
+    syn_groups:publish(Name, Message).
 
 %% ===================================================================
 %% Internal

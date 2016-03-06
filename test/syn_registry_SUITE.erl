@@ -23,7 +23,7 @@
 %% OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 %% THE SOFTWARE.
 %% ==========================================================================================================
--module(syn_register_processes_SUITE).
+-module(syn_registry_SUITE).
 
 %% callbacks
 -export([all/0]).

@@ -24,13 +24,13 @@
 %% THE SOFTWARE.
 %% ==========================================================================================================
 %% records
--record(syn_global_table, {
+-record(syn_registry_table, {
     key = undefined :: any(),
     pid = undefined :: undefined | pid() | atom(),
     node = undefined :: atom(),
     meta = undefined :: any()
 }).
--record(syn_pg_table, {
+-record(syn_groups_table, {
     name = undefined :: any(),
     pid = undefined :: undefined | pid() | atom(),
     node = undefined :: atom()
