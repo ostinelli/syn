@@ -1,5 +1,5 @@
 %% ==========================================================================================================
-%% Syn - A global process registry.
+%% Syn - A global Process Registry and Process Group manager.
 %%
 %% The MIT License (MIT)
 %%
@@ -281,7 +281,7 @@ handle_info(Info, State) ->
 %% ----------------------------------------------------------------------------------------------------------
 -spec terminate(Reason :: any(), #state{}) -> terminated.
 terminate(Reason, _State) ->
-    error_logger:info_msg("Terminating syn global with reason: ~p", [Reason]),
+    error_logger:info_msg("Terminating syn_registry with reason: ~p", [Reason]),
     terminated.
 
 %% ----------------------------------------------------------------------------------------------------------

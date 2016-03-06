@@ -1,5 +1,5 @@
 %% ==========================================================================================================
-%% Syn - A global process registry.
+%% Syn - A global Process Registry and Process Group manager.
 %%
 %% The MIT License (MIT)
 %%
@@ -178,14 +178,14 @@ handle_info({'EXIT', Pid, Reason}, State) ->
             end;
 
         Process ->
-            %% get pg
+            %% get group
             Name = Process#syn_groups_table.name,
             %% log
             case Reason of
                 normal -> ok;
                 killed -> ok;
                 _ ->
-                    error_logger:error_msg("Process of PG ~p and pid ~p exited with reason: ~p", [Name, Pid, Reason])
+                    error_logger:error_msg("Process of group ~p and pid ~p exited with reason: ~p", [Name, Pid, Reason])
             end,
             %% delete from table
             remove_process(Process)
@@ -203,7 +203,7 @@ handle_info(Info, State) ->
 %% ----------------------------------------------------------------------------------------------------------
 -spec terminate(Reason :: any(), #state{}) -> terminated.
 terminate(Reason, _State) ->
-    error_logger:info_msg("Terminating syn pg with reason: ~p", [Reason]),
+    error_logger:info_msg("Terminating syn_groups with reason: ~p", [Reason]),
     terminated.
 
 %% ----------------------------------------------------------------------------------------------------------
