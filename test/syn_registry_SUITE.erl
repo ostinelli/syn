@@ -52,7 +52,7 @@
 ]).
 
 %% internals
--export([process_exit_callback_dummy/4]).
+-export([registry_process_exit_callback_dummy/4]).
 
 %% include
 -include_lib("common_test/include/ct.hrl").
@@ -378,7 +378,7 @@ single_node_when_mnesia_is_ram_callback_on_process_exit(_Config) ->
     receive
         {exited, CurrentNode, <<"my proc">>, Pid, Meta, killed} -> ok
     after 2000 ->
-        ok = process_exit_callback_was_not_called_from_local_node
+        ok = registry_process_exit_callback_was_not_called_from_local_node
     end,
     %% unregister
     global:unregister_name(syn_register_process_SUITE_result).
@@ -555,12 +555,12 @@ two_nodes_when_mnesia_is_ram_callback_on_process_exit(Config) ->
     receive
         {exited, CurrentNode, <<"local">>, PidLocal, Meta, killed} -> ok
     after 2000 ->
-        ok = process_exit_callback_was_not_called_from_local_node
+        ok = registry_process_exit_callback_was_not_called_from_local_node
     end,
     receive
         {exited, SlaveNode, <<"slave">>, PidSlave, undefined, killed} -> ok
     after 2000 ->
-        ok = process_exit_callback_was_not_called_from_slave_node
+        ok = registry_process_exit_callback_was_not_called_from_slave_node
     end,
     %% unregister
     global:unregister_name(syn_register_process_SUITE_result).
@@ -596,5 +596,5 @@ two_nodes_when_mnesia_is_disc_find_by_pid(Config) ->
 %% ===================================================================
 %% Internal
 %% ===================================================================
-process_exit_callback_dummy(Key, Pid, Meta, Reason) ->
+registry_process_exit_callback_dummy(Key, Pid, Meta, Reason) ->
     global:send(syn_register_process_SUITE_result, {exited, node(), Key, Pid, Meta, Reason}).

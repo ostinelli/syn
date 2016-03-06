@@ -43,8 +43,8 @@
 
 %% records
 -record(state, {
-    conflicting_process_callback_module = undefined :: atom(),
-    conflicting_process_callback_function = undefined :: atom()
+    registry_conflicting_process_callback_module = undefined :: atom(),
+    registry_conflicting_process_callback_function = undefined :: atom()
 }).
 
 %% include
@@ -76,13 +76,13 @@ init([]) ->
     mnesia:subscribe(system),
     %% get options
     {ok, [ConflictingProcessCallbackModule, ConflictingProcessCallbackFunction]} = syn_utils:get_env_value(
-        conflicting_process_callback,
+        registry_conflicting_process_callback,
         [undefined, undefined]
     ),
     %% build state
     {ok, #state{
-        conflicting_process_callback_module = ConflictingProcessCallbackModule,
-        conflicting_process_callback_function = ConflictingProcessCallbackFunction
+        registry_conflicting_process_callback_module = ConflictingProcessCallbackModule,
+        registry_conflicting_process_callback_function = ConflictingProcessCallbackFunction
     }}.
 
 %% ----------------------------------------------------------------------------------------------------------
@@ -136,8 +136,8 @@ handle_info({mnesia_system_event, _MnesiaEvent}, State) ->
     {noreply, State};
 
 handle_info({purge_double_processes, DoubleProcessesInfo}, #state{
-    conflicting_process_callback_module = ConflictingProcessCallbackModule,
-    conflicting_process_callback_function = ConflictingProcessCallbackFunction
+    registry_conflicting_process_callback_module = ConflictingProcessCallbackModule,
+    registry_conflicting_process_callback_function = ConflictingProcessCallbackFunction
 } = State) ->
     error_logger:warning_msg("About to purge double processes after netsplit"),
     purge_double_processes(ConflictingProcessCallbackModule, ConflictingProcessCallbackFunction, DoubleProcessesInfo),

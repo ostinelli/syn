@@ -43,7 +43,7 @@
 
 %% internal
 -export([process_reply_main/0]).
--export([conflicting_process_callback_dummy/3]).
+-export([registry_conflicting_process_callback_dummy/3]).
 
 %% include
 -include_lib("common_test/include/ct.hrl").
@@ -325,7 +325,7 @@ two_nodes_netsplit_callback_resolution_when_there_are_conflicts(Config) ->
     SlaveNode = proplists:get_value(slave_node, Config),
     CurrentNode = node(),
 
-    %% load configuration variables from syn-test.config => this sets the conflicting_process_callback option
+    %% load configuration variables from syn-test.config => this sets the registry_conflicting_process_callback option
     syn_test_suite_helper:set_environment_variables(),
     syn_test_suite_helper:set_environment_variables(SlaveNode),
 
@@ -480,5 +480,5 @@ process_reply_main() ->
             global:send(syn_consistency_SUITE_result, {exited, self(), Meta})
     end.
 
-conflicting_process_callback_dummy(_Key, Pid, Meta) ->
+registry_conflicting_process_callback_dummy(_Key, Pid, Meta) ->
     Pid ! {shutdown, Meta}.

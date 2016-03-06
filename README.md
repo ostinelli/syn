@@ -1,23 +1,29 @@
 [![Build Status](https://travis-ci.org/ostinelli/syn.svg?branch=master)](https://travis-ci.org/ostinelli/syn)
 
-> THIS IS AN EXPERIMENTAL BRANCH WHICH ADDS SUPPORT FOR PROCESS GROUPS. THIS IS NOT PROPERLY TESTED, DO NOT USE OTHER THAN FOR FEEDBACK.
->
-> CONFLICT RESOLUTION FOR PG IS NOT YET IMPLEMENTED.
+> THIS IS AN EXPERIMENTAL BRANCH WHICH ADDS SUPPORT FOR PROCESS GROUPS. 
 
 # Syn
 **Syn** (short for _synonym_) is a global Process Registry and Process Group manager for Erlang.
 
 ## Introduction
-Syn is a process registry that has the following features:
 
- * Global process registry (i.e. a process is uniquely identified with a Key across all the nodes of a cluster).
- * Global Process Group manager (i.e. a PG is uniquely identified with a Name across all the nodes of a cluster).
- * Publish a message to all members of a Process Group (PubSub mechanism).
+##### What is a Process Registry?
+A Process Registry allows to register a process on all the nodes with a single Key. Consider this the process equivalent of a DNS server: in the same way you can retrieve an IP address from a domain name, when you need to retrieve a process you can then use its Key across all the nodes. 
+
+##### What is a Process Group?
+A Process Group is a named group which contains many processes. With the group Name, you can then retrieve the list of these processes, or publish a message to all of them. This mechanism allows for Publish / Subscribe patterns.
+
+##### What is Syn?
+Syn is both. It's a Process Registry and Process Group that has the following features:
+
+ * Global Process Registry (i.e. a process is uniquely identified with a Key across all the nodes of a cluster).
+ * Global Process Group manager (i.e. a group is uniquely identified with a Name across all the nodes of a cluster).
  * Any term can be used as Key and Name.
+ * A message can be publish to all members of a Process Group (PubSub mechanism).
  * Fast writes.
  * Automatically handles conflict resolution (such as net splits).
  * Configurable callbacks.
- * Processes are automatically monitored and removed from the registry and Process Group if they die.
+ * Processes are automatically monitored and removed from the Process Registry and Process Groups if they die.
 
 
 ## Notes
@@ -188,16 +194,16 @@ Options can be set in the environment variable `syn`. You're probably best off u
 ```erlang
 {syn, [
     %% define callback function on process exit
-    {process_exit_callback, [module1, function1]},
+    {registry_process_exit_callback, [module1, function1]},
 
     %% define callback function on conflicting process (instead of kill)
-    {conflicting_process_callback, [module2, function2]}
+    {registry_conflicting_process_callback, [module2, function2]}
 ]}
 ```
 These options are explained here below.
 
 ##### Callback on process exit
-The `process_exit_callback` option allows you to specify the `module` and the `function` of the callback that will be triggered when a process exits. This callback will be called only on the node where the process was running.
+The `registry_process_exit_callback` option allows you to specify the `module` and the `function` of the callback that will be triggered when a process exits. This callback will be called only on the node where the process was running.
 
 The callback function is defined as:
 ```erlang
@@ -228,7 +234,7 @@ Set it in the options:
 ```erlang
 {syn, [
     %% define callback function
-    {process_exit_callback, [my_callback, callback_on_process_exit]}
+    {registry_process_exit_callback, [my_callback, callback_on_process_exit]}
 ]}
 ```
 If you don't set this option, no callback will be triggered.
@@ -241,7 +247,7 @@ In case of race conditions, or during net splits, a Key might be registered simu
 
 When this happens, Syn will resolve this conflict by choosing a single process. Syn will discard the processes running on the node the conflict is being resolved on, and by default will kill it by sending a `kill` signal with `exit(Pid, kill)`.
 
-If this is not desired, you can set the `conflicting_process_callback` option to instruct Syn to trigger a callback, so that you can perform custom operations (such as a graceful shutdown). In this case, the process will not be killed by Syn, and you'll have to decide what to do with it. This callback will be called only on the node where the process is running.
+If this is not desired, you can set the `registry_conflicting_process_callback` option to instruct Syn to trigger a callback, so that you can perform custom operations (such as a graceful shutdown). In this case, the process will not be killed by Syn, and you'll have to decide what to do with it. This callback will be called only on the node where the process is running.
 
 The callback function is defined as:
 ```erlang
@@ -268,17 +274,17 @@ Set it in the options:
 ```erlang
 {syn, [
 	%% define callback function
-	{conflicting_process_callback, [my_callback, callback_on_conflicting_process]}
+	{registry_conflicting_process_callback, [my_callback, callback_on_conflicting_process]}
 ]}
 ```
 
 > Important Note: The conflict resolution method SHOULD be defined in the same way across all nodes of the cluster. Having different conflict resolution options on different nodes can have unexpected results.
 
-### Process Groups (PG)
+### Process Groups
 
-There's no need to manually create / delete Process Groups, Syn will take care of managing those for you.
+> There's no need to manually create / delete Process Groups, Syn will take care of managing those for you.
 
-To add a process to a PG:
+To add a process to a group:
 
 ```erlang
 syn:join(Name, Pid) -> ok | {error, Error}.
@@ -289,7 +295,7 @@ Types:
 	Error = pid_already_in_group
 ```
 
-To remove a process from a PG:
+To remove a process from a group:
 
 ```erlang
 syn:leave(Name, Pid) -> ok | {error, Error}.
@@ -300,7 +306,9 @@ Types:
 	Error = undefined | pid_not_in_group
 ```
 
-To publish a message to all PG members:
+> You don't need to remove processes that are about to die, since they are monitored by Syn and they will be removed automatically from their groups.
+
+To publish a message to all group members:
 
 ```erlang
 syn:publish(Name, Message) -> {ok, RecipientCount}.
@@ -311,7 +319,7 @@ Types:
 	RecipientCount = non_neg_integer()
 ```
 
-To get a list of the members of a PG:
+To get a list of the members of a group:
 
 ```erlang
 syn:get_members(Name) -> [pid()].
@@ -320,7 +328,7 @@ Types:
 	Name = any()
 ```
 
-To know if a process is a member of a PG:
+To know if a process is a member of a group:
 
 ```erlang
 syn:member(Pid, Name) -> boolean().

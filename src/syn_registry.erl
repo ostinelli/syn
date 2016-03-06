@@ -38,8 +38,8 @@
 
 %% records
 -record(state, {
-    process_exit_callback_module = undefined :: atom(),
-    process_exit_callback_function = undefined :: atom()
+    registry_process_exit_callback_module = undefined :: atom(),
+    registry_process_exit_callback_function = undefined :: atom()
 }).
 
 %% include
@@ -133,14 +133,14 @@ init([]) ->
 
     %% get options
     {ok, [ProcessExitCallbackModule, ProcessExitCallbackFunction]} = syn_utils:get_env_value(
-        process_exit_callback,
+        registry_process_exit_callback,
         [undefined, undefined]
     ),
 
     %% build state
     {ok, #state{
-        process_exit_callback_module = ProcessExitCallbackModule,
-        process_exit_callback_function = ProcessExitCallbackFunction
+        registry_process_exit_callback_module = ProcessExitCallbackModule,
+        registry_process_exit_callback_function = ProcessExitCallbackFunction
     }}.
 
 %% ----------------------------------------------------------------------------------------------------------
@@ -223,8 +223,8 @@ handle_cast(Msg, State) ->
     {stop, Reason :: any(), #state{}}.
 
 handle_info({'EXIT', Pid, Reason}, #state{
-    process_exit_callback_module = ProcessExitCallbackModule,
-    process_exit_callback_function = ProcessExitCallbackFunction
+    registry_process_exit_callback_module = ProcessExitCallbackModule,
+    registry_process_exit_callback_function = ProcessExitCallbackFunction
 } = State) ->
     %% do not lock backbone
     spawn(fun() ->
