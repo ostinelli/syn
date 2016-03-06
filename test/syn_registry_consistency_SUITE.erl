@@ -22,7 +22,7 @@
 %% LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 %% OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 %% THE SOFTWARE.
--module(syn_consistency_SUITE).
+-module(syn_registry_consistency_SUITE).
 
 %% callbacks
 -export([all/0]).
@@ -62,8 +62,8 @@
 %% -------------------------------------------------------------------
 all() ->
     [
-        {group, two_nodes_netsplits},
-        {group, three_nodes_netsplits}
+%%        {group, two_nodes_netsplits},
+%%        {group, three_nodes_netsplits}
     ].
 
 %% -------------------------------------------------------------------
