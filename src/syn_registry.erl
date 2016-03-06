@@ -97,7 +97,7 @@ unregister(Key) ->
         undefined ->
             {error, undefined};
         Process ->
-            Node = Process#syn_registry_table.node,
+            Node = node(Process#syn_registry_table.pid),
             gen_server:call({?MODULE, Node}, {unregister_on_node, Key})
     end.
 
