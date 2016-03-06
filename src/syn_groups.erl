@@ -58,15 +58,8 @@ join(Name, Pid) ->
 
 -spec leave(Name :: any(), Pid :: pid()) -> ok | {error, undefined | pid_not_in_group}.
 leave(Name, Pid) ->
-    case i_find_by_pid(Pid) of
-        undefined ->
-            {error, undefined};
-        Process when Process#syn_groups_table.name =/= Name ->
-            {error, pid_not_in_group};
-        Process ->
-            Node = Process#syn_groups_table.node,
-            gen_server:call({?MODULE, Node}, {leave, Name, Pid})
-    end.
+    Node = node(Pid),
+    gen_server:call({?MODULE, Node}, {leave, Name, Pid}).
 
 -spec member(Pid :: pid(), Name :: any()) -> boolean().
 member(Pid, Name) ->
