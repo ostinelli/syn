@@ -217,10 +217,16 @@ code_change(_OldVsn, State, _Extra) ->
 %% Internal
 %% ===================================================================
 -spec i_member(Pid :: pid(), Name :: any()) -> boolean().
+i_member(Pid, Name) when is_tuple(Name) ->
+    i_member_check(Pid, {'==', '$1', {Name}});
 i_member(Pid, Name) ->
+    i_member_check(Pid, {'=:=', '$1', Name}).
+
+-spec i_member_check(Pid :: pid(), NameGuard :: any()) -> boolean().
+i_member_check(Pid, NameGuard) ->
     %% build match specs
     MatchHead = #syn_groups_table{name = '$1', pid = '$2', _ = '_'},
-    Guards = [{'=:=', '$1', Name}, {'=:=', '$2', Pid}],
+    Guards = [NameGuard, {'=:=', '$2', Pid}],
     Result = '$2',
     %% select
     case mnesia:dirty_select(syn_groups_table, [{MatchHead, Guards, [Result]}]) of
