@@ -38,8 +38,8 @@
 %% internal
 -export([get_processes_info_of_node/1]).
 -export([write_processes_info_to_node/2]).
--export([get_pgs_info_of_node/1]).
--export([write_pgs_info_to_node/2]).
+-export([get_groups_info_of_node/1]).
+-export([write_groups_info_to_node/2]).
 
 %% records
 -record(state, {
@@ -127,8 +127,8 @@ handle_info({mnesia_system_event, {inconsistent_database, Context, RemoteNode}},
 
 handle_info({mnesia_system_event, {mnesia_down, RemoteNode}}, State) when RemoteNode =/= node() ->
     error_logger:error_msg("Received a MNESIA down event, removing on node ~p all pids of node ~p", [node(), RemoteNode]),
-    delete_global_pids_of_disconnected_node(RemoteNode),
-    delete_pg_pids_of_disconnected_node(RemoteNode),
+    delete_registry_pids_of_disconnected_node(RemoteNode),
+    delete_groups_pids_of_disconnected_node(RemoteNode),
     {noreply, State};
 
 handle_info({mnesia_system_event, _MnesiaEvent}, State) ->
@@ -166,8 +166,8 @@ code_change(_OldVsn, State, _Extra) ->
 %% ===================================================================
 %% Internal
 %% ===================================================================
--spec delete_global_pids_of_disconnected_node(RemoteNode :: atom()) -> ok.
-delete_global_pids_of_disconnected_node(RemoteNode) ->
+-spec delete_registry_pids_of_disconnected_node(RemoteNode :: atom()) -> ok.
+delete_registry_pids_of_disconnected_node(RemoteNode) ->
     %% build match specs
     MatchHead = #syn_registry_table{key = '$1', node = '$2', _ = '_'},
     Guard = {'=:=', '$2', RemoteNode},
@@ -177,8 +177,8 @@ delete_global_pids_of_disconnected_node(RemoteNode) ->
     NodePids = mnesia:dirty_select(syn_registry_table, [{MatchHead, [Guard], [IdFormat]}]),
     lists:foreach(DelF, NodePids).
 
--spec delete_pg_pids_of_disconnected_node(RemoteNode :: atom()) -> ok.
-delete_pg_pids_of_disconnected_node(RemoteNode) ->
+-spec delete_groups_pids_of_disconnected_node(RemoteNode :: atom()) -> ok.
+delete_groups_pids_of_disconnected_node(RemoteNode) ->
     %% build match specs
     Pattern = #syn_groups_table{node = RemoteNode, _ = '_'},
     ObjectsToDelete = mnesia:dirty_match_object(syn_groups_table, Pattern),
@@ -216,16 +216,16 @@ stitch(RemoteNode) ->
         fun(MergeF) ->
             catch case MergeF([syn_registry_table, syn_groups_table]) of
                 {merged, _, _} = Res ->
-                    stitch_global_tab(RemoteNode),
-                    stitch_pg_tab(RemoteNode),
+                    stitch_registry_tab(RemoteNode),
+                    stitch_group_tab(RemoteNode),
                     Res;
                 Other ->
                     Other
             end
         end).
 
--spec stitch_global_tab(RemoteNode :: atom()) -> ok.
-stitch_global_tab(RemoteNode) ->
+-spec stitch_registry_tab(RemoteNode :: atom()) -> ok.
+stitch_registry_tab(RemoteNode) ->
     %% get remote processes info
     RemoteProcessesInfo = rpc:call(RemoteNode, ?MODULE, get_processes_info_of_node, [RemoteNode]),
     %% get local processes info
@@ -326,35 +326,35 @@ purge_double_processes(ConflictingProcessCallbackModule, ConflictingProcessCallb
     end,
     lists:foreach(F, DoubleProcessesInfo).
 
--spec stitch_pg_tab(RemoteNode :: atom()) -> ok.
-stitch_pg_tab(RemoteNode) ->
+-spec stitch_group_tab(RemoteNode :: atom()) -> ok.
+stitch_group_tab(RemoteNode) ->
     %% get remote processes info
-    RemotePgsInfo = rpc:call(RemoteNode, ?MODULE, get_pgs_info_of_node, [RemoteNode]),
+    RemoteGroupsInfo = rpc:call(RemoteNode, ?MODULE, get_groups_info_of_node, [RemoteNode]),
     %% get local processes info
-    LocalPgsInfo = get_pgs_info_of_node(node()),
+    LocalGroupsInfo = get_groups_info_of_node(node()),
     %% write
-    write_remote_pgs_to_local(RemoteNode, RemotePgsInfo),
-    write_local_pgs_to_remote(RemoteNode, LocalPgsInfo).
+    write_remote_groups_to_local(RemoteNode, RemoteGroupsInfo),
+    write_local_groups_to_remote(RemoteNode, LocalGroupsInfo).
 
--spec get_pgs_info_of_node(Node :: atom()) -> list().
-get_pgs_info_of_node(Node) ->
+-spec get_groups_info_of_node(Node :: atom()) -> list().
+get_groups_info_of_node(Node) ->
     %% build match specs
     MatchHead = #syn_groups_table{name = '$1', pid = '$2', node = '$3'},
     Guard = {'=:=', '$3', Node},
-    PgInfoFormat = {{'$1', '$2'}},
+    GroupInfoFormat = {{'$1', '$2'}},
     %% select
-    mnesia:dirty_select(syn_groups_table, [{MatchHead, [Guard], [PgInfoFormat]}]).
+    mnesia:dirty_select(syn_groups_table, [{MatchHead, [Guard], [GroupInfoFormat]}]).
 
--spec write_remote_pgs_to_local(RemoteNode :: atom(), RemotePgsInfo :: list()) -> ok.
-write_remote_pgs_to_local(RemoteNode, RemotePgsInfo) ->
-    write_pgs_info_to_node(RemoteNode, RemotePgsInfo).
+-spec write_remote_groups_to_local(RemoteNode :: atom(), RemoteGroupsInfo :: list()) -> ok.
+write_remote_groups_to_local(RemoteNode, RemoteGroupsInfo) ->
+    write_groups_info_to_node(RemoteNode, RemoteGroupsInfo).
 
--spec write_local_pgs_to_remote(RemoteNode :: atom(), LocalPgsInfo :: list()) -> ok.
-write_local_pgs_to_remote(RemoteNode, LocalPgsInfo) ->
-    ok = rpc:call(RemoteNode, ?MODULE, write_pgs_info_to_node, [node(), LocalPgsInfo]).
+-spec write_local_groups_to_remote(RemoteNode :: atom(), LocalGroupsInfo :: list()) -> ok.
+write_local_groups_to_remote(RemoteNode, LocalGroupsInfo) ->
+    ok = rpc:call(RemoteNode, ?MODULE, write_groups_info_to_node, [node(), LocalGroupsInfo]).
 
--spec write_pgs_info_to_node(Node :: atom(), PgsInfo :: list()) -> ok.
-write_pgs_info_to_node(Node, PgsInfo) ->
+-spec write_groups_info_to_node(Node :: atom(), GroupsInfo :: list()) -> ok.
+write_groups_info_to_node(Node, GroupsInfo) ->
     FWrite = fun({Name, Pid}) ->
         mnesia:dirty_write(#syn_groups_table{
             name = Name,
@@ -362,4 +362,4 @@ write_pgs_info_to_node(Node, PgsInfo) ->
             node = Node
         })
     end,
-    lists:foreach(FWrite, PgsInfo).
+    lists:foreach(FWrite, GroupsInfo).

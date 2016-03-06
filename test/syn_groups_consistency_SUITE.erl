@@ -173,9 +173,9 @@ two_nodes_netsplit_when_there_are_no_conflicts(Config) ->
     SlavePidSlave = syn_test_suite_helper:start_process(SlaveNode),
 
     %% join
-    ok = syn:join(test_pg, LocalPid),
-    ok = syn:join(test_pg, SlavePidLocal),    %% joined on local node
-    ok = rpc:call(SlaveNode, syn, join, [test_pg, SlavePidSlave]),    %% joined on slave node
+    ok = syn:join({group, tuple_name}, LocalPid),
+    ok = syn:join({group, tuple_name}, SlavePidLocal),    %% joined on local node
+    ok = rpc:call(SlaveNode, syn, join, [{group, tuple_name}, SlavePidSlave]),    %% joined on slave node
     timer:sleep(100),
 
     %% check tables
@@ -219,11 +219,11 @@ two_nodes_netsplit_when_there_are_no_conflicts(Config) ->
     true = lists:member(CurrentNode, SlaveActiveReplicasAfter),
 
     %% check grouos
-    3 = length(syn:get_members(test_pg)),
-    true = syn:member(LocalPid, test_pg),
-    true = syn:member(SlavePidLocal, test_pg),
-    true = syn:member(SlavePidSlave, test_pg),
-    3 = length(rpc:call(SlaveNode, syn, get_members, [test_pg])),
-    true = rpc:call(SlaveNode, syn, member, [LocalPid, test_pg]),
-    true = rpc:call(SlaveNode, syn, member, [SlavePidLocal, test_pg]),
-    true = rpc:call(SlaveNode, syn, member, [SlavePidSlave, test_pg]).
+    3 = length(syn:get_members({group, tuple_name})),
+    true = syn:member(LocalPid, {group, tuple_name}),
+    true = syn:member(SlavePidLocal, {group, tuple_name}),
+    true = syn:member(SlavePidSlave, {group, tuple_name}),
+    3 = length(rpc:call(SlaveNode, syn, get_members, [{group, tuple_name}])),
+    true = rpc:call(SlaveNode, syn, member, [LocalPid, {group, tuple_name}]),
+    true = rpc:call(SlaveNode, syn, member, [SlavePidLocal, {group, tuple_name}]),
+    true = rpc:call(SlaveNode, syn, member, [SlavePidSlave, {group, tuple_name}]).

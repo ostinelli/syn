@@ -177,18 +177,18 @@ single_node_leave(_Config) ->
     %% start process
     Pid = syn_test_suite_helper:start_process(),
     %% retrieve
-    [] = syn:get_members(<<"my pg">>),
-    false = syn:member(Pid, <<"my pg">>),
+    [] = syn:get_members(<<"my group">>),
+    false = syn:member(Pid, <<"my group">>),
     %% join
-    ok = syn:join(<<"my pg">>, Pid),
+    ok = syn:join(<<"my group">>, Pid),
     %% retrieve
-    [Pid] = syn:get_members(<<"my pg">>),
-    true = syn:member(Pid, <<"my pg">>),
+    [Pid] = syn:get_members(<<"my group">>),
+    true = syn:member(Pid, <<"my group">>),
     %% leave
-    ok = syn:leave(<<"my pg">>, Pid),
+    ok = syn:leave(<<"my group">>, Pid),
     %% retrieve
-    [] = syn:get_members(<<"my pg">>),
-    false = syn:member(Pid, <<"my pg">>),
+    [] = syn:get_members(<<"my group">>),
+    false = syn:member(Pid, <<"my group">>),
     %% kill process
     syn_test_suite_helper:kill_process(Pid).
 
@@ -201,19 +201,19 @@ single_node_kill(_Config) ->
     %% start process
     Pid = syn_test_suite_helper:start_process(),
     %% retrieve
-    [] = syn:get_members(<<"my pg">>),
-    false = syn:member(Pid, <<"my pg">>),
+    [] = syn:get_members(<<"my group">>),
+    false = syn:member(Pid, <<"my group">>),
     %% join
-    ok = syn:join(<<"my pg">>, Pid),
+    ok = syn:join(<<"my group">>, Pid),
     %% retrieve
-    [Pid] = syn:get_members(<<"my pg">>),
-    true = syn:member(Pid, <<"my pg">>),
+    [Pid] = syn:get_members(<<"my group">>),
+    true = syn:member(Pid, <<"my group">>),
     %% kill process
     syn_test_suite_helper:kill_process(Pid),
     timer:sleep(100),
     %% retrieve
-    [] = syn:get_members(<<"my pg">>),
-    false = syn:member(Pid, <<"my pg">>).
+    [] = syn:get_members(<<"my group">>),
+    false = syn:member(Pid, <<"my group">>).
 
 single_node_publish(_Config) ->
     %% set schema location
@@ -227,10 +227,10 @@ single_node_publish(_Config) ->
     Pid1 = syn_test_suite_helper:start_process(F),
     Pid2 = syn_test_suite_helper:start_process(F),
     %% join
-    ok = syn:join(<<"my pg">>, Pid1),
-    ok = syn:join(<<"my pg">>, Pid2),
+    ok = syn:join(<<"my group">>, Pid1),
+    ok = syn:join(<<"my group">>, Pid2),
     %% publish
-    syn:publish(<<"my pg">>, {test, message}),
+    syn:publish(<<"my group">>, {test, message}),
     %% check publish was received
     receive
         {received, Pid1, {test, message}} -> ok
@@ -262,33 +262,33 @@ two_nodes_kill(Config) ->
     PidLocal = syn_test_suite_helper:start_process(),
     PidSlave = syn_test_suite_helper:start_process(SlaveNode),
     %% retrieve
-    [] = syn:get_members(<<"my pg">>),
-    false = syn:member(PidLocal, <<"my pg">>),
-    false = syn:member(PidSlave, <<"my pg">>),
-    [] = rpc:call(SlaveNode, syn, get_members, [<<"my pg">>]),
-    false = rpc:call(SlaveNode, syn, member, [PidLocal, <<"my pg">>]),
-    false = rpc:call(SlaveNode, syn, member, [PidSlave, <<"my pg">>]),
+    [] = syn:get_members(<<"my group">>),
+    false = syn:member(PidLocal, <<"my group">>),
+    false = syn:member(PidSlave, <<"my group">>),
+    [] = rpc:call(SlaveNode, syn, get_members, [<<"my group">>]),
+    false = rpc:call(SlaveNode, syn, member, [PidLocal, <<"my group">>]),
+    false = rpc:call(SlaveNode, syn, member, [PidSlave, <<"my group">>]),
     %% register
-    ok = syn:join(<<"my pg">>, PidSlave),
-    ok = rpc:call(SlaveNode, syn, join, [<<"my pg">>, PidLocal]),
+    ok = syn:join(<<"my group">>, PidSlave),
+    ok = rpc:call(SlaveNode, syn, join, [<<"my group">>, PidLocal]),
     %% retrieve
-    2 = length(syn:get_members(<<"my pg">>)),
-    true = syn:member(PidLocal, <<"my pg">>),
-    true = syn:member(PidSlave, <<"my pg">>),
-    2 = length(rpc:call(SlaveNode, syn, get_members, [<<"my pg">>])),
-    true = rpc:call(SlaveNode, syn, member, [PidLocal, <<"my pg">>]),
-    true = rpc:call(SlaveNode, syn, member, [PidSlave, <<"my pg">>]),
+    2 = length(syn:get_members(<<"my group">>)),
+    true = syn:member(PidLocal, <<"my group">>),
+    true = syn:member(PidSlave, <<"my group">>),
+    2 = length(rpc:call(SlaveNode, syn, get_members, [<<"my group">>])),
+    true = rpc:call(SlaveNode, syn, member, [PidLocal, <<"my group">>]),
+    true = rpc:call(SlaveNode, syn, member, [PidSlave, <<"my group">>]),
     %% kill processes
     syn_test_suite_helper:kill_process(PidLocal),
     syn_test_suite_helper:kill_process(PidSlave),
     timer:sleep(100),
     %% retrieve
-    [] = syn:get_members(<<"my pg">>),
-    false = syn:member(PidLocal, <<"my pg">>),
-    false = syn:member(PidSlave, <<"my pg">>),
-    [] = rpc:call(SlaveNode, syn, get_members, [<<"my pg">>]),
-    false = rpc:call(SlaveNode, syn, member, [PidLocal, <<"my pg">>]),
-    false = rpc:call(SlaveNode, syn, member, [PidSlave, <<"my pg">>]).
+    [] = syn:get_members(<<"my group">>),
+    false = syn:member(PidLocal, <<"my group">>),
+    false = syn:member(PidSlave, <<"my group">>),
+    [] = rpc:call(SlaveNode, syn, get_members, [<<"my group">>]),
+    false = rpc:call(SlaveNode, syn, member, [PidLocal, <<"my group">>]),
+    false = rpc:call(SlaveNode, syn, member, [PidSlave, <<"my group">>]).
 
 two_nodes_publish(Config) ->
     %% get slave
@@ -308,10 +308,10 @@ two_nodes_publish(Config) ->
     PidLocal = syn_test_suite_helper:start_process(F),
     PidSlave = syn_test_suite_helper:start_process(SlaveNode, F),
     %% register
-    ok = syn:join(<<"my pg">>, PidSlave),
-    ok = rpc:call(SlaveNode, syn, join, [<<"my pg">>, PidLocal]),
+    ok = syn:join(<<"my group">>, PidSlave),
+    ok = rpc:call(SlaveNode, syn, join, [<<"my group">>, PidLocal]),
     %% publish
-    syn:publish(<<"my pg">>, {test, message}),
+    syn:publish(<<"my group">>, {test, message}),
     %% check publish was received
     receive
         {received, PidLocal, {test, message}} -> ok
