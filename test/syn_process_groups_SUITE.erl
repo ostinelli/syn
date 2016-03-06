@@ -62,7 +62,7 @@
 %% -------------------------------------------------------------------
 all() ->
     [
-%%        {group, single_node_process_groups},
+        {group, single_node_process_groups},
         {group, two_nodes_process_groups}
     ].
 
@@ -169,6 +169,8 @@ end_per_testcase(_TestCase, Config) ->
 %% Tests
 %% ===================================================================
 single_node_leave(_Config) ->
+    %% set schema location
+    application:set_env(mnesia, schema_location, ram),
     %% start
     ok = syn:start(),
     ok = syn:init(),
@@ -191,6 +193,8 @@ single_node_leave(_Config) ->
     syn_test_suite_helper:kill_process(Pid).
 
 single_node_kill(_Config) ->
+    %% set schema location
+    application:set_env(mnesia, schema_location, ram),
     %% start
     ok = syn:start(),
     ok = syn:init(),
@@ -212,6 +216,8 @@ single_node_kill(_Config) ->
     false = syn:member(Pid, <<"my pg">>).
 
 single_node_publish(_Config) ->
+    %% set schema location
+    application:set_env(mnesia, schema_location, ram),
     %% start
     ok = syn:start(),
     ok = syn:init(),
@@ -243,6 +249,9 @@ single_node_publish(_Config) ->
 two_nodes_kill(Config) ->
     %% get slave
     SlaveNode = proplists:get_value(slave_node, Config),
+    %% set schema location
+    application:set_env(mnesia, schema_location, ram),
+    rpc:call(SlaveNode, mnesia, schema_location, [ram]),
     %% start
     ok = syn:start(),
     ok = syn:init(),
@@ -284,6 +293,9 @@ two_nodes_kill(Config) ->
 two_nodes_publish(Config) ->
     %% get slave
     SlaveNode = proplists:get_value(slave_node, Config),
+    %% set schema location
+    application:set_env(mnesia, schema_location, ram),
+    rpc:call(SlaveNode, mnesia, schema_location, [ram]),
     %% start
     ok = syn:start(),
     ok = syn:init(),

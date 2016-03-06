@@ -38,6 +38,8 @@
 %% internal
 -export([get_processes_info_of_node/1]).
 -export([write_processes_info_to_node/2]).
+-export([get_pgs_info_of_node/1]).
+-export([write_pgs_info_to_node/2]).
 
 %% records
 -record(state, {
@@ -125,7 +127,8 @@ handle_info({mnesia_system_event, {inconsistent_database, Context, RemoteNode}},
 
 handle_info({mnesia_system_event, {mnesia_down, RemoteNode}}, State) when RemoteNode =/= node() ->
     error_logger:error_msg("Received a MNESIA down event, removing on node ~p all pids of node ~p", [node(), RemoteNode]),
-    delete_pids_of_disconnected_node(RemoteNode),
+    delete_global_pids_of_disconnected_node(RemoteNode),
+    delete_pg_pids_of_disconnected_node(RemoteNode),
     {noreply, State};
 
 handle_info({mnesia_system_event, _MnesiaEvent}, State) ->
@@ -149,7 +152,7 @@ handle_info(Info, State) ->
 %% ----------------------------------------------------------------------------------------------------------
 -spec terminate(Reason :: any(), #state{}) -> terminated.
 terminate(Reason, _State) ->
-    error_logger:info_msg("Terminating syn netsplits with reason: ~p", [Reason]),
+    error_logger:info_msg("Terminating syn consistency with reason: ~p", [Reason]),
     terminated.
 
 %% ----------------------------------------------------------------------------------------------------------
@@ -163,8 +166,8 @@ code_change(_OldVsn, State, _Extra) ->
 %% ===================================================================
 %% Internal
 %% ===================================================================
--spec delete_pids_of_disconnected_node(RemoteNode :: atom()) -> ok.
-delete_pids_of_disconnected_node(RemoteNode) ->
+-spec delete_global_pids_of_disconnected_node(RemoteNode :: atom()) -> ok.
+delete_global_pids_of_disconnected_node(RemoteNode) ->
     %% build match specs
     MatchHead = #syn_global_table{key = '$1', node = '$2', _ = '_'},
     Guard = {'=:=', '$2', RemoteNode},
@@ -173,6 +176,15 @@ delete_pids_of_disconnected_node(RemoteNode) ->
     DelF = fun(Id) -> mnesia:dirty_delete({syn_global_table, Id}) end,
     NodePids = mnesia:dirty_select(syn_global_table, [{MatchHead, [Guard], [IdFormat]}]),
     lists:foreach(DelF, NodePids).
+
+-spec delete_pg_pids_of_disconnected_node(RemoteNode :: atom()) -> ok.
+delete_pg_pids_of_disconnected_node(RemoteNode) ->
+    %% build match specs
+    Pattern = #syn_pg_table{node = RemoteNode, _ = '_'},
+    ObjectsToDelete = mnesia:dirty_match_object(syn_pg_table, Pattern),
+    %% delete
+    DelF = fun(Record) -> mnesia:dirty_delete_object(syn_pg_table, Record) end,
+    lists:foreach(DelF, ObjectsToDelete).
 
 -spec automerge(RemoteNode :: atom()) -> ok.
 automerge(RemoteNode) ->
@@ -202,17 +214,18 @@ stitch(RemoteNode) ->
     mnesia_controller:connect_nodes(
         [RemoteNode],
         fun(MergeF) ->
-            catch case MergeF([syn_global_table]) of
+            catch case MergeF([syn_global_table, syn_pg_table]) of
                 {merged, _, _} = Res ->
-                    stitch_tab(RemoteNode),
+                    stitch_global_tab(RemoteNode),
+                    stitch_pg_tab(RemoteNode),
                     Res;
                 Other ->
                     Other
             end
         end).
 
--spec stitch_tab(RemoteNode :: atom()) -> ok.
-stitch_tab(RemoteNode) ->
+-spec stitch_global_tab(RemoteNode :: atom()) -> ok.
+stitch_global_tab(RemoteNode) ->
     %% get remote processes info
     RemoteProcessesInfo = rpc:call(RemoteNode, ?MODULE, get_processes_info_of_node, [RemoteNode]),
     %% get local processes info
@@ -312,3 +325,41 @@ purge_double_processes(ConflictingProcessCallbackModule, ConflictingProcessCallb
             end)
     end,
     lists:foreach(F, DoubleProcessesInfo).
+
+-spec stitch_pg_tab(RemoteNode :: atom()) -> ok.
+stitch_pg_tab(RemoteNode) ->
+    %% get remote processes info
+    RemotePgsInfo = rpc:call(RemoteNode, ?MODULE, get_pgs_info_of_node, [RemoteNode]),
+    %% get local processes info
+    LocalPgsInfo = get_pgs_info_of_node(node()),
+    %% write
+    write_remote_pgs_to_local(RemoteNode, RemotePgsInfo),
+    write_local_pgs_to_remote(RemoteNode, LocalPgsInfo).
+
+-spec get_pgs_info_of_node(Node :: atom()) -> list().
+get_pgs_info_of_node(Node) ->
+    %% build match specs
+    MatchHead = #syn_pg_table{name = '$1', pid = '$2', node = '$3'},
+    Guard = {'=:=', '$3', Node},
+    PgInfoFormat = {{'$1', '$2'}},
+    %% select
+    mnesia:dirty_select(syn_pg_table, [{MatchHead, [Guard], [PgInfoFormat]}]).
+
+-spec write_remote_pgs_to_local(RemoteNode :: atom(), RemotePgsInfo :: list()) -> ok.
+write_remote_pgs_to_local(RemoteNode, RemotePgsInfo) ->
+    write_pgs_info_to_node(RemoteNode, RemotePgsInfo).
+
+-spec write_local_pgs_to_remote(RemoteNode :: atom(), LocalPgsInfo :: list()) -> ok.
+write_local_pgs_to_remote(RemoteNode, LocalPgsInfo) ->
+    ok = rpc:call(RemoteNode, ?MODULE, write_pgs_info_to_node, [node(), LocalPgsInfo]).
+
+-spec write_pgs_info_to_node(Node :: atom(), PgsInfo :: list()) -> ok.
+write_pgs_info_to_node(Node, PgsInfo) ->
+    FWrite = fun({Name, Pid}) ->
+        mnesia:dirty_write(#syn_pg_table{
+            name = Name,
+            pid = Pid,
+            node = Node
+        })
+    end,
+    lists:foreach(FWrite, PgsInfo).

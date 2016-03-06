@@ -62,8 +62,8 @@
 %% -------------------------------------------------------------------
 all() ->
     [
-%%        {group, two_nodes_netsplits},
-%%        {group, three_nodes_netsplits}
+        {group, two_nodes_netsplits},
+        {group, three_nodes_netsplits}
     ].
 
 %% -------------------------------------------------------------------
