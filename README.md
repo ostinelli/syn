@@ -8,13 +8,13 @@
 ## Introduction
 
 ##### What is a Process Registry?
-A Process Registry allows to register a process on all the nodes of a cluster with a single Key. Consider this the process equivalent of a DNS server: in the same way you can retrieve an IP address from a domain name, you can retrieve a process from its Key. 
+A global Process Registry allows to register a process on all the nodes of a cluster with a single Key. Consider this the process equivalent of a DNS server: in the same way you can retrieve an IP address from a domain name, you can retrieve a process from its Key. 
 
 ##### What is a Process Group?
-A Process Group is a named group which contains many processes. With the group Name, you can retrieve the list of these processes, or publish a message to all of them. This mechanism allows for Publish / Subscribe patterns.
+A global Process Group is a named group which contains many processes, eventually running on different nodes. With the group Name, you can retrieve on any cluster node the list of these processes, or publish a message to all of them. This mechanism allows for Publish / Subscribe patterns.
 
 ##### What is Syn?
-Syn is both. It's a Process Registry and Process Group that has the following features:
+Syn is both. It's a Process Registry and Process Group manager that has the following features:
 
  * Global Process Registry (i.e. a process is uniquely identified with a Key across all the nodes of a cluster).
  * Global Process Group manager (i.e. a group is uniquely identified with a Name across all the nodes of a cluster).
