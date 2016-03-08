@@ -32,7 +32,7 @@
 -export([unregister/1]).
 -export([find_by_key/1, find_by_key/2]).
 -export([find_by_pid/1, find_by_pid/2]).
--export([count/0, count/1]).
+-export([registry_count/0, registry_count/1]).
 
 
 %% ===================================================================
@@ -80,12 +80,12 @@ find_by_pid(Pid) ->
 find_by_pid(Pid, with_meta) ->
     syn_global:find_by_pid(Pid, with_meta).
 
--spec count() -> non_neg_integer().
-count() ->
+-spec registry_count() -> non_neg_integer().
+registry_count() ->
     syn_global:count().
 
--spec count(Node :: atom()) -> non_neg_integer().
-count(Node) ->
+-spec registry_count(Node :: atom()) -> non_neg_integer().
+registry_count(Node) ->
     syn_global:count(Node).
 
 %% ===================================================================

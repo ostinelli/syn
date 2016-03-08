@@ -163,13 +163,13 @@ Types:
 To retrieve the count of total registered processes running in the cluster:
 
 ```erlang
-syn:count() -> non_neg_integer().
+syn:registry_count() -> non_neg_integer().
 ```
 
 To retrieve the count of total registered processes running on a specific node:
 
 ```erlang
-syn:count(Node) -> non_neg_integer().
+syn:registry_count(Node) -> non_neg_integer().
 
 Types:
 	Node = atom()

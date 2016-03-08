@@ -336,7 +336,7 @@ single_node_when_mnesia_is_ram_process_count(_Config) ->
     ok = syn:start(),
     ok = syn:init(),
     %% count
-    0 = syn:count(),
+    0 = syn:registry_count(),
     %% start process
     Pid1 = syn_test_suite_helper:start_process(),
     Pid2 = syn_test_suite_helper:start_process(),
@@ -346,14 +346,14 @@ single_node_when_mnesia_is_ram_process_count(_Config) ->
     ok = syn:register(2, Pid2),
     ok = syn:register(3, Pid3),
     %% count
-    3 = syn:count(),
+    3 = syn:registry_count(),
     %% kill processes
     syn_test_suite_helper:kill_process(Pid1),
     syn_test_suite_helper:kill_process(Pid2),
     syn_test_suite_helper:kill_process(Pid3),
     timer:sleep(100),
     %% count
-    0 = syn:count().
+    0 = syn:registry_count().
 
 single_node_when_mnesia_is_ram_callback_on_process_exit(_Config) ->
     CurrentNode = node(),
@@ -487,12 +487,12 @@ two_nodes_when_mnesia_is_ram_process_count(Config) ->
     ok = rpc:call(SlaveNode, syn, init, []),
     timer:sleep(100),
     %% count
-    0 = syn:count(),
-    0 = rpc:call(SlaveNode, syn, count, []),
-    0 = syn:count(CurrentNode),
-    0 = syn:count(SlaveNode),
-    0 = rpc:call(SlaveNode, syn, count, [CurrentNode]),
-    0 = rpc:call(SlaveNode, syn, count, [SlaveNode]),
+    0 = syn:registry_count(),
+    0 = rpc:call(SlaveNode, syn, registry_count, []),
+    0 = syn:registry_count(CurrentNode),
+    0 = syn:registry_count(SlaveNode),
+    0 = rpc:call(SlaveNode, syn, registry_count, [CurrentNode]),
+    0 = rpc:call(SlaveNode, syn, registry_count, [SlaveNode]),
     %% start processes
     PidLocal1 = syn_test_suite_helper:start_process(),
     PidLocal2 = syn_test_suite_helper:start_process(),
@@ -503,24 +503,24 @@ two_nodes_when_mnesia_is_ram_process_count(Config) ->
     ok = syn:register(3, PidSlave),
     timer:sleep(100),
     %% count
-    3 = syn:count(),
-    3 = rpc:call(SlaveNode, syn, count, []),
-    2 = syn:count(CurrentNode),
-    1 = syn:count(SlaveNode),
-    2 = rpc:call(SlaveNode, syn, count, [CurrentNode]),
-    1 = rpc:call(SlaveNode, syn, count, [SlaveNode]),
+    3 = syn:registry_count(),
+    3 = rpc:call(SlaveNode, syn, registry_count, []),
+    2 = syn:registry_count(CurrentNode),
+    1 = syn:registry_count(SlaveNode),
+    2 = rpc:call(SlaveNode, syn, registry_count, [CurrentNode]),
+    1 = rpc:call(SlaveNode, syn, registry_count, [SlaveNode]),
     %% kill processes
     syn_test_suite_helper:kill_process(PidLocal1),
     syn_test_suite_helper:kill_process(PidLocal2),
     syn_test_suite_helper:kill_process(PidSlave),
     timer:sleep(100),
     %% count
-    0 = syn:count(),
-    0 = rpc:call(SlaveNode, syn, count, []),
-    0 = syn:count(CurrentNode),
-    0 = syn:count(SlaveNode),
-    0 = rpc:call(SlaveNode, syn, count, [CurrentNode]),
-    0 = rpc:call(SlaveNode, syn, count, [SlaveNode]).
+    0 = syn:registry_count(),
+    0 = rpc:call(SlaveNode, syn, registry_count, []),
+    0 = syn:registry_count(CurrentNode),
+    0 = syn:registry_count(SlaveNode),
+    0 = rpc:call(SlaveNode, syn, registry_count, [CurrentNode]),
+    0 = rpc:call(SlaveNode, syn, registry_count, [SlaveNode]).
 
 two_nodes_when_mnesia_is_ram_callback_on_process_exit(Config) ->
     %% get slave
