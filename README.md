@@ -1,6 +1,5 @@
 [![Build Status](https://travis-ci.org/ostinelli/syn.svg?branch=master)](https://travis-ci.org/ostinelli/syn)
 
-> THIS IS AN EXPERIMENTAL BRANCH WHICH ADDS SUPPORT FOR PROCESS GROUPS. 
 
 # Syn
 **Syn** (short for _synonym_) is a global Process Registry and Process Group manager for Erlang.
@@ -8,10 +7,14 @@
 ## Introduction
 
 ##### What is a Process Registry?
-A global Process Registry allows to register a process on all the nodes of a cluster with a single Key. Consider this the process equivalent of a DNS server: in the same way you can retrieve an IP address from a domain name, you can retrieve a process from its Key. 
+A global Process Registry allows to register a process on all the nodes of a cluster with a single Key. Consider this the process equivalent of a DNS server: in the same way you can retrieve an IP address from a domain name, you can retrieve a process from its Key.
+
+Typical Use Case: registering on a system a process that handles a physical device (using its serial number).
 
 ##### What is a Process Group?
 A global Process Group is a named group which contains many processes, eventually running on different nodes. With the group Name, you can retrieve on any cluster node the list of these processes, or publish a message to all of them. This mechanism allows for Publish / Subscribe patterns.
+
+Typical Use Case: a chatroom .
 
 ##### What is Syn?
 Syn is both. It's a Process Registry and Process Group manager that has the following features:
@@ -294,6 +297,8 @@ Types:
 	Pid = pid()
 	Error = pid_already_in_group
 ```
+
+> When a process joins a group, Syn will automatically monitor it.
 
 To remove a process from a group:
 
