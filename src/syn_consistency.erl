@@ -3,7 +3,8 @@
 %%
 %% The MIT License (MIT)
 %%
-%% Copyright (c) 2016 Roberto Ostinelli <roberto@ostinelli.net> and Neato Robotics, Inc.
+%% Copyright (c) 2015 Roberto Ostinelli <roberto@ostinelli.net> and Neato Robotics, Inc.
+%%
 %% Portions of code from Ulf Wiger's unsplit server module:
 %% <https://github.com/uwiger/unsplit/blob/master/src/unsplit_server.erl>
 %%
