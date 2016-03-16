@@ -14,7 +14,7 @@ Typical Use Case: registering on a system a process that handles a physical devi
 ##### What is a Process Group?
 A global Process Group is a named group which contains many processes, eventually running on different nodes. With the group Name, you can retrieve on any cluster node the list of these processes, or publish a message to all of them. This mechanism allows for Publish / Subscribe patterns.
 
-Typical Use Case: a chatroom .
+Typical Use Case: a chatroom.
 
 ##### What is Syn?
 Syn is both. It's a Process Registry and Process Group manager that has the following features:
