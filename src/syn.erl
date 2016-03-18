@@ -42,6 +42,8 @@
 -export([member/2]).
 -export([get_members/1]).
 -export([publish/2]).
+-export([multi_call/2]).
+-export([multi_call_reply/2]).
 
 %% ===================================================================
 %% API
@@ -115,6 +117,14 @@ get_members(Name) ->
 -spec publish(Name :: any(), Message :: any()) -> {ok, RecipientCount :: non_neg_integer()}.
 publish(Name, Message) ->
     syn_groups:publish(Name, Message).
+
+-spec multi_call(Name :: any(), Message :: any()) -> [{pid(), Response :: any()}].
+multi_call(Name, Message) ->
+    syn_groups:multi_call(Name, Message).
+
+-spec multi_call_reply(CallerPid :: pid(), Reply :: any()) -> ok.
+multi_call_reply(CallerPid, Reply) ->
+    syn_groups:multi_call_reply(CallerPid, Reply).
 
 %% ===================================================================
 %% Internal

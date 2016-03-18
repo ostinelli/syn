@@ -35,15 +35,18 @@
 -export([
     single_node_leave/1,
     single_node_kill/1,
-    single_node_publish/1
+    single_node_publish/1,
+    single_node_call/1
 ]).
 -export([
     two_nodes_kill/1,
-    two_nodes_publish/1
+    two_nodes_publish/1,
+    two_nodes_call/1
 ]).
 
 %% internal
 -export([recipient_loop/1]).
+-export([called_loop/1]).
 
 %% include
 -include_lib("common_test/include/ct.hrl").
@@ -83,11 +86,13 @@ groups() ->
         {single_node_process_groups, [shuffle], [
             single_node_leave,
             single_node_kill,
-            single_node_publish
+            single_node_publish,
+            single_node_call
         ]},
         {two_nodes_process_groups, [shuffle], [
             two_nodes_kill,
-            two_nodes_publish
+            two_nodes_publish,
+            two_nodes_call
         ]}
     ].
 %% -------------------------------------------------------------------
@@ -221,7 +226,7 @@ single_node_publish(_Config) ->
     %% start
     ok = syn:start(),
     ok = syn:init(),
-    %% start process
+    %% start processes
     ResultPid = self(),
     F = fun() -> recipient_loop(ResultPid) end,
     Pid1 = syn_test_suite_helper:start_process(F),
@@ -245,6 +250,32 @@ single_node_publish(_Config) ->
     %% kill processes
     syn_test_suite_helper:kill_process(Pid1),
     syn_test_suite_helper:kill_process(Pid2).
+
+single_node_call(_Config) ->
+    %% set schema location
+    application:set_env(mnesia, schema_location, ram),
+    %% start
+    ok = syn:start(),
+    ok = syn:init(),
+    %% start processes
+    Pid1 = syn_test_suite_helper:start_process(fun() -> called_loop(pid1) end),
+    Pid2 = syn_test_suite_helper:start_process(fun() -> called_loop(pid2) end),
+    PidUnresponsive = syn_test_suite_helper:start_process(),
+    %% register
+    ok = syn:join(<<"my group">>, Pid1),
+    ok = syn:join(<<"my group">>, Pid2),
+    ok = syn:join(<<"my group">>, PidUnresponsive),
+    %% call
+    {Replies, BadPids} = syn:multi_call(<<"my group">>, get_pid_name),
+    %% check responses
+    2 = length(Replies),
+    pid1 = proplists:get_value(Pid1, Replies),
+    pid2 = proplists:get_value(Pid2, Replies),
+    [PidUnresponsive] = BadPids,
+    %% kill processes
+    syn_test_suite_helper:kill_process(Pid1),
+    syn_test_suite_helper:kill_process(Pid2),
+    syn_test_suite_helper:kill_process(PidUnresponsive).
 
 two_nodes_kill(Config) ->
     %% get slave
@@ -327,10 +358,47 @@ two_nodes_publish(Config) ->
     syn_test_suite_helper:kill_process(PidLocal),
     syn_test_suite_helper:kill_process(PidSlave).
 
+two_nodes_call(Config) ->
+    %% get slave
+    SlaveNode = proplists:get_value(slave_node, Config),
+    %% set schema location
+    application:set_env(mnesia, schema_location, ram),
+    rpc:call(SlaveNode, mnesia, schema_location, [ram]),
+    %% start
+    ok = syn:start(),
+    ok = syn:init(),
+    ok = rpc:call(SlaveNode, syn, start, []),
+    ok = rpc:call(SlaveNode, syn, init, []),
+    timer:sleep(100),
+    %% start processes
+    PidLocal = syn_test_suite_helper:start_process(fun() -> called_loop(pid1) end),
+    PidSlave = syn_test_suite_helper:start_process(SlaveNode, fun() -> called_loop(pid2) end),
+    PidUnresponsive = syn_test_suite_helper:start_process(),
+    %% register
+    ok = syn:join(<<"my group">>, PidLocal),
+    ok = syn:join(<<"my group">>, PidSlave),
+    ok = syn:join(<<"my group">>, PidUnresponsive),
+    %% call
+    {Replies, BadPids} = syn:multi_call(<<"my group">>, get_pid_name),
+    %% check responses
+    2 = length(Replies),
+    pid1 = proplists:get_value(PidLocal, Replies),
+    pid2 = proplists:get_value(PidSlave, Replies),
+    [PidUnresponsive] = BadPids,
+    %% kill processes
+    syn_test_suite_helper:kill_process(PidLocal),
+    syn_test_suite_helper:kill_process(PidSlave),
+    syn_test_suite_helper:kill_process(PidUnresponsive).
+
 %% ===================================================================
 %% Internal
 %% ===================================================================
 recipient_loop(Pid) ->
     receive
         Message -> Pid ! {received, self(), Message}
+    end.
+
+called_loop(PidName) ->
+    receive
+        {syn_multi_call, CallerPid, get_pid_name} -> syn:multi_call_reply(CallerPid, PidName)
     end.

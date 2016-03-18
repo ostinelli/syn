@@ -32,12 +32,17 @@
 -export([member/2]).
 -export([get_members/1]).
 -export([publish/2]).
+-export([multi_call/2]).
+-export([multi_call_reply/2]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
 %% records
 -record(state, {}).
+
+%% macros
+-define(MULTI_CALL_TIMEOUT_MS, 5000).
 
 %% include
 -include("syn.hrl").
@@ -77,6 +82,21 @@ publish(Name, Message) ->
     end,
     lists:foreach(FSend, MemberPids),
     {ok, length(MemberPids)}.
+
+-spec multi_call(Name :: any(), Message :: any()) ->
+    {[{pid(), Reply :: any()}], [BadPid :: pid()]}.
+multi_call(Name, Message) ->
+    Self = self(),
+    MemberPids = i_get_members(Name),
+    FSend = fun(Pid) ->
+        Pid ! {syn_multi_call, Self, Message}
+    end,
+    lists:foreach(FSend, MemberPids),
+    collect_replies(MemberPids).
+
+-spec multi_call_reply(CallerPid :: pid(), Reply :: any()) -> ok.
+multi_call_reply(CallerPid, Reply) ->
+    CallerPid ! {syn_multi_call_reply, self(), Reply}.
 
 %% ===================================================================
 %% Callbacks
@@ -251,3 +271,20 @@ i_find_by_pid(Pid) ->
 -spec remove_process(Process :: #syn_groups_table{}) -> ok.
 remove_process(Process) ->
     mnesia:dirty_delete_object(syn_groups_table, Process).
+
+-spec collect_replies(MemberPids :: [pid()]) ->
+    {[{pid(), Reply :: any()}], [BadPid :: pid()]}.
+collect_replies(MemberPids) ->
+    collect_replies(MemberPids, []).
+
+-spec collect_replies(MemberPids :: [pid()], Replies :: [{pid(), Reply :: any()}]) ->
+    {[{pid(), Reply :: any()}], [BadPid :: pid()]}.
+collect_replies([], Replies) -> {Replies, []};
+collect_replies(MemberPids, Replies) ->
+    receive
+        {syn_multi_call_reply, Pid, Reply} ->
+            MemberPids1 = lists:delete(Pid, MemberPids),
+            collect_replies(MemberPids1, [{Pid, Reply} | Replies])
+    after ?MULTI_CALL_TIMEOUT_MS ->
+        {Replies, MemberPids}
+    end.

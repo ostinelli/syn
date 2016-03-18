@@ -313,17 +313,6 @@ Types:
 
 > You don't need to remove processes that are about to die, since they are monitored by Syn and they will be removed automatically from their groups.
 
-To publish a message to all group members:
-
-```erlang
-syn:publish(Name, Message) -> {ok, RecipientCount}.
-
-Types:
-	Name = any()
-	Message = any()
-	RecipientCount = non_neg_integer()
-```
-
 To get a list of the members of a group:
 
 ```erlang
@@ -343,8 +332,56 @@ Types:
 	Name = any()
 ```
 
+To publish a message to all group members:
+
+```erlang
+syn:publish(Name, Message) -> {ok, RecipientCount}.
+
+Types:
+	Name = any()
+	Message = any()
+	RecipientCount = non_neg_integer()
+```
+
+To call all group members and get their replies:
+
+```erlang
+syn:multi_call(Name, Message) -> {Replies, BadPids}.
+
+Types:
+	Name = any()
+	Message = any()
+	Replies = [{MemberPid, Reply}]
+	BadPids = [MemberPid]
+	  MemberPid = pid()
+	  Reply = any()
+```
+
+> Syn will wait up to 5 seconds to receive all replies from the members. The members that do not reply in time will be added to the BadPids list.
+
+When this call is issued, all members will receive a tuple in the format:
+
+```erlang
+{syn_multi_call, CallerPid, Message}
+
+Types:
+	CallerPid = pid()
+	Message = any()
+```
+
+To reply, every member must use the method:
+
+```erlang
+syn:multi_call_reply(CallerPid, Reply) -> ok.
+
+Types:
+	CallerPid = pid()
+	Reply = any()
+```
+
+
 ## Internals
-Under the hood, Syn performs dirty reads and writes into a distributed in-memory Mnesia table, replicated across all the nodes of the cluster.
+Under the hood, Syn performs dirty reads and writes into distributed in-memory Mnesia tables, replicated across all the nodes of the cluster.
 
 To automatically handle conflict resolution, Syn implements a specialized and simplified version of the mechanisms used in Ulf Wiger's [unsplit](https://github.com/uwiger/unsplit) framework.
 
