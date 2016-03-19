@@ -13,6 +13,10 @@
             mnesia
         ]},
         {mod, {syn_app, []}},
-        {env, []}
+        {env, []},
+
+        {maintainers, ["Roberto Ostinelli"]},
+        {licenses, ["MIT"]},
+        {links, [{"Github", "https://github.com/ostinelli/syn"}]}
     ]
 }.
