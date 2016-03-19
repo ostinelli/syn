@@ -22,6 +22,6 @@ run:
 
 tests: all
 	ct_run -dir $(PROJECT_DIR)/test -logdir $(PROJECT_DIR)/test/results \
-	-pa $(PROJECT_DIR)/ebin $(PROJECT_DIR)/deps/*/ebin
+	-pa $(PROJECT_DIR)/ebin
 
 travis: all tests
