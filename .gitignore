@@ -23,10 +23,8 @@ Temporary Items
 .apdisk
 
 # project ignores
-deps
-ebin
+_build
 erl_crash.dump
 *.beam
-.rebar
 test/results/*
 !test/results/.keep

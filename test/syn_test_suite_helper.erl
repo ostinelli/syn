@@ -56,13 +56,9 @@ set_environment_variables(Node) ->
     lists:foreach(F, AppsConfig).
 
 start_slave(NodeShortName) ->
-    EbinFilePath = filename:join([filename:dirname(code:lib_dir(syn, ebin)), "ebin"]),
-    TestFilePath = filename:join([filename:dirname(code:lib_dir(syn, ebin)), "test"]),
-    %% start slave
-    {ok, Node} = ct_slave:start(NodeShortName, [
-        {boot_timeout, 10},
-        {erl_flags, lists:concat(["-pa ", EbinFilePath, " ", TestFilePath])}
-    ]),
+    CodePath = code:get_path(),
+    {ok, Node} = ct_slave:start(NodeShortName, [{boot_timeout, 10}]),
+    true = rpc:call(Node, code, set_path, [CodePath]),
     {ok, Node}.
 
 stop_slave(NodeShortName) ->

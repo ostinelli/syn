@@ -1,27 +1,24 @@
 PROJECT_DIR:=$(strip $(shell dirname $(realpath $(lastword $(MAKEFILE_LIST)))))
 
 all:
-	@./rebar compile
+	@$(PROJECT_DIR)/rebar3 compile
 
 clean:
-	@./rebar clean
+	@$(PROJECT_DIR)/rebar3 clean
 	@find $(PROJECT_DIR)/. -name "erl_crash\.dump" | xargs rm -f
-	@find $(PROJECT_DIR)/. -name "*.beam" | xargs rm -f
 
 dialyze:
-	@dialyzer -n -c $(PROJECT_DIR)/src/*.erl
+	@$(PROJECT_DIR)/rebar3 dialyzer
 
 run:
-	@erl -pa $(PROJECT_DIR)/ebin \
+	@erl -pa `$(PROJECT_DIR)/rebar3 path` \
 	-name syn@127.0.0.1 \
 	+K true \
-	+P 5000000 \
-	+Q 1000000 \
 	-mnesia schema_location ram \
 	-eval 'syn:start(),syn:init().'
 
 tests: all
 	ct_run -dir $(PROJECT_DIR)/test -logdir $(PROJECT_DIR)/test/results \
-	-pa $(PROJECT_DIR)/ebin
+	-pa `$(PROJECT_DIR)/rebar3 path`
 
 travis: all tests
