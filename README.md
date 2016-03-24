@@ -342,6 +342,8 @@ Types:
 	Name = any()
 ```
 
+> The order of member pids in the returned array is not guaranteed to match the order of joins, nor to be the same in successive calls.
+
 To know if a process is a member of a group:
 
 ```erlang
