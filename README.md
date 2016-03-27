@@ -401,6 +401,30 @@ Types:
 	Reply = any()
 ```
 
+##### Callback on group process exit
+
+For group process there is the process exit callback. Just like in case of registry process:
+
+```erlang
+{syn, [
+	%% define callback function
+	{group_process_exit_callback, [module, function]}
+]}
+```
+
+The callback function is defined as:
+
+```erlang
+CallbackFun = fun(Name, Pid, Reason) -> any().
+
+Types:
+	Name = any()
+	Pid = pid()
+	Reason = any()
+```
+The `Key` and `Pid` are the ones of the process that exited with `Reason`.
+
+
 
 ## Internals
 Under the hood, Syn performs dirty reads and writes into distributed in-memory Mnesia tables, replicated across all the nodes of the cluster.
