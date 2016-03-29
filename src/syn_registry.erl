@@ -24,6 +24,7 @@
 %% THE SOFTWARE.
 %% ==========================================================================================================
 -module(syn_registry).
+-behaviour(gen_server).
 
 %% API
 -export([start_link/0]).
