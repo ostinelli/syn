@@ -211,97 +211,6 @@ Types:
 	Node = atom()
 ```
 
-#### Options
-Options can be set in the environment variable `syn`. You're probably best off using an application configuration file (in releases, `sys.config`):
-
-```erlang
-{syn, [
-    %% define callback function on process exit
-    {registry_process_exit_callback, [module1, function1]},
-
-    %% define callback function on conflicting process (instead of kill)
-    {registry_conflicting_process_callback, [module2, function2]}
-]}
-```
-These options are explained here below.
-
-##### Callback on process exit
-The `registry_process_exit_callback` option allows you to specify the `module` and the `function` of the callback that will be triggered when a process exits. This callback will be called only on the node where the process was running.
-
-The callback function is defined as:
-```erlang
-CallbackFun = fun(Key, Pid, Meta, Reason) -> any().
-
-Types:
-	Key = any()
-	Pid = pid()
-	Meta = any()
-	Reason = any()
-```
-The `Key` and `Pid` are the ones of the process that exited with `Reason`.
-
-For instance, if you want to print a log when a process exited:
-
-```erlang
--module(my_callback).
--export([callback_on_process_exit/4]).
-
-callback_on_process_exit(Key, Pid, Meta, Reason) ->
-	error_logger:info_msg(
-		"Process with Key ~p, Pid ~p and Meta ~p exited with reason ~p~n",
-		[Key, Pid, Meta, Reason]
-	)
-```
-
-Set it in the options:
-```erlang
-{syn, [
-    %% define callback function
-    {registry_process_exit_callback, [my_callback, callback_on_process_exit]}
-]}
-```
-If you don't set this option, no callback will be triggered.
-
-> If a process dies as a consequence of a conflict resolution, the process exit callback will still be called but the Key and Meta values will both be `undefined`.
-
-
-##### Conflict resolution by callback
-In case of race conditions, or during net splits, a Key might be registered simultaneously on two different nodes. In this case, the cluster experiences a naming conflict.
-
-When this happens, Syn will resolve this conflict by choosing a single process. Syn will discard the processes running on the node the conflict is being resolved on, and by default will kill it by sending a `kill` signal with `exit(Pid, kill)`.
-
-If this is not desired, you can set the `registry_conflicting_process_callback` option to instruct Syn to trigger a callback, so that you can perform custom operations (such as a graceful shutdown). In this case, the process will not be killed by Syn, and you'll have to decide what to do with it. This callback will be called only on the node where the process is running.
-
-The callback function is defined as:
-```erlang
-CallbackFun = fun(Key, Pid, Meta) -> any().
-
-Types:
-	Key = any()
-	Pid = pid()
-	Meta = any()
-```
-The `Key`, `Pid` and `Meta` are the ones of the process that is to be discarded.
-
-For instance, if you want to send a `shutdown` message to the discarded process:
-
-```erlang
--module(my_callback).
--export([callback_on_conflicting_process/3]).
-
-callback_on_conflicting_process(_Key, Pid, _Meta) ->
-	Pid ! shutdown
-```
-
-Set it in the options:
-```erlang
-{syn, [
-	%% define callback function
-	{registry_conflicting_process_callback, [my_callback, callback_on_conflicting_process]}
-]}
-```
-
-> Important Note: The conflict resolution method SHOULD be defined in the same way across all nodes of the cluster. Having different conflict resolution options on different nodes can have unexpected results.
 
 ### Process Groups
 
@@ -342,7 +251,7 @@ Types:
 	Name = any()
 ```
 
-> The order of member pids in the returned array is not guaranteed to match the order of joins, nor to be the same in successive calls.
+> The order of member pids in the returned array is guaranteed to be the same on every node, however it is not guaranteed to match the order of joins.
 
 To know if a process is a member of a group:
 
@@ -400,6 +309,107 @@ Types:
 	CallerPid = pid()
 	Reply = any()
 ```
+
+## Options
+Options can be set in the environment variable `syn`. You're probably best off using an application configuration file (in releases, `sys.config`). The list of all available options is:
+
+```erlang
+{syn, [
+    %% define callback function on process exit
+    {registry_process_exit_callback, [module1, function1]},
+
+    %% define callback function on conflicting process (instead of kill)
+    {registry_conflicting_process_callback, [module2, function2]}
+]}
+```
+These options are explained here below.
+
+### Registry options
+These allow to set the Process Registry options, and are:
+
+ * `registry_process_exit_callback`
+ * `registry_conflicting_process_callback`
+
+#### Callback on process exit
+The `registry_process_exit_callback` option allows you to specify the `module` and the `function` of the callback that will be triggered when a registered process exits. This callback will be called only on the node where the process was running.
+
+The callback function is defined as:
+```erlang
+CallbackFun = fun(Key, Pid, Meta, Reason) -> any().
+
+Types:
+	Key = any()
+	Pid = pid()
+	Meta = any()
+	Reason = any()
+```
+The `Key` and `Pid` are the ones of the process that exited with `Reason`.
+
+For instance, if you want to print a log when a registered process exited:
+
+```erlang
+-module(my_callback).
+-export([callback_on_process_exit/4]).
+
+callback_on_process_exit(Key, Pid, Meta, Reason) ->
+	error_logger:info_msg(
+		"Process with Key ~p, Pid ~p and Meta ~p exited with reason ~p~n",
+		[Key, Pid, Meta, Reason]
+	)
+```
+
+Set it in the options:
+```erlang
+{syn, [
+    %% define callback function
+    {registry_process_exit_callback, [my_callback, callback_on_process_exit]}
+]}
+```
+If you don't set this option, no callback will be triggered.
+
+> If a process dies as a consequence of a conflict resolution, the process exit callback will still be called but the Key and Meta values will both be `undefined`.
+
+
+#### Conflict resolution by callback
+In case of race conditions, or during net splits, a specific Key might be registered simultaneously on two different nodes. In this case, the cluster experiences a registry naming conflict.
+
+When this happens, Syn will resolve this Process Registry conflict by choosing a single process. Syn will discard the processes running on the node the conflict is being resolved on, and by default will kill it by sending a `kill` signal with `exit(Pid, kill)`.
+
+If this is not desired, you can set the `registry_conflicting_process_callback` option to instruct Syn to trigger a callback, so that you can perform custom operations (such as a graceful shutdown). In this case, the process will not be killed by Syn, and you'll have to decide what to do with it. This callback will be called only on the node where the process is running.
+
+The callback function is defined as:
+```erlang
+CallbackFun = fun(Key, Pid, Meta) -> any().
+
+Types:
+	Key = any()
+	Pid = pid()
+	Meta = any()
+```
+The `Key`, `Pid` and `Meta` are the ones of the process that is to be discarded.
+
+For instance, if you want to send a `shutdown` message to the discarded process:
+
+```erlang
+-module(my_callback).
+-export([callback_on_conflicting_process/3]).
+
+callback_on_conflicting_process(_Key, Pid, _Meta) ->
+	Pid ! shutdown
+```
+
+Set it in the options:
+```erlang
+{syn, [
+	%% define callback function
+	{registry_conflicting_process_callback, [my_callback, callback_on_conflicting_process]}
+]}
+```
+
+> Important Note: The conflict resolution method SHOULD be defined in the same way across all nodes of the cluster. Having different conflict resolution options on different nodes can have unexpected results.
+
+### Process Groups options
+There currently are none.
 
 
 ## Internals

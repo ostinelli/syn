@@ -258,9 +258,10 @@ i_member_check(Pid, NameGuard) ->
 -spec i_get_members(Name :: any()) -> [Process :: #syn_groups_table{}].
 i_get_members(Name) ->
     Processes = mnesia:dirty_read(syn_groups_table, Name),
-    lists:map(fun(Process) ->
+    Pids = lists:map(fun(Process) ->
         Process#syn_groups_table.pid
-    end, Processes).
+    end, Processes),
+    lists:sort(Pids).
 
 -spec i_find_by_pid(Pid :: pid()) -> Process :: #syn_groups_table{} | undefined.
 i_find_by_pid(Pid) ->

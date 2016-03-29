@@ -302,13 +302,9 @@ two_nodes_kill(Config) ->
     %% register
     ok = syn:join(<<"my group">>, PidSlave),
     ok = rpc:call(SlaveNode, syn, join, [<<"my group">>, PidLocal]),
-    %% retrieve
-    2 = length(syn:get_members(<<"my group">>)),
-    true = syn:member(PidLocal, <<"my group">>),
-    true = syn:member(PidSlave, <<"my group">>),
-    2 = length(rpc:call(SlaveNode, syn, get_members, [<<"my group">>])),
-    true = rpc:call(SlaveNode, syn, member, [PidLocal, <<"my group">>]),
-    true = rpc:call(SlaveNode, syn, member, [PidSlave, <<"my group">>]),
+    %% retrieve, pid should have the same order in all nodes
+    [PidSlave, PidLocal] = syn:get_members(<<"my group">>),
+    [PidSlave, PidLocal] = rpc:call(SlaveNode, syn, get_members, [<<"my group">>]),
     %% kill processes
     syn_test_suite_helper:kill_process(PidLocal),
     syn_test_suite_helper:kill_process(PidSlave),
