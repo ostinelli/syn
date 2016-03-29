@@ -4,8 +4,9 @@
         {vsn, "1.2.1"},
         {registered, [
             syn_consistency,
+            syn_groups,
             syn_registry,
-            syn_groups
+            syn_sup
         ]},
         {applications, [
             kernel,
