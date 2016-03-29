@@ -135,12 +135,12 @@ handle_info({mnesia_system_event, _MnesiaEvent}, State) ->
     %% ignore mnesia event
     {noreply, State};
 
-handle_info({purge_registry_double_processes, DoubleRegistryProcessesInfo}, #state{
+handle_info({handle_purgeg_registry_double_processes, DoubleRegistryProcessesInfo}, #state{
     registry_conflicting_process_callback_module = RegistryConflictingProcessCallbackModule,
     registry_conflicting_process_callback_function = RegistryConflictingProcessCallbackFunction
 } = State) ->
     error_logger:warning_msg("About to purge double processes after netsplit"),
-    purge_registry_double_processes(RegistryConflictingProcessCallbackModule, RegistryConflictingProcessCallbackFunction, DoubleRegistryProcessesInfo),
+    handle_purged_registry_double_processes(RegistryConflictingProcessCallbackModule, RegistryConflictingProcessCallbackFunction, DoubleRegistryProcessesInfo),
     {noreply, State};
 
 handle_info(Info, State) ->
@@ -267,7 +267,7 @@ purge_registry_double_processes_from_local_mnesia(LocalRegistryProcessesInfo, Re
     DoubleRegistryProcessesInfo = lists:foldl(F, [], RemoteRegistryProcessesInfo),
 
     %% send to syn_consistency gen_server to handle double processes once merging is done
-    ?MODULE ! {purge_registry_double_processes, DoubleRegistryProcessesInfo},
+    ?MODULE ! {handle_purgeg_registry_double_processes, DoubleRegistryProcessesInfo},
 
     %% compute local processes without doubles
     LocalRegistryProcessesInfo1 = ets:tab2list(Tab),
@@ -304,27 +304,6 @@ write_registry_processes_info_to_node(Node, RegistryProcessesInfo) ->
         })
     end,
     lists:foreach(FWrite, RegistryProcessesInfo).
-
--spec purge_registry_double_processes(
-    RegistryConflictingProcessCallbackModule :: atom(),
-    RegistryConflictingProcessCallbackFunction :: atom(),
-    DoubleRegistryProcessesInfo :: list()
-) -> ok.
-purge_registry_double_processes(undefined, _, DoubleRegistryProcessesInfo) ->
-    F = fun({Key, LocalProcessPid, _LocalProcessMeta}) ->
-        error_logger:warning_msg("Found a double process for ~s, killing it on local node ~p", [Key, node()]),
-        exit(LocalProcessPid, kill)
-    end,
-    lists:foreach(F, DoubleRegistryProcessesInfo);
-purge_registry_double_processes(RegistryConflictingProcessCallbackModule, RegistryConflictingProcessCallbackFunction, DoubleRegistryProcessesInfo) ->
-    F = fun({Key, LocalProcessPid, LocalProcessMeta}) ->
-        spawn(
-            fun() ->
-                error_logger:warning_msg("Found a double process for ~s, about to trigger callback on local node ~p", [Key, node()]),
-                RegistryConflictingProcessCallbackModule:RegistryConflictingProcessCallbackFunction(Key, LocalProcessPid, LocalProcessMeta)
-            end)
-    end,
-    lists:foreach(F, DoubleRegistryProcessesInfo).
 
 -spec stitch_group_tab(RemoteNode :: atom()) -> ok.
 stitch_group_tab(RemoteNode) ->
@@ -363,3 +342,24 @@ write_groups_processes_info_to_node(Node, GroupsRegistryProcessesInfo) ->
         })
     end,
     lists:foreach(FWrite, GroupsRegistryProcessesInfo).
+
+-spec handle_purged_registry_double_processes(
+    RegistryConflictingProcessCallbackModule :: atom(),
+    RegistryConflictingProcessCallbackFunction :: atom(),
+    DoubleRegistryProcessesInfo :: list()
+) -> ok.
+handle_purged_registry_double_processes(undefined, _, DoubleRegistryProcessesInfo) ->
+    F = fun({Key, LocalProcessPid, _LocalProcessMeta}) ->
+        error_logger:warning_msg("Found a double process for ~s, killing it on local node ~p", [Key, node()]),
+        exit(LocalProcessPid, kill)
+        end,
+    lists:foreach(F, DoubleRegistryProcessesInfo);
+handle_purged_registry_double_processes(RegistryConflictingProcessCallbackModule, RegistryConflictingProcessCallbackFunction, DoubleRegistryProcessesInfo) ->
+    F = fun({Key, LocalProcessPid, LocalProcessMeta}) ->
+        spawn(
+            fun() ->
+                error_logger:warning_msg("Found a double process for ~s, about to trigger callback on local node ~p", [Key, node()]),
+                RegistryConflictingProcessCallbackModule:RegistryConflictingProcessCallbackFunction(Key, LocalProcessPid, LocalProcessMeta)
+            end)
+        end,
+    lists:foreach(F, DoubleRegistryProcessesInfo).
