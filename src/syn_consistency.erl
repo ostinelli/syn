@@ -135,7 +135,7 @@ handle_info({mnesia_system_event, _MnesiaEvent}, State) ->
     %% ignore mnesia event
     {noreply, State};
 
-handle_info({handle_purgeg_registry_double_processes, DoubleRegistryProcessesInfo}, #state{
+handle_info({handle_purged_registry_double_processes, DoubleRegistryProcessesInfo}, #state{
     registry_conflicting_process_callback_module = RegistryConflictingProcessCallbackModule,
     registry_conflicting_process_callback_function = RegistryConflictingProcessCallbackFunction
 } = State) ->
@@ -275,7 +275,7 @@ purge_registry_double_processes_from_local_mnesia(LocalRegistryProcessesInfo, Re
     DoubleRegistryProcessesInfo = lists:foldl(F, [], RemoteRegistryProcessesInfo),
 
     %% send to syn_consistency gen_server to handle double processes once merging is done
-    ?MODULE ! {handle_purgeg_registry_double_processes, DoubleRegistryProcessesInfo},
+    ?MODULE ! {handle_purged_registry_double_processes, DoubleRegistryProcessesInfo},
 
     %% compute local processes without doubles
     LocalRegistryProcessesInfo1 = ets:tab2list(Tab),
