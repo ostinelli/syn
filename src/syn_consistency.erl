@@ -188,12 +188,20 @@ delete_groups_pids_of_disconnected_node(RemoteNode) ->
 
 -spec automerge(RemoteNode :: atom()) -> ok.
 automerge(RemoteNode) ->
+    %% suspend processes able to modify mnesia tables
+    sys:suspend(syn_registry),
+    sys:suspend(syn_groups),
+    %% resolve conflicts
     global:trans({{?MODULE, automerge}, self()},
         fun() ->
             error_logger:warning_msg("AUTOMERGE starting on node ~p for remote node ~p (global lock is set)", [node(), RemoteNode]),
             check_stitch(RemoteNode),
             error_logger:warning_msg("AUTOMERGE done (global lock about to be unset)")
-        end).
+        end
+    ),
+    %% resume processes able to modify mnesia tables
+    sys:resume(syn_registry),
+    sys:resume(syn_groups).
 
 -spec check_stitch(RemoteNode :: atom()) -> ok.
 check_stitch(RemoteNode) ->
@@ -352,7 +360,7 @@ handle_purged_registry_double_processes(undefined, _, DoubleRegistryProcessesInf
     F = fun({Key, LocalProcessPid, _LocalProcessMeta}) ->
         error_logger:warning_msg("Found a double process for ~s, killing it on local node ~p", [Key, node()]),
         exit(LocalProcessPid, kill)
-        end,
+    end,
     lists:foreach(F, DoubleRegistryProcessesInfo);
 handle_purged_registry_double_processes(RegistryConflictingProcessCallbackModule, RegistryConflictingProcessCallbackFunction, DoubleRegistryProcessesInfo) ->
     F = fun({Key, LocalProcessPid, LocalProcessMeta}) ->
@@ -360,6 +368,7 @@ handle_purged_registry_double_processes(RegistryConflictingProcessCallbackModule
             fun() ->
                 error_logger:warning_msg("Found a double process for ~s, about to trigger callback on local node ~p", [Key, node()]),
                 RegistryConflictingProcessCallbackModule:RegistryConflictingProcessCallbackFunction(Key, LocalProcessPid, LocalProcessMeta)
-            end)
-        end,
+            end
+        )
+    end,
     lists:foreach(F, DoubleRegistryProcessesInfo).
