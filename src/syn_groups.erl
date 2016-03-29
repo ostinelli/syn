@@ -58,17 +58,17 @@ start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], Options).
 
 -spec join(Name :: any(), Pid :: pid()) -> ok | {error, pid_already_in_group}.
-join(Name, Pid) ->
+join(Name, Pid) when is_pid(Pid) ->
     Node = node(Pid),
     gen_server:call({?MODULE, Node}, {join, Name, Pid}).
 
 -spec leave(Name :: any(), Pid :: pid()) -> ok | {error, undefined | pid_not_in_group}.
-leave(Name, Pid) ->
+leave(Name, Pid) when is_pid(Pid) ->
     Node = node(Pid),
     gen_server:call({?MODULE, Node}, {leave, Name, Pid}).
 
 -spec member(Pid :: pid(), Name :: any()) -> boolean().
-member(Pid, Name) ->
+member(Pid, Name) when is_pid(Pid) ->
     i_member(Pid, Name).
 
 -spec get_members(Name :: any()) -> [pid()].

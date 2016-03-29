@@ -70,25 +70,25 @@ find_by_key(Key, with_meta) ->
     end.
 
 -spec find_by_pid(Pid :: pid()) -> Key :: any() | undefined.
-find_by_pid(Pid) ->
+find_by_pid(Pid) when is_pid(Pid) ->
     case i_find_by_pid(on_connected_node, Pid) of
         undefined -> undefined;
         Process -> Process#syn_registry_table.key
     end.
 
 -spec find_by_pid(Pid :: pid(), with_meta) -> {Key :: any(), Meta :: any()} | undefined.
-find_by_pid(Pid, with_meta) ->
+find_by_pid(Pid, with_meta) when is_pid(Pid) ->
     case i_find_by_pid(on_connected_node, Pid) of
         undefined -> undefined;
         Process -> {Process#syn_registry_table.key, Process#syn_registry_table.meta}
     end.
 
 -spec register(Key :: any(), Pid :: pid()) -> ok | {error, taken | pid_already_registered}.
-register(Key, Pid) ->
+register(Key, Pid) when is_pid(Pid) ->
     register(Key, Pid, undefined).
 
 -spec register(Key :: any(), Pid :: pid(), Meta :: any()) -> ok | {error, taken | pid_already_registered}.
-register(Key, Pid, Meta) ->
+register(Key, Pid, Meta) when is_pid(Pid) ->
     Node = node(Pid),
     gen_server:call({?MODULE, Node}, {register_on_node, Key, Pid, Meta}).
 
