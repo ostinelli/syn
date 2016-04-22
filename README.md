@@ -89,6 +89,8 @@ Your application will have its own logic on how to connect to the other nodes in
 syn:init().
 ```
 
+> Ensure to initialize Syn **only once** on a node. Even if the node were to disconnect from the cluster and reconnect again, do not re-initialize it. This would disable Syn from being able to handle conflict resolution automatically.
+
 The recommended place to initialize Syn is in the `start/2` function in your main application module, something along the lines of:
 
 ```erlang
