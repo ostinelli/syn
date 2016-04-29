@@ -34,8 +34,7 @@
 -export([
     two_nodes_netsplit_when_there_are_no_conflicts/1,
     two_nodes_netsplit_kill_resolution_when_there_are_conflicts/1,
-    two_nodes_netsplit_callback_resolution_when_there_are_conflicts/1,
-    two_nodes_netsplit_with_nodedown_when_there_are_no_conflicts/1
+    two_nodes_netsplit_callback_resolution_when_there_are_conflicts/1
 ]).
 
 -export([
@@ -45,7 +44,6 @@
 %% internal
 -export([process_reply_main/0]).
 -export([registry_conflicting_process_callback_dummy/3]).
--export([wait_for_node_down_resume_and_reconnect/1]).
 
 %% include
 -include_lib("common_test/include/ct.hrl").
@@ -85,8 +83,7 @@ groups() ->
         {two_nodes_netsplits, [shuffle], [
             two_nodes_netsplit_when_there_are_no_conflicts,
             two_nodes_netsplit_kill_resolution_when_there_are_conflicts,
-            two_nodes_netsplit_callback_resolution_when_there_are_conflicts,
-            two_nodes_netsplit_with_nodedown_when_there_are_no_conflicts
+            two_nodes_netsplit_callback_resolution_when_there_are_conflicts
         ]},
         {three_nodes_netsplits, [shuffle], [
             three_nodes_netsplit_kill_resolution_when_there_are_conflicts
@@ -400,90 +397,6 @@ two_nodes_netsplit_callback_resolution_when_there_are_conflicts(Config) ->
     %% unregister
     global:unregister_name(syn_consistency_SUITE_result).
 
-two_nodes_netsplit_with_nodedown_when_there_are_no_conflicts(Config) ->
-    %% get slave
-    SlaveNode = proplists:get_value(slave_node, Config),
-    CurrentNode = node(),
-
-    %% start syn
-    ok = syn:start(),
-    ok = syn:init(),
-    ok = rpc:call(SlaveNode, syn, start, []),
-    ok = rpc:call(SlaveNode, syn, init, []),
-    timer:sleep(100),
-
-    %% start processes
-    LocalPid = syn_test_suite_helper:start_process(),
-    SlavePidLocal = syn_test_suite_helper:start_process(SlaveNode),
-    SlavePidSlave = syn_test_suite_helper:start_process(SlaveNode),
-
-    %% register
-    ok = syn:register(local_pid, LocalPid),
-    ok = syn:register(slave_pid_local, SlavePidLocal),    %% slave registered on local node
-    ok = rpc:call(SlaveNode, syn, register, [slave_pid_slave, SlavePidSlave]),    %% slave registered on slave node
-    timer:sleep(100),
-
-    %% check tables
-    3 = mnesia:table_info(syn_registry_table, size),
-    3 = rpc:call(SlaveNode, mnesia, table_info, [syn_registry_table, size]),
-
-    LocalActiveReplicas = mnesia:table_info(syn_registry_table, active_replicas),
-    2 = length(LocalActiveReplicas),
-    true = lists:member(SlaveNode, LocalActiveReplicas),
-    true = lists:member(CurrentNode, LocalActiveReplicas),
-
-    SlaveActiveReplicas = rpc:call(SlaveNode, mnesia, table_info, [syn_registry_table, active_replicas]),
-    2 = length(SlaveActiveReplicas),
-    true = lists:member(SlaveNode, SlaveActiveReplicas),
-    true = lists:member(CurrentNode, SlaveActiveReplicas),
-
-    %% simulate net split
-    ok = net_kernel:monitor_nodes(true),
-    rpc:cast(SlaveNode, ?MODULE, wait_for_node_down_resume_and_reconnect, [node()]),
-
-    receive
-        {nodedown, SlaveNode} -> ok
-    end,
-    timer:sleep(1000),
-
-    %% check tables
-    1 = mnesia:table_info(syn_registry_table, size),
-    [CurrentNode] = mnesia:table_info(syn_registry_table, active_replicas),
-
-    %% wait to be reconnected
-    receive
-        {nodeup, SlaveNode} -> ok
-    end,
-    timer:sleep(1000),
-
-    %% check tables
-    3 = mnesia:table_info(syn_registry_table, size),
-    3 = rpc:call(SlaveNode, mnesia, table_info, [syn_registry_table, size]),
-
-    LocalActiveReplicas2 = mnesia:table_info(syn_registry_table, active_replicas),
-    2 = length(LocalActiveReplicas2),
-    true = lists:member(SlaveNode, LocalActiveReplicas2),
-    true = lists:member(CurrentNode, LocalActiveReplicas2),
-
-    SlaveActiveReplicas2 = rpc:call(SlaveNode, mnesia, table_info, [syn_registry_table, active_replicas]),
-    2 = length(SlaveActiveReplicas2),
-    true = lists:member(SlaveNode, SlaveActiveReplicas2),
-    true = lists:member(CurrentNode, SlaveActiveReplicas2),
-
-    %% check processes
-    LocalPid = syn:find_by_key(local_pid),
-    SlavePidLocal = syn:find_by_key(slave_pid_local),
-    SlavePidSlave = syn:find_by_key(slave_pid_slave),
-
-    LocalPid = rpc:call(SlaveNode, syn, find_by_key, [local_pid]),
-    SlavePidLocal = rpc:call(SlaveNode, syn, find_by_key, [slave_pid_local]),
-    SlavePidSlave = rpc:call(SlaveNode, syn, find_by_key, [slave_pid_slave]),
-
-    %% kill processes
-    syn_test_suite_helper:kill_process(LocalPid),
-    syn_test_suite_helper:kill_process(SlavePidLocal),
-    syn_test_suite_helper:kill_process(SlavePidSlave).
-
 three_nodes_netsplit_kill_resolution_when_there_are_conflicts(Config) ->
     %% get slaves
     SlaveNode = proplists:get_value(slave_node, Config),
@@ -569,13 +482,3 @@ process_reply_main() ->
 
 registry_conflicting_process_callback_dummy(_Key, Pid, Meta) ->
     Pid ! {shutdown, Meta}.
-
-wait_for_node_down_resume_and_reconnect(Node) ->
-    monitor_node(Node, true),
-    ok = sys:suspend(net_kernel),
-    receive
-        {nodedown, Node} ->
-            timer:sleep(1000),
-            sys:resume(net_kernel),
-            net_kernel:connect_node(Node)
-    end.
