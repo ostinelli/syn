@@ -296,7 +296,7 @@ Types:
 	  Reply = any()
 ```
 
-> Syn will wait up to the value specified in `Timeout` to receive all replies from the members. The members that do not reply in time will be added to the `BadPids` list.
+> Syn will wait up to the value specified in `Timeout` to receive all replies from the members. The members that do not reply in time or that crash before sending a reply will be added to the `BadPids` list.
 
 When this call is issued, all members will receive a tuple in the format:
 

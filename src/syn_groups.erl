@@ -39,6 +39,9 @@
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
+%% internal
+-export([multi_call_and_receive/4]).
+
 %% records
 -record(state, {}).
 
@@ -94,10 +97,10 @@ multi_call(Name, Message, Timeout) ->
     Self = self(),
     MemberPids = i_get_members(Name),
     FSend = fun(Pid) ->
-        Pid ! {syn_multi_call, Self, Message}
+        spawn_link(?MODULE, multi_call_and_receive, [Self, Pid, Message, Timeout])
     end,
     lists:foreach(FSend, MemberPids),
-    collect_replies(MemberPids, Timeout).
+    collect_replies(MemberPids).
 
 -spec multi_call_reply(CallerPid :: pid(), Reply :: any()) -> {syn_multi_call_reply, pid(), Reply :: any()}.
 multi_call_reply(CallerPid, Reply) ->
@@ -278,19 +281,38 @@ i_find_by_pid(Pid) ->
 remove_process(Process) ->
     mnesia:dirty_delete_object(syn_groups_table, Process).
 
--spec collect_replies(MemberPids :: [pid()], Timeout :: non_neg_integer()) ->
-    {[{pid(), Reply :: any()}], [BadPid :: pid()]}.
-collect_replies(MemberPids, Timeout) ->
-    collect_replies(MemberPids, Timeout, []).
+-spec multi_call_and_receive(
+    CollectorPid :: pid(),
+    Pid :: pid(),
+    Message :: any(),
+    Timeout :: non_neg_integer()
+) -> any().
+multi_call_and_receive(CollectorPid, Pid, Message, Timeout) ->
+    MonitorRef = monitor(process, Pid),
+    Pid ! {syn_multi_call, self(), Message},
 
--spec collect_replies(MemberPids :: [pid()], Timeout :: non_neg_integer(), Replies :: [{pid(), Reply :: any()}]) ->
-    {[{pid(), Reply :: any()}], [BadPid :: pid()]}.
-collect_replies([], _Timeout, Replies) -> {Replies, []};
-collect_replies(MemberPids, Timeout, Replies) ->
     receive
         {syn_multi_call_reply, Pid, Reply} ->
-            MemberPids1 = lists:delete(Pid, MemberPids),
-            collect_replies(MemberPids1, Timeout, [{Pid, Reply} | Replies])
+            CollectorPid ! {reply, Pid, Reply};
+        {'DOWN', MonitorRef, _, _, _} ->
+            CollectorPid ! {bad_pid, Pid}
     after Timeout ->
-        {Replies, MemberPids}
+        CollectorPid ! {bad_pid, Pid}
+    end.
+
+-spec collect_replies(MemberPids :: [pid()]) -> {[{pid(), Reply :: any()}], [BadPid :: pid()]}.
+collect_replies(MemberPids) ->
+    collect_replies(MemberPids, [], []).
+
+-spec collect_replies(MemberPids :: [pid()], [{pid(), Reply :: any()}], [pid()]) ->
+    {[{pid(), Reply :: any()}], [BadPid :: pid()]}.
+collect_replies([], Replies, BadPids) -> {Replies, BadPids};
+collect_replies(MemberPids, Replies, BadPids) ->
+    receive
+        {reply, Pid, Reply} ->
+            MemberPids1 = lists:delete(Pid, MemberPids),
+            collect_replies(MemberPids1, [{Pid, Reply} | Replies], BadPids);
+        {bad_pid, Pid} ->
+            MemberPids1 = lists:delete(Pid, MemberPids),
+            collect_replies(MemberPids1, Replies, [Pid | BadPids])
     end.

@@ -36,7 +36,8 @@
     single_node_leave/1,
     single_node_kill/1,
     single_node_publish/1,
-    single_node_multi_call/1
+    single_node_multi_call/1,
+    single_node_multi_call_when_recipient_crashes/1
 ]).
 -export([
     two_nodes_kill/1,
@@ -46,7 +47,7 @@
 
 %% internal
 -export([recipient_loop/1]).
--export([called_loop/1]).
+-export([called_loop/1, called_loop_that_crashes/1]).
 
 %% include
 -include_lib("common_test/include/ct.hrl").
@@ -87,7 +88,8 @@ groups() ->
             single_node_leave,
             single_node_kill,
             single_node_publish,
-            single_node_multi_call
+            single_node_multi_call,
+            single_node_multi_call_when_recipient_crashes
         ]},
         {two_nodes_process_groups, [shuffle], [
             two_nodes_kill,
@@ -277,6 +279,33 @@ single_node_multi_call(_Config) ->
     syn_test_suite_helper:kill_process(Pid2),
     syn_test_suite_helper:kill_process(PidUnresponsive).
 
+single_node_multi_call_when_recipient_crashes(_Config) ->
+    %% set schema location
+    application:set_env(mnesia, schema_location, ram),
+    %% start
+    ok = syn:start(),
+    ok = syn:init(),
+    %% start processes
+    Pid1 = syn_test_suite_helper:start_process(fun() -> called_loop(pid1) end),
+    Pid2 = syn_test_suite_helper:start_process(fun() -> called_loop(pid2) end),
+    PidCrashes = syn_test_suite_helper:start_process(fun() -> called_loop_that_crashes(pid_crashes) end),
+    %% register
+    ok = syn:join(<<"my group">>, Pid1),
+    ok = syn:join(<<"my group">>, Pid2),
+    ok = syn:join(<<"my group">>, PidCrashes),
+    %% call
+    {Time, {Replies, BadPids}} = timer:tc(syn, multi_call, [<<"my group">>, get_pid_name]),
+    %% check that pid2 was monitored, no need to wait for timeout
+    true = Time/1000 < 1000,
+    %% check responses
+    2 = length(Replies),
+    pid1 = proplists:get_value(Pid1, Replies),
+    pid2 = proplists:get_value(Pid2, Replies),
+    [PidCrashes] = BadPids,
+    %% kill processes
+    syn_test_suite_helper:kill_process(Pid1),
+    syn_test_suite_helper:kill_process(Pid2).
+
 two_nodes_kill(Config) ->
     %% get slave
     SlaveNode = proplists:get_value(slave_node, Config),
@@ -398,4 +427,9 @@ recipient_loop(Pid) ->
 called_loop(PidName) ->
     receive
         {syn_multi_call, CallerPid, get_pid_name} -> syn:multi_call_reply(CallerPid, PidName)
+    end.
+
+called_loop_that_crashes(_PidName) ->
+    receive
+        {syn_multi_call, _CallerPid, get_pid_name} -> exit(recipient_crashed_on_purpose)
     end.
