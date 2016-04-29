@@ -118,15 +118,17 @@ get_members(Name) ->
 publish(Name, Message) ->
     syn_groups:publish(Name, Message).
 
--spec multi_call(Name :: any(), Message :: any()) -> [{pid(), Response :: any()}].
+-spec multi_call(Name :: any(), Message :: any()) ->
+    {[{pid(), Reply :: any()}], [BadPid :: pid()]}.
 multi_call(Name, Message) ->
     syn_groups:multi_call(Name, Message).
 
--spec multi_call(Name :: any(), Message :: any(), Timeout :: non_neg_integer()) -> [{pid(), Response :: any()}].
+-spec multi_call(Name :: any(), Message :: any(), Timeout :: non_neg_integer()) ->
+    {[{pid(), Reply :: any()}], [BadPid :: pid()]}.
 multi_call(Name, Message, Timeout) ->
     syn_groups:multi_call(Name, Message, Timeout).
 
--spec multi_call_reply(CallerPid :: pid(), Reply :: any()) -> ok.
+-spec multi_call_reply(CallerPid :: pid(), Reply :: any()) -> {syn_multi_call_reply, pid(), Reply :: any()}.
 multi_call_reply(CallerPid, Reply) ->
     syn_groups:multi_call_reply(CallerPid, Reply).
 

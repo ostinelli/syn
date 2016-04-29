@@ -99,7 +99,7 @@ multi_call(Name, Message, Timeout) ->
     lists:foreach(FSend, MemberPids),
     collect_replies(MemberPids, Timeout).
 
--spec multi_call_reply(CallerPid :: pid(), Reply :: any()) -> ok.
+-spec multi_call_reply(CallerPid :: pid(), Reply :: any()) -> {syn_multi_call_reply, pid(), Reply :: any()}.
 multi_call_reply(CallerPid, Reply) ->
     CallerPid ! {syn_multi_call_reply, self(), Reply}.
 
@@ -259,7 +259,7 @@ i_member_check(Pid, NameGuard) ->
         _ -> true
     end.
 
--spec i_get_members(Name :: any()) -> [Process :: #syn_groups_table{}].
+-spec i_get_members(Name :: any()) -> [pid()].
 i_get_members(Name) ->
     Processes = mnesia:dirty_read(syn_groups_table, Name),
     Pids = lists:map(fun(Process) ->
