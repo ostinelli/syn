@@ -36,12 +36,12 @@
     single_node_leave/1,
     single_node_kill/1,
     single_node_publish/1,
-    single_node_call/1
+    single_node_multi_call/1
 ]).
 -export([
     two_nodes_kill/1,
     two_nodes_publish/1,
-    two_nodes_call/1
+    two_nodes_multi_call/1
 ]).
 
 %% internal
@@ -87,12 +87,12 @@ groups() ->
             single_node_leave,
             single_node_kill,
             single_node_publish,
-            single_node_call
+            single_node_multi_call
         ]},
         {two_nodes_process_groups, [shuffle], [
             two_nodes_kill,
             two_nodes_publish,
-            two_nodes_call
+            two_nodes_multi_call
         ]}
     ].
 %% -------------------------------------------------------------------
@@ -251,7 +251,7 @@ single_node_publish(_Config) ->
     syn_test_suite_helper:kill_process(Pid1),
     syn_test_suite_helper:kill_process(Pid2).
 
-single_node_call(_Config) ->
+single_node_multi_call(_Config) ->
     %% set schema location
     application:set_env(mnesia, schema_location, ram),
     %% start
@@ -354,7 +354,7 @@ two_nodes_publish(Config) ->
     syn_test_suite_helper:kill_process(PidLocal),
     syn_test_suite_helper:kill_process(PidSlave).
 
-two_nodes_call(Config) ->
+two_nodes_multi_call(Config) ->
     %% get slave
     SlaveNode = proplists:get_value(slave_node, Config),
     %% set schema location
