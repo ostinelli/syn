@@ -376,7 +376,7 @@ two_nodes_multi_call(Config) ->
     ok = syn:join(<<"my group">>, PidUnresponsive),
     timer:sleep(100),
     %% call
-    {Replies, BadPids} = syn:multi_call(<<"my group">>, get_pid_name),
+    {Replies, BadPids} = syn:multi_call(<<"my group">>, get_pid_name, 3000),
     %% check responses
     2 = length(Replies),
     pid1 = proplists:get_value(PidLocal, Replies),

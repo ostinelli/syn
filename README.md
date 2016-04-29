@@ -280,17 +280,23 @@ To call all group members and get their replies:
 
 ```erlang
 syn:multi_call(Name, Message) -> {Replies, BadPids}.
+```
+Same as `syn:multi_call(Name, Message, 5000)`.
+
+```erlang
+syn:multi_call(Name, Message, Timeout) -> {Replies, BadPids}.
 
 Types:
 	Name = any()
 	Message = any()
+	Timeout = non_neg_integer()
 	Replies = [{MemberPid, Reply}]
 	BadPids = [MemberPid]
 	  MemberPid = pid()
 	  Reply = any()
 ```
 
-> Syn will wait up to 5 seconds to receive all replies from the members. The members that do not reply in time will be added to the BadPids list.
+> Syn will wait up to the value specified in `Timeout` to receive all replies from the members. The members that do not reply in time will be added to the `BadPids` list.
 
 When this call is issued, all members will receive a tuple in the format:
 
