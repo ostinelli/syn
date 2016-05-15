@@ -7,17 +7,17 @@
 ## Introduction
 
 ##### What is a Process Registry?
-A global Process Registry allows to register a process on all the nodes of a cluster with a single Key. Consider this the process equivalent of a DNS server: in the same way you can retrieve an IP address from a domain name, you can retrieve a process from its Key.
+A global Process Registry allows registering a process on all the nodes of a cluster with a single Key. Consider this the process equivalent of a DNS server: in the same way you can retrieve an IP address from a domain name, you can retrieve a process from its Key.
 
 Typical Use Case: registering on a system a process that handles a physical device (using its serial number).
 
 ##### What is a Process Group?
-A global Process Group is a named group which contains many processes, eventually running on different nodes. With the group Name, you can retrieve on any cluster node the list of these processes, or publish a message to all of them. This mechanism allows for Publish / Subscribe patterns.
+A global Process Group is a named group which contains many processes, possibly running on different nodes. With the group Name, you can retrieve on any cluster node the list of these processes, or publish a message to all of them. This mechanism allows for Publish / Subscribe patterns.
 
 Typical Use Case: a chatroom.
 
 ##### What is Syn?
-Syn is both. It's a Process Registry and Process Group manager that has the following features:
+Syn is a Process Registry and Process Group manager that has the following features:
 
  * Global Process Registry (i.e. a process is uniquely identified with a Key across all the nodes of a cluster).
  * Global Process Group manager (i.e. a group is uniquely identified with a Name across all the nodes of a cluster).
@@ -32,7 +32,7 @@ Syn is both. It's a Process Registry and Process Group manager that has the foll
 ## Notes
 In any distributed system you are faced with a consistency challenge, which is often resolved by having one master arbiter performing all write operations (chosen with a mechanism of [leader election](http://en.wikipedia.org/wiki/Leader_election)), or through [atomic transactions](http://en.wikipedia.org/wiki/Atomicity_(database_systems)).
 
-Syn was born for applications of the [IoT](http://en.wikipedia.org/wiki/Internet_of_Things) field. In this context, Keys used to identify a process are often the physical object's unique identifier (for instance, its serial or mac address), and are therefore already defined and unique _before_ hitting the system.  The consistency challenge is less of a problem in this case, since the likelihood of concurrent incoming requests that would register processes with the same Key is extremely low and, in most cases, acceptable.
+Syn was born for applications of the [IoT](http://en.wikipedia.org/wiki/Internet_of_Things) field. In this context, Keys used to identify a process are often the physical object's unique identifier (for instance, its serial or MAC address), and are therefore already defined and unique _before_ hitting the system.  The consistency challenge is less of a problem in this case, since the likelihood of concurrent incoming requests that would register processes with the same Key is extremely low and, in most cases, acceptable.
 
 In addition, write speeds were a determining factor in the architecture of Syn.
 
@@ -77,21 +77,21 @@ $ rebar compile
 ## Usage
 
 ### Setup
-Ensure to start Syn from your application. This can be done by either providing it as a dependency in your `.app` file, or by starting it manually:
+Ensure that your application starts Syn. This can be done by either providing it as a dependency in your `.app` file, or by starting it manually:
 
 ```erlang
 syn:start().
 ```
 
-Your application will have its own logic on how to connect to the other nodes in the cluster. Once it is connected, ensure to initialize Syn (this will set up the underlying mnesia backend):
+Your application will have its own logic on how to connect to the other nodes in the cluster. Once it is connected, ensure that Syn gets initialized (this will set up the underlying mnesia backend):
 
 ```erlang
 syn:init().
 ```
 
-> Ensure to initialize Syn **only once** on a node. Even if the node were to disconnect from the cluster and reconnect again, do not re-initialize it. This would disable Syn from being able to handle conflict resolution automatically.
+> Ensure that Syn is initialized **only once** on a node. Even if the node were to disconnect from the cluster and reconnect again, do not re-initialize it. This would disable Syn from being able to handle conflict resolution automatically.
 
-The recommended place to initialize Syn is in the `start/2` function in your main application module, something along the lines of:
+A possible place to initialize Syn is in the `start/2` function in your main application module, something along the lines of:
 
 ```erlang
 -module(myapp_app).
@@ -116,21 +116,17 @@ connect_nodes() ->
 
 Syn is then ready.
 
+> You may prefer to initialize Syn inside of the root supervisor instead. This is particularly true if you are using OTP's `included_applications` feature.
+
 
 ### Process Registry
 
 To register a process:
 
 ```erlang
-syn:register(Key, Pid) -> ok | {error, Error}.
-
-Types:
-	Key = any()
-	Pid = pid()
-	Error = taken | pid_already_registered
+syn:register(Key, Pid) ->
+    syn:register(Key, Pid, undefined).
 ```
-
-To register a process and attach metadata to it:
 
 ```erlang
 syn:register(Key, Pid, Meta) -> ok | {error, Error}.
@@ -142,7 +138,14 @@ Types:
 	Error = taken | pid_already_registered
 ```
 
+| ERROR | DESC
+|-----|-----
+| taken | The Key is already taken by another process.
+| pid_already_registered | The Pid is already registered with another Key.
+
+> You may re-register a process multiple times, for example if you need to update its metadata.
 > When a process gets registered, Syn will automatically monitor it.
+
 
 To retrieve a Pid from a Key:
 
@@ -228,6 +231,7 @@ Types:
 	Pid = pid()
 ```
 
+> A process can join multiple groups. Also, a process may join the same group multiple times, though it will still be listed only once in it.
 > When a process joins a group, Syn will automatically monitor it.
 
 To remove a process from a group:
@@ -275,12 +279,14 @@ Types:
 	RecipientCount = non_neg_integer()
 ```
 
+> `RecipientCount` is the count of the intended recipients.
+
 To call all group members and get their replies:
 
 ```erlang
-syn:multi_call(Name, Message) -> {Replies, BadPids}.
+syn:multi_call(Name, Message) ->
+    syn:multi_call(Name, Message, 5000).
 ```
-Same as `syn:multi_call(Name, Message, 5000)`.
 
 ```erlang
 syn:multi_call(Name, Message, Timeout) -> {Replies, BadPids}.
@@ -332,7 +338,7 @@ Options can be set in the environment variable `syn`. You're probably best off u
 These options are explained here below.
 
 ### Registry options
-These allow to set the Process Registry options, and are:
+These allow setting the Process Registry options, and are:
 
  * `registry_process_exit_callback`
  * `registry_conflicting_process_callback`
@@ -432,7 +438,7 @@ Before implementing a new feature, please submit a ticket to discuss what you in
 
 Do not commit to master in your fork. Provide a clean branch without merge commits. Every pull request should have its own topic branch. In this way, every additional adjustments to the original pull request might be done easily, and squashed with `git rebase -i`. The updated branch will be visible in the same pull request, so there will be no need to open new pull requests when there are changes to be applied.
 
-Ensure to include proper testing. To run Syn tests you simply have to be in the project's root directory and run:
+Ensure that  proper testing is included. To run Syn tests you simply have to be in the project's root directory and run:
 
 ```bash
 $ make tests
