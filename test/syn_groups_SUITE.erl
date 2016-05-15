@@ -208,19 +208,26 @@ single_node_kill(_Config) ->
     %% start process
     Pid = syn_test_suite_helper:start_process(),
     %% retrieve
-    [] = syn:get_members(<<"my group">>),
-    false = syn:member(Pid, <<"my group">>),
+    [] = syn:get_members(<<"my group 1">>),
+    [] = syn:get_members(<<"my group 2">>),
+    false = syn:member(Pid, <<"my group 1">>),
+    false = syn:member(Pid, <<"my group 2">>),
     %% join
-    ok = syn:join(<<"my group">>, Pid),
+    ok = syn:join(<<"my group 1">>, Pid),
+    ok = syn:join(<<"my group 2">>, Pid),
     %% retrieve
-    [Pid] = syn:get_members(<<"my group">>),
-    true = syn:member(Pid, <<"my group">>),
+    [Pid] = syn:get_members(<<"my group 1">>),
+    [Pid] = syn:get_members(<<"my group 2">>),
+    true = syn:member(Pid, <<"my group 1">>),
+    true = syn:member(Pid, <<"my group 2">>),
     %% kill process
     syn_test_suite_helper:kill_process(Pid),
     timer:sleep(100),
     %% retrieve
-    [] = syn:get_members(<<"my group">>),
-    false = syn:member(Pid, <<"my group">>).
+    [] = syn:get_members(<<"my group 1">>),
+    [] = syn:get_members(<<"my group 2">>),
+    false = syn:member(Pid, <<"my group 1">>),
+    false = syn:member(Pid, <<"my group 2">>).
 
 single_node_publish(_Config) ->
     %% set schema location

@@ -154,11 +154,8 @@ handle_call({join, Name, Pid}, _From, State) ->
     end;
 
 handle_call({leave, Name, Pid}, _From, State) ->
-    %% we check again to return the correct response regardless of race conditions
-    case i_find_by_pid(Pid) of
+    case find_by_pid_and_name(Pid, Name) of
         undefined ->
-            {reply, {error, undefined}, State};
-        Process when Process#syn_groups_table.name =/= Name ->
             {error, pid_not_in_group};
         Process ->
             %% remove from table
@@ -195,8 +192,8 @@ handle_cast(Msg, State) ->
 
 handle_info({'EXIT', Pid, Reason}, State) ->
     %% check if pid is in table
-    case i_find_by_pid(Pid) of
-        undefined ->
+    case find_groups_by_pid(Pid) of
+        [] ->
             %% log
             case Reason of
                 normal -> ok;
@@ -205,18 +202,21 @@ handle_info({'EXIT', Pid, Reason}, State) ->
                     error_logger:error_msg("Received an exit message from an unlinked process ~p with reason: ~p", [Pid, Reason])
             end;
 
-        Process ->
-            %% get group
-            Name = Process#syn_groups_table.name,
-            %% log
-            case Reason of
-                normal -> ok;
-                killed -> ok;
-                _ ->
-                    error_logger:error_msg("Process of group ~p and pid ~p exited with reason: ~p", [Name, Pid, Reason])
+        Processes ->
+            F = fun(Process) ->
+                %% get group
+                Name = Process#syn_groups_table.name,
+                %% log
+                case Reason of
+                    normal -> ok;
+                    killed -> ok;
+                    _ ->
+                        error_logger:error_msg("Process of group ~p and pid ~p exited with reason: ~p", [Name, Pid, Reason])
+                end,
+                %% delete from table
+                remove_process(Process)
             end,
-            %% delete from table
-            remove_process(Process)
+            lists:foreach(F, Processes)
     end,
     %% return
     {noreply, State};
@@ -244,21 +244,28 @@ code_change(_OldVsn, State, _Extra) ->
 %% ===================================================================
 %% Internal
 %% ===================================================================
--spec i_member(Pid :: pid(), Name :: any()) -> boolean().
-i_member(Pid, Name) when is_tuple(Name) ->
-    i_member_check(Pid, {'==', '$1', {Name}});
-i_member(Pid, Name) ->
-    i_member_check(Pid, {'=:=', '$1', Name}).
+-spec find_by_pid_and_name(Pid :: pid(), Name :: any()) -> Process :: #syn_groups_table{} | undefined.
+find_by_pid_and_name(Pid, Name) when is_tuple(Name) ->
+    i_find_by_pid_and_name(Pid, {'==', '$1', {Name}});
+find_by_pid_and_name(Pid, Name) ->
+    i_find_by_pid_and_name(Pid, {'=:=', '$1', Name}).
 
--spec i_member_check(Pid :: pid(), NameGuard :: any()) -> boolean().
-i_member_check(Pid, NameGuard) ->
+-spec i_find_by_pid_and_name(Pid :: pid(), NameGuard :: any()) -> boolean().
+i_find_by_pid_and_name(Pid, NameGuard) ->
     %% build match specs
     MatchHead = #syn_groups_table{name = '$1', pid = '$2', _ = '_'},
     Guards = [NameGuard, {'=:=', '$2', Pid}],
-    Result = '$2',
+    Result = '$_',
     %% select
     case mnesia:dirty_select(syn_groups_table, [{MatchHead, Guards, [Result]}]) of
-        [] -> false;
+        [] -> undefined;
+        [Process] -> Process
+    end.
+
+-spec i_member(Pid :: pid(), Name :: any()) -> boolean().
+i_member(Pid, Name) ->
+    case find_by_pid_and_name(Pid, Name) of
+        undefined -> false;
         _ -> true
     end.
 
@@ -270,12 +277,9 @@ i_get_members(Name) ->
     end, Processes),
     lists:sort(Pids).
 
--spec i_find_by_pid(Pid :: pid()) -> Process :: #syn_groups_table{} | undefined.
-i_find_by_pid(Pid) ->
-    case mnesia:dirty_index_read(syn_groups_table, Pid, #syn_groups_table.pid) of
-        [Process] -> Process;
-        _ -> undefined
-    end.
+-spec find_groups_by_pid(Pid :: pid()) -> [Process :: #syn_groups_table{}].
+find_groups_by_pid(Pid) ->
+    mnesia:dirty_index_read(syn_groups_table, Pid, #syn_groups_table.pid).
 
 -spec remove_process(Process :: #syn_groups_table{}) -> ok.
 remove_process(Process) ->

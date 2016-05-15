@@ -239,7 +239,7 @@ syn:leave(Name, Pid) -> ok | {error, Error}.
 Types:
 	Name = any()
 	Pid = pid()
-	Error = undefined | pid_not_in_group
+	Error = pid_not_in_group
 ```
 
 > You don't need to remove processes that are about to die, since they are monitored by Syn and they will be removed automatically from their groups.
