@@ -289,9 +289,14 @@ single_node_when_mnesia_is_ram_re_register_error(_Config) ->
     Pid2 = syn_test_suite_helper:start_process(),
     %% register
     ok = syn:register(<<"my proc">>, Pid),
+    %% re-register same process
+    ok = syn:register(<<"my proc">>, Pid, {with, meta}),
+    %% register same process with another name
+    {error, pid_already_registered} = syn:register(<<"my proc 2">>, Pid),
+    %% register another process
     {error, taken} = syn:register(<<"my proc">>, Pid2),
     %% retrieve
-    Pid = syn:find_by_key(<<"my proc">>),
+    {Pid, {with, meta}} = syn:find_by_key(<<"my proc">>, with_meta),
     %% kill process
     syn_test_suite_helper:kill_process(Pid),
     timer:sleep(100),

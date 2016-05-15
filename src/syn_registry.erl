@@ -158,24 +158,28 @@ init([]) ->
 handle_call({register_on_node, Key, Pid, Meta}, _From, State) ->
     %% check & register in gen_server process to ensure atomicity at node level without transaction lock
     %% atomicity is obviously not at cluster level, which is covered by syn_consistency.
+
+    %% check if key registered
     case i_find_by_key(Key) of
         undefined ->
+            %% check if pid registered with different key
             case i_find_by_pid(Pid) of
                 undefined ->
                     %% add to table
-                    mnesia:dirty_write(#syn_registry_table{
-                        key = Key,
-                        pid = Pid,
-                        node = node(),
-                        meta = Meta
-                    }),
-                    %% link
-                    erlang:link(Pid),
+                    register_on_node(Key, Pid, node(), Meta),
                     %% return
                     {reply, ok, State};
+
                 _ ->
                     {reply, {error, pid_already_registered}, State}
             end;
+
+        Process when Process#syn_registry_table.pid =:= Pid ->
+            %% re-register (maybe different metadata?)
+            register_on_node(Key, Pid, node(), Meta),
+            %% return
+            {reply, ok, State};
+
         _ ->
             {reply, {error, taken}, State}
     end;
@@ -333,3 +337,15 @@ return_if_on_connected_node(Process) ->
 -spec remove_process_by_key(Key :: any()) -> ok.
 remove_process_by_key(Key) ->
     mnesia:dirty_delete(syn_registry_table, Key).
+
+-spec register_on_node(Key :: any(), Pid :: pid(), Node :: atom(), Meta :: any()) -> ok.
+register_on_node(Key, Pid, Node, Meta) ->
+    %% add to table
+    mnesia:dirty_write(#syn_registry_table{
+        key = Key,
+        pid = Pid,
+        node = Node,
+        meta = Meta
+    }),
+    %% link
+    erlang:link(Pid).
