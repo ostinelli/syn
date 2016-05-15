@@ -33,6 +33,7 @@
 
 %% tests
 -export([
+    single_node_join/1,
     single_node_leave/1,
     single_node_kill/1,
     single_node_publish/1,
@@ -85,6 +86,7 @@ all() ->
 groups() ->
     [
         {single_node_process_groups, [shuffle], [
+            single_node_join,
             single_node_leave,
             single_node_kill,
             single_node_publish,
@@ -175,6 +177,27 @@ end_per_testcase(_TestCase, Config) ->
 %% ===================================================================
 %% Tests
 %% ===================================================================
+single_node_join(_Config) ->
+    %% set schema location
+    application:set_env(mnesia, schema_location, ram),
+    %% start
+    ok = syn:start(),
+    ok = syn:init(),
+    %% start process
+    Pid = syn_test_suite_helper:start_process(),
+    %% retrieve
+    [] = syn:get_members(<<"my group">>),
+    false = syn:member(Pid, <<"my group">>),
+    %% join
+    ok = syn:join(<<"my group">>, Pid),
+    %% allow to rejoin
+    ok = syn:join(<<"my group">>, Pid),
+    %% retrieve
+    [Pid] = syn:get_members(<<"my group">>),
+    true = syn:member(Pid, <<"my group">>),
+    %% kill process
+    syn_test_suite_helper:kill_process(Pid).
+
 single_node_leave(_Config) ->
     %% set schema location
     application:set_env(mnesia, schema_location, ram),
@@ -303,7 +326,7 @@ single_node_multi_call_when_recipient_crashes(_Config) ->
     %% call
     {Time, {Replies, BadPids}} = timer:tc(syn, multi_call, [<<"my group">>, get_pid_name]),
     %% check that pid2 was monitored, no need to wait for timeout
-    true = Time/1000 < 1000,
+    true = Time / 1000 < 1000,
     %% check responses
     2 = length(Replies),
     pid1 = proplists:get_value(Pid1, Replies),

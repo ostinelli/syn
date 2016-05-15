@@ -221,12 +221,11 @@ Types:
 To add a process to a group:
 
 ```erlang
-syn:join(Name, Pid) -> ok | {error, Error}.
+syn:join(Name, Pid) -> ok.
 
 Types:
 	Name = any()
 	Pid = pid()
-	Error = pid_already_in_group
 ```
 
 > When a process joins a group, Syn will automatically monitor it.

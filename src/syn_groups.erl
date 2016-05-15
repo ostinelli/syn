@@ -137,21 +137,16 @@ init([]) ->
     {stop, Reason :: any(), #state{}}.
 
 handle_call({join, Name, Pid}, _From, State) ->
-    case i_member(Pid, Name) of
-        false ->
-            %% add to table
-            mnesia:dirty_write(#syn_groups_table{
-                name = Name,
-                pid = Pid,
-                node = node()
-            }),
-            %% link
-            erlang:link(Pid),
-            %% return
-            {reply, ok, State};
-        _ ->
-            {reply, pid_already_in_group, State}
-    end;
+    %% add to group
+    mnesia:dirty_write(#syn_groups_table{
+        name = Name,
+        pid = Pid,
+        node = node()
+    }),
+    %% link
+    erlang:link(Pid),
+    %% return
+    {reply, ok, State};
 
 handle_call({leave, Name, Pid}, _From, State) ->
     case find_by_pid_and_name(Pid, Name) of
