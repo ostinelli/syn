@@ -98,11 +98,11 @@ registry_count() ->
 registry_count(Node) ->
     syn_registry:count(Node).
 
--spec join(Name :: any(), Pid :: pid()) -> ok | {error, pid_already_in_group}.
+-spec join(Name :: any(), Pid :: pid()) -> ok.
 join(Name, Pid) ->
     syn_groups:join(Name, Pid).
 
--spec leave(Name :: any(), Pid :: pid()) -> ok | {error, undefined | pid_not_in_group}.
+-spec leave(Name :: any(), Pid :: pid()) -> ok | {error, pid_not_in_group}.
 leave(Name, Pid) ->
     syn_groups:leave(Name, Pid).
 

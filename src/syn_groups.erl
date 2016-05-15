@@ -60,12 +60,12 @@ start_link() ->
     Options = [],
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], Options).
 
--spec join(Name :: any(), Pid :: pid()) -> ok | {error, pid_already_in_group}.
+-spec join(Name :: any(), Pid :: pid()) -> ok.
 join(Name, Pid) when is_pid(Pid) ->
     Node = node(Pid),
     gen_server:call({?MODULE, Node}, {join, Name, Pid}).
 
--spec leave(Name :: any(), Pid :: pid()) -> ok | {error, undefined | pid_not_in_group}.
+-spec leave(Name :: any(), Pid :: pid()) -> ok | {error, pid_not_in_group}.
 leave(Name, Pid) when is_pid(Pid) ->
     Node = node(Pid),
     gen_server:call({?MODULE, Node}, {leave, Name, Pid}).
@@ -245,7 +245,7 @@ find_by_pid_and_name(Pid, Name) when is_tuple(Name) ->
 find_by_pid_and_name(Pid, Name) ->
     i_find_by_pid_and_name(Pid, {'=:=', '$1', Name}).
 
--spec i_find_by_pid_and_name(Pid :: pid(), NameGuard :: any()) -> boolean().
+-spec i_find_by_pid_and_name(Pid :: pid(), NameGuard :: any()) -> Process :: #syn_groups_table{} | undefined.
 i_find_by_pid_and_name(Pid, NameGuard) ->
     %% build match specs
     MatchHead = #syn_groups_table{name = '$1', pid = '$2', _ = '_'},

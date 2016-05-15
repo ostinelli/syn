@@ -338,7 +338,7 @@ return_if_on_connected_node(Process) ->
 remove_process_by_key(Key) ->
     mnesia:dirty_delete(syn_registry_table, Key).
 
--spec register_on_node(Key :: any(), Pid :: pid(), Node :: atom(), Meta :: any()) -> ok.
+-spec register_on_node(Key :: any(), Pid :: pid(), Node :: atom(), Meta :: any()) -> true.
 register_on_node(Key, Pid, Node, Meta) ->
     %% add to table
     mnesia:dirty_write(#syn_registry_table{
