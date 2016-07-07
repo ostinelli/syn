@@ -36,6 +36,12 @@
 -export([find_by_pid/1, find_by_pid/2]).
 -export([registry_count/0, registry_count/1]).
 
+%% registry API for elixir
+-export([register_name/2]).
+-export([unregister_name/1]).
+-export([whereis_name/1]).
+-export([send/2]).
+
 %% groups
 -export([join/2]).
 -export([leave/2]).
@@ -131,6 +137,32 @@ multi_call(Name, Message, Timeout) ->
 -spec multi_call_reply(CallerPid :: pid(), Reply :: any()) -> {syn_multi_call_reply, pid(), Reply :: any()}.
 multi_call_reply(CallerPid, Reply) ->
     syn_groups:multi_call_reply(CallerPid, Reply).
+
+-spec register_name(Key :: any(), Pid :: pid()) -> yes | no.
+register_name(Key, Pid) ->
+    case syn_registry:register(Key, Pid) of
+      ok -> yes;
+      {error, _} -> no;
+      _ -> no
+    end.
+
+-spec unregister_name(Key :: any()) -> any() | nil.
+unregister_name(Key) ->
+    case syn_registry:unregister(Key) of
+      ok -> Key;
+      {error, _} -> nil;
+      _ -> nil
+    end.
+
+-spec whereis_name(Key :: any()) -> pid() | undefined.
+whereis_name(Key) -> syn_registry:find_by_key(Key).
+
+-spec send(Key :: any(), Message :: any()) -> pid() | {atom(), tuple()}.
+send(Key, Message) ->
+    case whereis_name(Key) of
+      undefined -> {badarg, {Key, Message}};
+      Pid -> Pid ! Message, Pid
+    end.
 
 %% ===================================================================
 %% Internal
