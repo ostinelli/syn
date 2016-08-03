@@ -36,6 +36,12 @@
 -export([find_by_pid/1, find_by_pid/2]).
 -export([registry_count/0, registry_count/1]).
 
+%% registry for gen_server name via-tuples
+-export([register_name/2]).
+-export([unregister_name/1]).
+-export([whereis_name/1]).
+-export([send/2]).
+
 %% groups
 -export([join/2]).
 -export([leave/2]).
@@ -97,6 +103,32 @@ registry_count() ->
 -spec registry_count(Node :: atom()) -> non_neg_integer().
 registry_count(Node) ->
     syn_registry:count(Node).
+
+-spec register_name(Name :: term(), Pid :: pid()) -> 'yes' | 'no'.
+register_name(Name, Pid) when is_pid(Pid) ->
+    case syn_registry:register(Name, Pid) of
+      ok -> yes;
+      {error, _} -> no;
+      _ -> no
+    end.
+
+-spec unregister_name(Name :: term()) -> _.
+unregister_name(Name) ->
+    case syn_registry:unregister(Name) of
+      ok -> Name;
+      {error, _} -> nil;
+      _ -> nil
+    end.
+
+-spec whereis_name(Name :: term()) -> pid() | 'undefined'.
+whereis_name(Name) -> syn_registry:find_by_key(Name).
+
+-spec send(Name :: term(), Message :: term()) -> pid().
+send(Name, Message) ->
+    case whereis_name(Name) of
+      undefined -> {badarg, {Name, Message}};
+      Pid -> Pid ! Message, Pid
+    end.
 
 -spec join(Name :: any(), Pid :: pid()) -> ok.
 join(Name, Pid) ->
