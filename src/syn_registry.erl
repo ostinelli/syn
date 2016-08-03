@@ -255,6 +255,7 @@ handle_info({'EXIT', Pid, Reason}, #state{
                 %% log
                 case Reason of
                     normal -> ok;
+                    shutdown -> ok;
                     killed -> ok;
                     _ ->
                         error_logger:error_msg("Process with key ~p and pid ~p exited with reason: ~p", [Key0, Pid, Reason])
