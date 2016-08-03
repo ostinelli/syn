@@ -37,6 +37,7 @@
     single_node_when_mnesia_is_ram_find_by_key_with_meta/1,
     single_node_when_mnesia_is_ram_find_by_pid/1,
     single_node_when_mnesia_is_ram_find_by_pid_with_meta/1,
+    single_node_when_mnesia_is_ram_with_gen_server_name/1,
     single_node_when_mnesia_is_ram_re_register_error/1,
     single_node_when_mnesia_is_ram_unregister/1,
     single_node_when_mnesia_is_ram_process_count/1,
@@ -94,6 +95,7 @@ groups() ->
             single_node_when_mnesia_is_ram_find_by_key_with_meta,
             single_node_when_mnesia_is_ram_find_by_pid,
             single_node_when_mnesia_is_ram_find_by_pid_with_meta,
+            single_node_when_mnesia_is_ram_with_gen_server_name,
             single_node_when_mnesia_is_ram_re_register_error,
             single_node_when_mnesia_is_ram_unregister,
             single_node_when_mnesia_is_ram_process_count,
@@ -202,6 +204,48 @@ single_node_when_mnesia_is_ram_find_by_key(_Config) ->
     Pid = syn:find_by_key(<<"my proc">>),
     %% kill process
     syn_test_suite_helper:kill_process(Pid),
+    timer:sleep(100),
+    %% retrieve
+    undefined = syn:find_by_key(<<"my proc">>).
+
+single_node_when_mnesia_is_ram_with_gen_server_name(_Config) ->
+    %% set schema location
+    application:set_env(mnesia, schema_location, ram),
+    %% start
+    ok = syn:start(),
+    ok = syn:init(),
+    %% retrieve
+    undefined = syn:whereis_name(<<"my proc">>),
+    %% register
+    {ok, Pid} = syn_test_gen_server:start_link(self(), {via, syn, <<"my proc">>}),
+    %% retrieve
+    Pid = syn:whereis_name(<<"my proc">>),
+    %% gen_server call messages
+    call_received = gen_server:call({via, syn, <<"my proc">>}, message_is_ignored),
+    %% gen_server cast messages
+    gen_server:cast({via, syn, <<"my proc">>}, message_is_ignored),
+    ok =
+        receive
+            cast_received -> ok
+        after
+            100 -> error
+        end,
+    %% any other message
+    syn:send(<<"my proc">>, message_is_ignored),
+    ok =
+        receive
+            info_received -> ok
+        after
+            100 -> error
+        end,
+    %% stop process
+    syn_test_gen_server:stop({via, syn, <<"my proc">>}),
+    ok =
+        receive
+            stop_received -> ok
+        after
+            100 -> error
+        end,
     timer:sleep(100),
     %% retrieve
     undefined = syn:find_by_key(<<"my proc">>).
