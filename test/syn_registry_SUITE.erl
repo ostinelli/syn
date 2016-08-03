@@ -224,28 +224,26 @@ single_node_when_mnesia_is_ram_with_gen_server_name(_Config) ->
     call_received = gen_server:call({via, syn, <<"my proc">>}, message_is_ignored),
     %% gen_server cast messages
     gen_server:cast({via, syn, <<"my proc">>}, message_is_ignored),
-    ok =
-        receive
-            cast_received -> ok
-        after
-            100 -> error
-        end,
+    ok = receive
+        cast_received -> ok
+    after
+        1000 -> error_receiving_cast_message
+    end,
     %% any other message
     syn:send(<<"my proc">>, message_is_ignored),
-    ok =
-        receive
-            info_received -> ok
-        after
-            100 -> error
-        end,
+    ok = receive
+        info_received -> ok
+    after
+        1000 -> error_receiving_info_message
+    end,
     %% stop process
     syn_test_gen_server:stop({via, syn, <<"my proc">>}),
-    ok =
-        receive
-            stop_received -> ok
-        after
-            100 -> error
-        end,
+    ok = receive
+        stop_received -> ok
+    after
+        1000 -> error_stopping_process
+    end,
+    %% wait for process to exit
     timer:sleep(100),
     %% retrieve
     undefined = syn:find_by_key(<<"my proc">>).

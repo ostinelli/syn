@@ -146,7 +146,7 @@ Types:
 > You may re-register a process multiple times, for example if you need to update its metadata.
 > When a process gets registered, Syn will automatically monitor it.
 
-Processes can also be registered as gen_server names, by usage of via-tuples.
+Processes can also be registered as `gen_server` names, by usage of via-tuples.
 This way, you can use the gen_server API with these tuples without referring to the Pid directly.
 
 ```erlang

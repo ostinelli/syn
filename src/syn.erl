@@ -107,17 +107,17 @@ registry_count(Node) ->
 -spec register_name(Name :: term(), Pid :: pid()) -> 'yes' | 'no'.
 register_name(Name, Pid) when is_pid(Pid) ->
     case syn_registry:register(Name, Pid) of
-      ok -> yes;
-      {error, _} -> no;
-      _ -> no
+        ok -> yes;
+        {error, _} -> no;
+        _ -> no
     end.
 
 -spec unregister_name(Name :: term()) -> _.
 unregister_name(Name) ->
     case syn_registry:unregister(Name) of
-      ok -> Name;
-      {error, _} -> nil;
-      _ -> nil
+        ok -> Name;
+        {error, _} -> nil;
+        _ -> nil
     end.
 
 -spec whereis_name(Name :: term()) -> pid() | 'undefined'.
@@ -126,8 +126,8 @@ whereis_name(Name) -> syn_registry:find_by_key(Name).
 -spec send(Name :: term(), Message :: term()) -> pid().
 send(Name, Message) ->
     case whereis_name(Name) of
-      undefined -> {badarg, {Name, Message}};
-      Pid -> Pid ! Message, Pid
+        undefined -> {badarg, {Name, Message}};
+        Pid -> Pid ! Message, Pid
     end.
 
 -spec join(Name :: any(), Pid :: pid()) -> ok.
