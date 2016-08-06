@@ -131,13 +131,13 @@ count(Node) ->
 init([]) ->
     %% trap linked processes signal
     process_flag(trap_exit, true),
-
+    
     %% get options
     {ok, [ProcessExitCallbackModule, ProcessExitCallbackFunction]} = syn_utils:get_env_value(
         registry_process_exit_callback,
         [undefined, undefined]
     ),
-
+    
     %% build state
     {ok, #state{
         registry_process_exit_callback_module = ProcessExitCallbackModule,
@@ -158,7 +158,7 @@ init([]) ->
 handle_call({register_on_node, Key, Pid, Meta}, _From, State) ->
     %% check & register in gen_server process to ensure atomicity at node level without transaction lock
     %% atomicity is obviously not at cluster level, which is covered by syn_consistency.
-
+    
     %% check if key registered
     case i_find_by_key(Key) of
         undefined ->
@@ -169,17 +169,17 @@ handle_call({register_on_node, Key, Pid, Meta}, _From, State) ->
                     register_on_node(Key, Pid, node(), Meta),
                     %% return
                     {reply, ok, State};
-
+                
                 _ ->
                     {reply, {error, pid_already_registered}, State}
             end;
-
+        
         Process when Process#syn_registry_table.pid =:= Pid ->
             %% re-register (maybe different metadata?)
             register_on_node(Key, Pid, node(), Meta),
             %% return
             {reply, ok, State};
-
+        
         _ ->
             {reply, {error, taken}, State}
     end;
@@ -231,50 +231,51 @@ handle_info({'EXIT', Pid, Reason}, #state{
     registry_process_exit_callback_module = ProcessExitCallbackModule,
     registry_process_exit_callback_function = ProcessExitCallbackFunction
 } = State) ->
-    %% do not lock backbone
-    spawn(fun() ->
-        %% check if pid is in table
-        {Key, Meta} = case i_find_by_pid(Pid) of
-            undefined ->
-                %% log
-                case Reason of
-                    normal -> ok;
-                    killed -> ok;
-                    _ ->
-                        error_logger:error_msg("Received an exit message from an unlinked process ~p with reason: ~p", [Pid, Reason])
-                end,
-
-                %% return
-                {undefined, undefined};
-
-            Process ->
-                %% get process info
-                Key0 = Process#syn_registry_table.key,
-                Meta0 = Process#syn_registry_table.meta,
-
-                %% log
-                case Reason of
-                    normal -> ok;
-                    shutdown -> ok;
-                    killed -> ok;
-                    _ ->
-                        error_logger:error_msg("Process with key ~p and pid ~p exited with reason: ~p", [Key0, Pid, Reason])
-                end,
-
-                %% delete from table
-                remove_process_by_key(Key0),
-
-                %% return
-                {Key0, Meta0}
-        end,
-
-        %% callback
-        case ProcessExitCallbackModule of
-            undefined -> ok;
-            _ -> ProcessExitCallbackModule:ProcessExitCallbackFunction(Key, Pid, Meta, Reason)
-        end
-    end),
-
+    %% check if pid is in table
+    {Key, Meta} = case i_find_by_pid(Pid) of
+        undefined ->
+            %% log
+            case Reason of
+                normal -> ok;
+                killed -> ok;
+                _ ->
+                    error_logger:error_msg("Received an exit message from an unlinked process ~p with reason: ~p", [Pid, Reason])
+            end,
+            
+            %% return
+            {undefined, undefined};
+        
+        Process ->
+            %% get process info
+            Key0 = Process#syn_registry_table.key,
+            Meta0 = Process#syn_registry_table.meta,
+            
+            %% log
+            case Reason of
+                normal -> ok;
+                shutdown -> ok;
+                killed -> ok;
+                _ ->
+                    error_logger:error_msg("Process with key ~p and pid ~p exited with reason: ~p", [Key0, Pid, Reason])
+            end,
+            
+            %% delete from table
+            remove_process_by_key(Key0),
+            
+            %% return
+            {Key0, Meta0}
+    end,
+    
+    %% callback
+    case ProcessExitCallbackModule of
+        undefined ->
+            ok;
+        _ ->
+            spawn(fun() ->
+                ProcessExitCallbackModule:ProcessExitCallbackFunction(Key, Pid, Meta, Reason)
+            end)
+    end,
+    
     %% return
     {noreply, State};
 

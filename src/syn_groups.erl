@@ -245,18 +245,19 @@ handle_info({'EXIT', Pid, Reason}, #state{
                 remove_process(Process),
                 
                 %% callback in separate process
-                spawn(fun() ->
-                    case ProcessExitCallbackModule of
-                        undefined -> ok;
-                        _ -> ProcessExitCallbackModule:ProcessExitCallbackFunction(Name, Pid, Meta, Reason)
-                    end
-                end)
+                case ProcessExitCallbackModule of
+                    undefined ->
+                        ok;
+                    _ ->
+                        spawn(fun() ->
+                            ProcessExitCallbackModule:ProcessExitCallbackFunction(Name, Pid, Meta, Reason)
+                        end)
+                end
             end,
             lists:foreach(F, Processes)
     end,
     %% return
     {noreply, State};
-
 
 handle_info(Info, State) ->
     error_logger:warning_msg("Received an unknown info message: ~p", [Info]),
