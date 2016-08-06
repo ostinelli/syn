@@ -261,7 +261,7 @@ Types:
 	Error = pid_not_in_group
 ```
 
-> You don't need to remove processes that are about to die, since they are monitored by Syn and they will be removed automatically from their groups.
+> You don't need to remove processes that are about to die, since they are monitored by Syn and they will be removed automatically from their groups. If you manually remove a process from a group just before it dies, the callback on process exit (see here below) might not get called.
 
 To get a list of the members of a group:
 
@@ -383,7 +383,7 @@ Types:
 	Meta = any()
 	Reason = any()
 ```
-The `Key` and `Pid` are the ones of the process that exited with `Reason`.
+The `Key`, `Pid` and `Meta` are the ones of the process that exited with `Reason`.
 
 For instance, if you want to print a log when a registered process exited:
 
@@ -449,7 +449,48 @@ Set it in the options:
 > Important Note: The conflict resolution method SHOULD be defined in the same way across all nodes of the cluster. Having different conflict resolution options on different nodes can have unexpected results.
 
 ### Process Groups options
-There currently are none.
+These allow setting the Process Groups options, and are:
+
+ * `process_groups_process_exit_callback`
+
+#### Callback on process exit
+The `process_groups_process_exit_callback` option allows you to specify the `module` and the `function` of the callback that will be triggered when a member process of a group exits. This callback will be called only on the node where the process was running.
+
+The callback function is defined as:
+```erlang
+CallbackFun = fun(Names, Pid, Meta, Reason) -> any().
+
+Types:
+	Name = any()
+	Pid = pid()
+	Meta = any()
+	Reason = any()
+```
+`Name` is the Process Group that the process with `Pid` and `Meta` that exited with `Reason` was a member of.
+
+For instance, if you want to print a log when a member process of a group exited:
+
+```erlang
+-module(my_callback).
+-export([callback_on_process_exit/4]).
+
+callback_on_process_exit(Name, Pid, Meta, Reason) ->
+	error_logger:info_msg(
+		"Process with Pid ~p and Meta ~p of Group ~p exited with reason ~p~n",
+		[Pid, Meta, Name, Reason]
+	)
+```
+
+Set it in the options:
+```erlang
+{syn, [
+    %% define callback function
+    {process_groups_process_exit_callback, [my_callback, callback_on_process_exit]}
+]}
+```
+If you don't set this option, no callback will be triggered.
+
+> This callback will be called for every Process Group that the process was a member of.
 
 
 ## Internals

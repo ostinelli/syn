@@ -39,7 +39,8 @@
     single_node_publish/1,
     single_node_multi_call/1,
     single_node_multi_call_when_recipient_crashes/1,
-    single_node_meta/1
+    single_node_meta/1,
+    single_node_callback_on_process_exit/1
 ]).
 -export([
     two_nodes_kill/1,
@@ -47,9 +48,10 @@
     two_nodes_multi_call/1
 ]).
 
-%% internal
+%% internals
 -export([recipient_loop/1]).
 -export([called_loop/1, called_loop_that_crashes/1]).
+-export([process_groups_process_exit_callback_dummy/4]).
 
 %% include
 -include_lib("common_test/include/ct.hrl").
@@ -93,7 +95,8 @@ groups() ->
             single_node_publish,
             single_node_multi_call,
             single_node_multi_call_when_recipient_crashes,
-            single_node_meta
+            single_node_meta,
+            single_node_callback_on_process_exit
         ]},
         {two_nodes_process_groups, [shuffle], [
             two_nodes_kill,
@@ -338,7 +341,7 @@ single_node_multi_call_when_recipient_crashes(_Config) ->
     syn_test_suite_helper:kill_process(Pid1),
     syn_test_suite_helper:kill_process(Pid2).
 
-single_node_meta(Config) ->
+single_node_meta(_Config) ->
     %% set schema location
     application:set_env(mnesia, schema_location, ram),
     %% start
@@ -365,6 +368,39 @@ single_node_meta(Config) ->
     %% kill process
     syn_test_suite_helper:kill_process(Pid).
 
+single_node_callback_on_process_exit(_Config) ->
+    CurrentNode = node(),
+    %% set schema location
+    application:set_env(mnesia, schema_location, ram),
+    %% load configuration variables from syn-test.config => this defines the callback
+    syn_test_suite_helper:set_environment_variables(),
+    %% start
+    ok = syn:start(),
+    ok = syn:init(),
+    %% register global process
+    ResultPid = self(),
+    global:register_name(syn_process_groups_SUITE_result, ResultPid),
+    %% start process
+    Pid = syn_test_suite_helper:start_process(),
+    %% register
+    ok = syn:join(<<"my group">>, Pid, {some, meta, 1}),
+    ok = syn:join(<<"my other group">>, Pid, {some, meta, 2}),
+    %% kill process
+    syn_test_suite_helper:kill_process(Pid),
+    %% check callback were triggered
+    receive
+        {exited, CurrentNode, <<"my group">>, Pid, {some, meta, 1}, killed} -> ok
+    after 2000 ->
+        ok = process_groups_exit_callback_was_not_called_from_local_node
+    end,
+    receive
+        {exited, CurrentNode, <<"my other group">>, Pid, {some, meta, 2}, killed} -> ok
+    after 2000 ->
+        ok = process_groups_exit_callback_was_not_called_from_local_node
+    end,
+    %% unregister
+    global:unregister_name(syn_process_groups_SUITE_result).
+    
 two_nodes_kill(Config) ->
     %% get slave
     SlaveNode = proplists:get_value(slave_node, Config),
@@ -492,3 +528,6 @@ called_loop_that_crashes(_PidName) ->
     receive
         {syn_multi_call, _CallerPid, get_pid_name} -> exit(recipient_crashed_on_purpose)
     end.
+
+process_groups_process_exit_callback_dummy(Name, Pid, Meta, Reason) ->
+    global:send(syn_process_groups_SUITE_result, {exited, node(), Name, Pid, Meta, Reason}).

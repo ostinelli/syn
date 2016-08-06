@@ -43,7 +43,10 @@
 -export([multi_call_and_receive/4]).
 
 %% records
--record(state, {}).
+-record(state, {
+    process_groups_process_exit_callback_module = undefined :: atom(),
+    process_groups_process_exit_callback_function = undefined :: atom()
+}).
 
 %% macros
 -define(DEFAULT_MULTI_CALL_TIMEOUT_MS, 5000).
@@ -130,8 +133,17 @@ init([]) ->
     %% trap linked processes signal
     process_flag(trap_exit, true),
     
+    %% get options
+    {ok, [ProcessExitCallbackModule, ProcessExitCallbackFunction]} = syn_utils:get_env_value(
+        process_groups_process_exit_callback,
+        [undefined, undefined]
+    ),
+    
     %% build state
-    {ok, #state{}}.
+    {ok, #state{
+        process_groups_process_exit_callback_module = ProcessExitCallbackModule,
+        process_groups_process_exit_callback_function = ProcessExitCallbackFunction
+    }}.
 
 %% ----------------------------------------------------------------------------------------------------------
 %% Call messages
@@ -202,7 +214,10 @@ handle_cast(Msg, State) ->
     {noreply, #state{}, Timeout :: non_neg_integer()} |
     {stop, Reason :: any(), #state{}}.
 
-handle_info({'EXIT', Pid, Reason}, State) ->
+handle_info({'EXIT', Pid, Reason}, #state{
+    process_groups_process_exit_callback_module = ProcessExitCallbackModule,
+    process_groups_process_exit_callback_function = ProcessExitCallbackFunction
+} = State) ->
     %% check if pid is in table
     case find_groups_by_pid(Pid) of
         [] ->
@@ -216,8 +231,9 @@ handle_info({'EXIT', Pid, Reason}, State) ->
         
         Processes ->
             F = fun(Process) ->
-                %% get group
+                %% get group & meta
                 Name = Process#syn_groups_table.name,
+                Meta = Process#syn_groups_table.meta,
                 %% log
                 case Reason of
                     normal -> ok;
@@ -226,7 +242,15 @@ handle_info({'EXIT', Pid, Reason}, State) ->
                         error_logger:error_msg("Process of group ~p and pid ~p exited with reason: ~p", [Name, Pid, Reason])
                 end,
                 %% delete from table
-                remove_process(Process)
+                remove_process(Process),
+                
+                %% callback in separate process
+                spawn(fun() ->
+                    case ProcessExitCallbackModule of
+                        undefined -> ok;
+                        _ -> ProcessExitCallbackModule:ProcessExitCallbackFunction(Name, Pid, Meta, Reason)
+                    end
+                end)
             end,
             lists:foreach(F, Processes)
     end,
