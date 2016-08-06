@@ -38,7 +38,8 @@
     single_node_kill/1,
     single_node_publish/1,
     single_node_multi_call/1,
-    single_node_multi_call_when_recipient_crashes/1
+    single_node_multi_call_when_recipient_crashes/1,
+    single_node_meta/1
 ]).
 -export([
     two_nodes_kill/1,
@@ -91,7 +92,8 @@ groups() ->
             single_node_kill,
             single_node_publish,
             single_node_multi_call,
-            single_node_multi_call_when_recipient_crashes
+            single_node_multi_call_when_recipient_crashes,
+            single_node_meta
         ]},
         {two_nodes_process_groups, [shuffle], [
             two_nodes_kill,
@@ -335,6 +337,33 @@ single_node_multi_call_when_recipient_crashes(_Config) ->
     %% kill processes
     syn_test_suite_helper:kill_process(Pid1),
     syn_test_suite_helper:kill_process(Pid2).
+
+single_node_meta(Config) ->
+    %% set schema location
+    application:set_env(mnesia, schema_location, ram),
+    %% start
+    ok = syn:start(),
+    ok = syn:init(),
+    %% start process
+    Pid = syn_test_suite_helper:start_process(),
+    %% retrieve
+    [] = syn:get_members(<<"my group">>, with_meta),
+    false = syn:member(Pid, <<"my group">>),
+    %% join
+    ok = syn:join(<<"my group">>, Pid, {some, meta}),
+    %% retrieve
+    [{Pid, {some, meta}}] = syn:get_members(<<"my group">>, with_meta),
+    %% allow to rejoin to update meta
+    ok = syn:join(<<"my group">>, Pid, {updated, meta}),
+    %% retrieve
+    [{Pid, {updated, meta}}] = syn:get_members(<<"my group">>, with_meta),
+    %% leave
+    ok = syn:leave(<<"my group">>, Pid),
+    %% retrieve
+    [] = syn:get_members(<<"my group">>),
+    false = syn:member(Pid, <<"my group">>),
+    %% kill process
+    syn_test_suite_helper:kill_process(Pid).
 
 two_nodes_kill(Config) ->
     %% get slave

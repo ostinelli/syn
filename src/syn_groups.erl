@@ -28,10 +28,10 @@
 
 %% API
 -export([start_link/0]).
--export([join/2]).
+-export([join/2, join/3]).
 -export([leave/2]).
 -export([member/2]).
--export([get_members/1]).
+-export([get_members/1, get_members/2]).
 -export([publish/2]).
 -export([multi_call/2, multi_call/3]).
 -export([multi_call_reply/2]).
@@ -61,9 +61,13 @@ start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], Options).
 
 -spec join(Name :: any(), Pid :: pid()) -> ok.
-join(Name, Pid) when is_pid(Pid) ->
+join(Name, Pid) ->
+    join(Name, Pid, undefined).
+
+-spec join(Name :: any(), Pid :: pid(), Meta :: any()) -> ok.
+join(Name, Pid, Meta) when is_pid(Pid) ->
     Node = node(Pid),
-    gen_server:call({?MODULE, Node}, {join, Name, Pid}).
+    gen_server:call({?MODULE, Node}, {join, Name, Pid, Meta}).
 
 -spec leave(Name :: any(), Pid :: pid()) -> ok | {error, pid_not_in_group}.
 leave(Name, Pid) when is_pid(Pid) ->
@@ -77,6 +81,10 @@ member(Pid, Name) when is_pid(Pid) ->
 -spec get_members(Name :: any()) -> [pid()].
 get_members(Name) ->
     i_get_members(Name).
+
+-spec get_members(Name :: any(), with_meta) -> [{pid(), Meta :: any()}].
+get_members(Name, with_meta) ->
+    i_get_members(Name, with_meta).
 
 -spec publish(Name :: any(), Message :: any()) -> {ok, RecipientCount :: non_neg_integer()}.
 publish(Name, Message) ->
@@ -121,7 +129,7 @@ multi_call_reply(CallerPid, Reply) ->
 init([]) ->
     %% trap linked processes signal
     process_flag(trap_exit, true),
-
+    
     %% build state
     {ok, #state{}}.
 
@@ -136,12 +144,21 @@ init([]) ->
     {stop, Reason :: any(), Reply :: any(), #state{}} |
     {stop, Reason :: any(), #state{}}.
 
-handle_call({join, Name, Pid}, _From, State) ->
+handle_call({join, Name, Pid, Meta}, _From, State) ->
+    %% check if pid is already in group
+    case find_by_pid_and_name(Pid, Name) of
+        undefined ->
+            ok;
+        Process ->
+            %% remove old reference
+            mnesia:dirty_delete_object(Process)
+    end,
     %% add to group
     mnesia:dirty_write(#syn_groups_table{
         name = Name,
         pid = Pid,
-        node = node()
+        node = node(),
+        meta = Meta
     }),
     %% link
     erlang:link(Pid),
@@ -196,7 +213,7 @@ handle_info({'EXIT', Pid, Reason}, State) ->
                 _ ->
                     error_logger:error_msg("Received an exit message from an unlinked process ~p with reason: ~p", [Pid, Reason])
             end;
-
+        
         Processes ->
             F = fun(Process) ->
                 %% get group
@@ -272,6 +289,14 @@ i_get_members(Name) ->
     end, Processes),
     lists:sort(Pids).
 
+-spec i_get_members(Name :: any(), with_meta) -> [{pid(), Meta :: any()}].
+i_get_members(Name, with_meta) ->
+    Processes = mnesia:dirty_read(syn_groups_table, Name),
+    PidsWithMeta = lists:map(fun(Process) ->
+        {Process#syn_groups_table.pid, Process#syn_groups_table.meta}
+    end, Processes),
+    lists:keysort(1, PidsWithMeta).
+
 -spec find_groups_by_pid(Pid :: pid()) -> [Process :: #syn_groups_table{}].
 find_groups_by_pid(Pid) ->
     mnesia:dirty_index_read(syn_groups_table, Pid, #syn_groups_table.pid).
@@ -289,7 +314,7 @@ remove_process(Process) ->
 multi_call_and_receive(CollectorPid, Pid, Message, Timeout) ->
     MonitorRef = monitor(process, Pid),
     Pid ! {syn_multi_call, self(), Message},
-
+    
     receive
         {syn_multi_call_reply, Pid, Reply} ->
             CollectorPid ! {reply, Pid, Reply};

@@ -233,15 +233,22 @@ Types:
 To add a process to a group:
 
 ```erlang
-syn:join(Name, Pid) -> ok.
+syn:join(Name, Pid) ->
+	syn:join(Name, Pid, undefined).
+```
+
+```erlang
+syn:join(Name, Pid, Meta) -> ok.
 
 Types:
 	Name = any()
 	Pid = pid()
+	meta = any()
 ```
 
-> A process can join multiple groups. Also, a process may join the same group multiple times, though it will still be listed only once in it.
-> When a process joins a group, Syn will automatically monitor it.
+> A process can join multiple groups. When a process joins a group, Syn will automatically monitor it.
+> 
+> A process may join the same group multiple times, for example if you need to update its metadata, though it will still be listed only once in it.
 
 To remove a process from a group:
 
@@ -263,6 +270,17 @@ syn:get_members(Name) -> [pid()].
 
 Types:
 	Name = any()
+```
+
+To get a list of the members of a group with their metadata:
+
+```erlang
+syn:get_members(Name, with_meta) ->
+	[{pid(), Meta}].
+
+Types:
+	Name = any()
+	Meta = any()
 ```
 
 > The order of member pids in the returned array is guaranteed to be the same on every node, however it is not guaranteed to match the order of joins.

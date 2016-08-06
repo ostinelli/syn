@@ -43,10 +43,10 @@
 -export([send/2]).
 
 %% groups
--export([join/2]).
+-export([join/2, join/3]).
 -export([leave/2]).
 -export([member/2]).
--export([get_members/1]).
+-export([get_members/1, get_members/2]).
 -export([publish/2]).
 -export([multi_call/2, multi_call/3]).
 -export([multi_call_reply/2]).
@@ -134,6 +134,10 @@ send(Name, Message) ->
 join(Name, Pid) ->
     syn_groups:join(Name, Pid).
 
+-spec join(Name :: any(), Pid :: pid(), Meta :: any()) -> ok.
+join(Name, Pid, Meta) ->
+    syn_groups:join(Name, Pid, Meta).
+
 -spec leave(Name :: any(), Pid :: pid()) -> ok | {error, pid_not_in_group}.
 leave(Name, Pid) ->
     syn_groups:leave(Name, Pid).
@@ -145,6 +149,10 @@ member(Pid, Name) ->
 -spec get_members(Name :: any()) -> [pid()].
 get_members(Name) ->
     syn_groups:get_members(Name).
+
+-spec get_members(Name :: any(), with_meta) -> [{pid(), Meta :: any()}].
+get_members(Name, with_meta) ->
+    syn_groups:get_members(Name, with_meta).
 
 -spec publish(Name :: any(), Message :: any()) -> {ok, RecipientCount :: non_neg_integer()}.
 publish(Name, Message) ->
