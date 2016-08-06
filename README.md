@@ -458,7 +458,7 @@ The `process_groups_process_exit_callback` option allows you to specify the `mod
 
 The callback function is defined as:
 ```erlang
-CallbackFun = fun(Names, Pid, Meta, Reason) -> any().
+CallbackFun = fun(Name, Pid, Meta, Reason) -> any().
 
 Types:
 	Name = any()
