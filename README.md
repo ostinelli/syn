@@ -247,7 +247,7 @@ Types:
 ```
 
 > A process can join multiple groups. When a process joins a group, Syn will automatically monitor it.
-> 
+>
 > A process may join the same group multiple times, for example if you need to update its metadata, though it will still be listed only once in it.
 
 To remove a process from a group:
@@ -355,11 +355,14 @@ Options can be set in the environment variable `syn`. You're probably best off u
 
 ```erlang
 {syn, [
-    %% define callback function on process exit
+    %% define callback function on process exit for registry
     {registry_process_exit_callback, [module1, function1]},
 
     %% define callback function on conflicting process (instead of kill)
-    {registry_conflicting_process_callback, [module2, function2]}
+    {registry_conflicting_process_callback, [module2, function2]},
+
+    %% define callback function on process exit for groups
+    {process_groups_process_exit_callback, [module3, function3]}
 ]}
 ```
 These options are explained here below.
