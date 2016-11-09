@@ -317,7 +317,7 @@ single_node_publish(_Config) ->
     ok = syn:join(<<"my group">>, Pid1),
     ok = syn:join(<<"my group">>, Pid2),
     %% publish
-    syn:publish(<<"my group">>, {test, message}),
+    {ok, 2} = syn:publish(<<"my group">>, {test, message}),
     %% check publish was received
     receive
         {received, Pid1, {test, message}} -> ok
@@ -616,7 +616,7 @@ two_nodes_local_publish(Config) ->
     ok = syn:join(<<"my group">>, PidLocal2, {meta, pid_local_2}),
     ok = syn:join(<<"my group">>, PidSlave, {meta, pid_slave}),
     %% publish
-    syn:publish_to_local(<<"my group">>, {test, message}),
+    {ok, 2} = syn:publish_to_local(<<"my group">>, {test, message}),
     %% check publish was received by local pids
     receive
         {received, PidLocal1, {test, message}} -> ok
