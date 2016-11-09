@@ -46,13 +46,13 @@ Therefore, Availability has been chosen over Consistency and Syn is [eventually 
 If you're using [rebar3](https://github.com/erlang/rebar3), add `syn` as a dependency in your project's `rebar.config` file:
 
 ```erlang
-{syn, {git, "git://github.com/ostinelli/syn.git", {tag, "1.5.0"}}}
+{syn, {git, "git://github.com/ostinelli/syn.git", {tag, "1.6.0"}}}
 ```
 
 Or, if you're using [Hex.pm](https://hex.pm/) as package manager (with the [rebar3_hex](https://github.com/hexpm/rebar3_hex) plugin):
 
 ```erlang
-{syn, "1.5.0"}
+{syn, "1.6.0"}
 ```
 
 Then, compile:
