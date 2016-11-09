@@ -32,6 +32,7 @@
 -export([leave/2]).
 -export([member/2]).
 -export([get_members/1, get_members/2]).
+-export([get_local_members/1, get_local_members/2]).
 -export([publish/2]).
 -export([multi_call/2, multi_call/3]).
 -export([multi_call_reply/2]).
@@ -88,6 +89,14 @@ get_members(Name) ->
 -spec get_members(Name :: any(), with_meta) -> [{pid(), Meta :: any()}].
 get_members(Name, with_meta) ->
     i_get_members(Name, with_meta).
+
+-spec get_local_members(Name :: any()) -> [pid()].
+get_local_members(Name) ->
+    i_get_local_members(Name).
+
+-spec get_local_members(Name :: any(), with_meta) -> [{pid(), Meta :: any()}].
+get_local_members(Name, with_meta) ->
+    i_get_local_members(Name, with_meta).
 
 -spec publish(Name :: any(), Message :: any()) -> {ok, RecipientCount :: non_neg_integer()}.
 publish(Name, Message) ->
@@ -323,6 +332,36 @@ i_get_members(Name, with_meta) ->
     PidsWithMeta = lists:map(fun(Process) ->
         {Process#syn_groups_table.pid, Process#syn_groups_table.meta}
     end, Processes),
+    lists:keysort(1, PidsWithMeta).
+
+-spec i_get_local_members(Name :: any()) -> [pid()].
+i_get_local_members(Name) ->
+    %% build name guard
+    NameGuard = case is_tuple(Name) of
+        true -> {'==', '$1', {Name}};
+        _ -> {'=:=', '$1', Name}
+    end,
+    %% build match specs
+    MatchHead = #syn_groups_table{name = '$1', node = '$2', pid = '$3', _ = '_'},
+    Guards = [NameGuard, {'=:=', '$2', node()}],
+    Result = '$3',
+    %% select
+    Pids = mnesia:dirty_select(syn_groups_table, [{MatchHead, Guards, [Result]}]),
+    lists:sort(Pids).
+
+-spec i_get_local_members(Name :: any(), with_meta) -> [{pid(), Meta :: any()}].
+i_get_local_members(Name, with_meta) ->
+    %% build name guard
+    NameGuard = case is_tuple(Name) of
+        true -> {'==', '$1', {Name}};
+        _ -> {'=:=', '$1', Name}
+    end,
+    %% build match specs
+    MatchHead = #syn_groups_table{name = '$1', node = '$2', pid = '$3', meta = '$4', _ = '_'},
+    Guards = [NameGuard, {'=:=', '$2', node()}],
+    Result = {{'$3', '$4'}},
+    %% select
+    PidsWithMeta = mnesia:dirty_select(syn_groups_table, [{MatchHead, Guards, [Result]}]),
     lists:keysort(1, PidsWithMeta).
 
 -spec find_groups_by_pid(Pid :: pid()) -> [Process :: #syn_groups_table{}].

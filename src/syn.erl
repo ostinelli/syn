@@ -47,6 +47,7 @@
 -export([leave/2]).
 -export([member/2]).
 -export([get_members/1, get_members/2]).
+-export([get_local_members/1, get_local_members/2]).
 -export([publish/2]).
 -export([multi_call/2, multi_call/3]).
 -export([multi_call_reply/2]).
@@ -153,6 +154,14 @@ get_members(Name) ->
 -spec get_members(Name :: any(), with_meta) -> [{pid(), Meta :: any()}].
 get_members(Name, with_meta) ->
     syn_groups:get_members(Name, with_meta).
+
+-spec get_local_members(Name :: any()) -> [pid()].
+get_local_members(Name) ->
+    syn_groups:get_local_members(Name).
+
+-spec get_local_members(Name :: any(), with_meta) -> [{pid(), Meta :: any()}].
+get_local_members(Name, with_meta) ->
+    syn_groups:get_local_members(Name, with_meta).
 
 -spec publish(Name :: any(), Message :: any()) -> {ok, RecipientCount :: non_neg_integer()}.
 publish(Name, Message) ->

@@ -46,7 +46,8 @@
 -export([
     two_nodes_kill/1,
     two_nodes_publish/1,
-    two_nodes_multi_call/1
+    two_nodes_multi_call/1,
+    two_nodes_local_members/1
 ]).
 
 %% internals
@@ -103,7 +104,8 @@ groups() ->
         {two_nodes_process_groups, [shuffle], [
             two_nodes_kill,
             two_nodes_publish,
-            two_nodes_multi_call
+            two_nodes_multi_call,
+            two_nodes_local_members
         ]}
     ].
 %% -------------------------------------------------------------------
@@ -441,7 +443,7 @@ single_node_callback_on_process_exit(_Config) ->
     end,
     %% unregister
     global:unregister_name(syn_process_groups_SUITE_result).
-    
+
 two_nodes_kill(Config) ->
     %% get slave
     SlaveNode = proplists:get_value(slave_node, Config),
@@ -535,7 +537,7 @@ two_nodes_multi_call(Config) ->
     PidLocal = syn_test_suite_helper:start_process(fun() -> called_loop(pid1) end),
     PidSlave = syn_test_suite_helper:start_process(SlaveNode, fun() -> called_loop(pid2) end),
     PidUnresponsive = syn_test_suite_helper:start_process(),
-    %% register
+    %% join
     ok = syn:join(<<"my group">>, PidLocal),
     ok = syn:join(<<"my group">>, PidSlave),
     ok = syn:join(<<"my group">>, PidUnresponsive),
@@ -551,6 +553,44 @@ two_nodes_multi_call(Config) ->
     syn_test_suite_helper:kill_process(PidLocal),
     syn_test_suite_helper:kill_process(PidSlave),
     syn_test_suite_helper:kill_process(PidUnresponsive).
+
+two_nodes_local_members(Config) ->
+    %% get slave
+    SlaveNode = proplists:get_value(slave_node, Config),
+    %% set schema location
+    application:set_env(mnesia, schema_location, ram),
+    rpc:call(SlaveNode, mnesia, schema_location, [ram]),
+    %% start
+    ok = syn:start(),
+    ok = syn:init(),
+    ok = rpc:call(SlaveNode, syn, start, []),
+    ok = rpc:call(SlaveNode, syn, init, []),
+    timer:sleep(100),
+    %% start processes
+    PidLocal1 = syn_test_suite_helper:start_process(),
+    PidLocal2 = syn_test_suite_helper:start_process(),
+    PidSlave = syn_test_suite_helper:start_process(SlaveNode),
+    %% join
+    ok = syn:join(<<"my group">>, PidLocal1, {meta, pid_local_1}),
+    ok = syn:join(<<"my group">>, PidLocal2, {meta, pid_local_2}),
+    ok = syn:join(<<"my group">>, PidSlave, {meta, pid_slave}),
+    timer:sleep(100),
+    %% retrieve, pid should have the same order in all nodes
+    [PidLocal1, PidLocal2] = syn:get_local_members(<<"my group">>),
+    [
+        {PidLocal1, {meta, pid_local_1}},
+        {PidLocal2, {meta, pid_local_2}}
+    ] = syn:get_local_members(<<"my group">>, with_meta),
+    %% local pids leave
+    ok = syn:leave(<<"my group">>, PidLocal1),
+    ok = syn:leave(<<"my group">>, PidLocal2),
+    %% retrieve, no more local pids
+    [] = syn:get_local_members(<<"my group">>),
+    %% kill processes
+    syn_test_suite_helper:kill_process(PidLocal1),
+    syn_test_suite_helper:kill_process(PidLocal2),
+    syn_test_suite_helper:kill_process(PidSlave).
+
 
 %% ===================================================================
 %% Internal
