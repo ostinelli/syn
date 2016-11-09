@@ -61,19 +61,6 @@ Then, compile:
 $ rebar3 compile
 ```
 
-### Rebar2
-If you're using [rebar](https://github.com/rebar/rebar), add `syn` as a dependency in your project's `rebar.config` file:
-
-```erlang
-{syn, ".*", {git, "git://github.com/ostinelli/syn.git", {tag, "1.5.0"}}}
-```
-
-Then, get and compile your dependencies:
-
-```bash
-$ rebar get-deps
-$ rebar compile
-```
 
 ## Usage
 
@@ -350,6 +337,43 @@ Types:
 	Reply = any()
 ```
 
+
+To get a list of the local members of a group (running on the node):
+
+```erlang
+syn:get_local_members(Name) -> [pid()].
+
+Types:
+	Name = any()
+```
+
+To get a list of the local members of a group with their metadata:
+
+```erlang
+syn:get_local_members(Name, with_meta) ->
+	[{pid(), Meta}].
+
+Types:
+	Name = any()
+	Meta = any()
+```
+
+> The order of member pids in the returned array is guaranteed to be the same on every node, however it is not guaranteed to match the order of joins.
+
+To publish a message to all local group members:
+
+```erlang
+syn:publish_to_local(Name, Message) -> {ok, RecipientCount}.
+
+Types:
+	Name = any()
+	Message = any()
+	RecipientCount = non_neg_integer()
+```
+
+> `RecipientCount` is the count of the intended recipients.
+
+
 ## Options
 Options can be set in the environment variable `syn`. You're probably best off using an application configuration file (in releases, `sys.config`). The list of all available options is:
 
@@ -509,7 +533,7 @@ Before implementing a new feature, please submit a ticket to discuss what you in
 
 Do not commit to master in your fork. Provide a clean branch without merge commits. Every pull request should have its own topic branch. In this way, every additional adjustments to the original pull request might be done easily, and squashed with `git rebase -i`. The updated branch will be visible in the same pull request, so there will be no need to open new pull requests when there are changes to be applied.
 
-Ensure that  proper testing is included. To run Syn tests you simply have to be in the project's root directory and run:
+Ensure that proper testing is included. To run Syn tests you simply have to be in the project's root directory and run:
 
 ```bash
 $ make tests
