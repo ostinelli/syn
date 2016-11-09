@@ -47,7 +47,8 @@
     two_nodes_kill/1,
     two_nodes_publish/1,
     two_nodes_multi_call/1,
-    two_nodes_local_members/1
+    two_nodes_local_members/1,
+    two_nodes_local_publish/1
 ]).
 
 %% internals
@@ -105,7 +106,8 @@ groups() ->
             two_nodes_kill,
             two_nodes_publish,
             two_nodes_multi_call,
-            two_nodes_local_members
+            two_nodes_local_members,
+            two_nodes_local_publish
         ]}
     ].
 %% -------------------------------------------------------------------
@@ -591,6 +593,51 @@ two_nodes_local_members(Config) ->
     syn_test_suite_helper:kill_process(PidLocal2),
     syn_test_suite_helper:kill_process(PidSlave).
 
+two_nodes_local_publish(Config) ->
+    %% get slave
+    SlaveNode = proplists:get_value(slave_node, Config),
+    %% set schema location
+    application:set_env(mnesia, schema_location, ram),
+    rpc:call(SlaveNode, mnesia, schema_location, [ram]),
+    %% start
+    ok = syn:start(),
+    ok = syn:init(),
+    ok = rpc:call(SlaveNode, syn, start, []),
+    ok = rpc:call(SlaveNode, syn, init, []),
+    timer:sleep(100),
+    %% start processes
+    ResultPid = self(),
+    F = fun() -> recipient_loop(ResultPid) end,
+    PidLocal1 = syn_test_suite_helper:start_process(F),
+    PidLocal2 = syn_test_suite_helper:start_process(F),
+    PidSlave = syn_test_suite_helper:start_process(SlaveNode, F),
+    %% join
+    ok = syn:join(<<"my group">>, PidLocal1, {meta, pid_local_1}),
+    ok = syn:join(<<"my group">>, PidLocal2, {meta, pid_local_2}),
+    ok = syn:join(<<"my group">>, PidSlave, {meta, pid_slave}),
+    %% publish
+    syn:publish_to_local(<<"my group">>, {test, message}),
+    %% check publish was received by local pids
+    receive
+        {received, PidLocal1, {test, message}} -> ok
+    after 2000 ->
+        ok = published_message_was_not_received_by_pid_local_1
+    end,
+    receive
+        {received, PidLocal2, {test, message}} -> ok
+    after 2000 ->
+        ok = published_message_was_not_received_by_pid_local_2
+    end,
+    receive
+        {received, PidSlave, {test, message}} ->
+            ko = published_message_was_received_by_pid_slave
+    after 1000 ->
+        ok
+    end,
+    %% kill processes
+    syn_test_suite_helper:kill_process(PidLocal1),
+    syn_test_suite_helper:kill_process(PidLocal2),
+    syn_test_suite_helper:kill_process(PidSlave).
 
 %% ===================================================================
 %% Internal

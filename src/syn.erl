@@ -49,6 +49,7 @@
 -export([get_members/1, get_members/2]).
 -export([get_local_members/1, get_local_members/2]).
 -export([publish/2]).
+-export([publish_to_local/2]).
 -export([multi_call/2, multi_call/3]).
 -export([multi_call_reply/2]).
 
@@ -166,6 +167,10 @@ get_local_members(Name, with_meta) ->
 -spec publish(Name :: any(), Message :: any()) -> {ok, RecipientCount :: non_neg_integer()}.
 publish(Name, Message) ->
     syn_groups:publish(Name, Message).
+
+-spec publish_to_local(Name :: any(), Message :: any()) -> {ok, RecipientCount :: non_neg_integer()}.
+publish_to_local(Name, Message) ->
+    syn_groups:publish_to_local(Name, Message).
 
 -spec multi_call(Name :: any(), Message :: any()) ->
     {[{pid(), Reply :: any()}], [BadPid :: pid()]}.
