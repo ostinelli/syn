@@ -214,6 +214,8 @@ single_node_leave(_Config) ->
     %% retrieve
     [] = syn:get_members(<<"my group">>),
     false = syn:member(Pid, <<"my group">>),
+    %% leave before join
+    {error, pid_not_in_group} = syn:leave(<<"my group">>, Pid),
     %% join
     ok = syn:join(<<"my group">>, Pid),
     %% retrieve

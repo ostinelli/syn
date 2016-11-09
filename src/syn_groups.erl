@@ -180,7 +180,7 @@ handle_call({join, Name, Pid, Meta}, _From, State) ->
 handle_call({leave, Name, Pid}, _From, State) ->
     case find_by_pid_and_name(Pid, Name) of
         undefined ->
-            {error, pid_not_in_group};
+            {reply, {error, pid_not_in_group}, State};
         Process ->
             %% remove from table
             remove_process(Process),
