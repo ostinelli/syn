@@ -36,6 +36,7 @@
     single_node_join/1,
     single_node_leave/1,
     single_node_kill/1,
+    single_node_leave_and_kill_multi_groups/1,
     single_node_publish/1,
     single_node_multi_call/1,
     single_node_multi_call_when_recipient_crashes/1,
@@ -92,6 +93,7 @@ groups() ->
             single_node_join,
             single_node_leave,
             single_node_kill,
+            single_node_leave_and_kill_multi_groups,
             single_node_publish,
             single_node_multi_call,
             single_node_multi_call_when_recipient_crashes,
@@ -249,6 +251,43 @@ single_node_kill(_Config) ->
     [Pid] = syn:get_members(<<"my group 1">>),
     [Pid] = syn:get_members(<<"my group 2">>),
     true = syn:member(Pid, <<"my group 1">>),
+    true = syn:member(Pid, <<"my group 2">>),
+    %% kill process
+    syn_test_suite_helper:kill_process(Pid),
+    timer:sleep(100),
+    %% retrieve
+    [] = syn:get_members(<<"my group 1">>),
+    [] = syn:get_members(<<"my group 2">>),
+    false = syn:member(Pid, <<"my group 1">>),
+    false = syn:member(Pid, <<"my group 2">>).
+
+single_node_leave_and_kill_multi_groups(_Config) ->
+    %% set schema location
+    application:set_env(mnesia, schema_location, ram),
+    %% start
+    ok = syn:start(),
+    ok = syn:init(),
+    %% start process
+    Pid = syn_test_suite_helper:start_process(),
+    %% retrieve
+    [] = syn:get_members(<<"my group 1">>),
+    [] = syn:get_members(<<"my group 2">>),
+    false = syn:member(Pid, <<"my group 1">>),
+    false = syn:member(Pid, <<"my group 2">>),
+    %% join
+    ok = syn:join(<<"my group 1">>, Pid),
+    ok = syn:join(<<"my group 2">>, Pid),
+    %% retrieve
+    [Pid] = syn:get_members(<<"my group 1">>),
+    [Pid] = syn:get_members(<<"my group 2">>),
+    true = syn:member(Pid, <<"my group 1">>),
+    true = syn:member(Pid, <<"my group 2">>),
+    %% leave group 1
+    ok = syn:leave(<<"my group 1">>, Pid),
+    %% retrieve
+    [] = syn:get_members(<<"my group 1">>),
+    [Pid] = syn:get_members(<<"my group 2">>),
+    false = syn:member(Pid, <<"my group 1">>),
     true = syn:member(Pid, <<"my group 2">>),
     %% kill process
     syn_test_suite_helper:kill_process(Pid),

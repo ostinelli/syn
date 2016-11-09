@@ -184,8 +184,11 @@ handle_call({leave, Name, Pid}, _From, State) ->
         Process ->
             %% remove from table
             remove_process(Process),
-            %% unlink
-            erlang:unlink(Pid),
+            %% unlink only when process is no more in groups
+            case find_groups_by_pid(Pid) of
+                [] -> erlang:unlink(Pid);
+                _ -> nop
+            end,
             %% reply
             {reply, ok, State}
     end;
