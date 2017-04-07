@@ -536,5 +536,5 @@ Do not commit to master in your fork. Provide a clean branch without merge commi
 Ensure that proper testing is included. To run Syn tests you simply have to be in the project's root directory and run:
 
 ```bash
-$ make tests
+$ make test
 ```

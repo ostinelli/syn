@@ -17,7 +17,7 @@ run:
 	-mnesia schema_location ram \
 	-eval 'syn:start(),syn:init().'
 
-tests: all
+test: all
 	ct_run -dir $(PROJECT_DIR)/test -logdir $(PROJECT_DIR)/test/results \
 	-pa `rebar3 path`
 
