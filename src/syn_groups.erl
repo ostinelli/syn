@@ -304,16 +304,10 @@ code_change(_OldVsn, State, _Extra) ->
 %% Internal
 %% ===================================================================
 -spec find_by_pid_and_name(Pid :: pid(), Name :: any()) -> Process :: #syn_groups_table{} | undefined.
-find_by_pid_and_name(Pid, Name) when is_tuple(Name) ->
-    i_find_by_pid_and_name(Pid, {'==', '$1', {Name}});
 find_by_pid_and_name(Pid, Name) ->
-    i_find_by_pid_and_name(Pid, {'=:=', '$1', Name}).
-
--spec i_find_by_pid_and_name(Pid :: pid(), NameGuard :: any()) -> Process :: #syn_groups_table{} | undefined.
-i_find_by_pid_and_name(Pid, NameGuard) ->
     %% build match specs
-    MatchHead = #syn_groups_table{name = '$1', pid = '$2', _ = '_'},
-    Guards = [NameGuard, {'=:=', '$2', Pid}],
+    MatchHead = #syn_groups_table{name = Name, pid = Pid, _ = '_'},
+    Guards = [],
     Result = '$_',
     %% select
     case mnesia:dirty_select(syn_groups_table, [{MatchHead, Guards, [Result]}]) of

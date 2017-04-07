@@ -41,7 +41,8 @@
     single_node_multi_call/1,
     single_node_multi_call_when_recipient_crashes/1,
     single_node_meta/1,
-    single_node_callback_on_process_exit/1
+    single_node_callback_on_process_exit/1,
+    single_node_all_keys/1
 ]).
 -export([
     two_nodes_kill/1,
@@ -100,7 +101,8 @@ groups() ->
             single_node_multi_call,
             single_node_multi_call_when_recipient_crashes,
             single_node_meta,
-            single_node_callback_on_process_exit
+            single_node_callback_on_process_exit,
+            single_node_all_keys
         ]},
         {two_nodes_process_groups, [shuffle], [
             two_nodes_kill,
@@ -445,6 +447,36 @@ single_node_callback_on_process_exit(_Config) ->
     end,
     %% unregister
     global:unregister_name(syn_process_groups_SUITE_result).
+
+%% covering bug <https://github.com/ostinelli/syn/issues/32>
+single_node_all_keys(_Config) ->
+    %% set schema location
+    application:set_env(mnesia, schema_location, ram),
+    %% start
+    ok = syn:start(),
+    ok = syn:init(),
+    %% start process
+    Pid = syn_test_suite_helper:start_process(),
+    %% join with complex names
+    GroupNames = [
+        "mygroup",
+        <<"mygroup">>,
+        mygroup,
+        {mygroup},
+        {mygroup, 12345},
+        {mygroup, {other, <<"mygroup">>}},
+        [mygroup, {other, <<"mygroup">>}],
+        {mygroup, {other, <<"mygroup">>}, [mygroup, {other, <<"mygroup">>}]}
+    ],
+    F = fun(GroupName) ->
+        ok = syn:join(GroupName, Pid),
+        %% retrieve
+        [Pid] = syn:get_members(GroupName),
+        true = syn:member(Pid, GroupName)
+    end,
+    lists:foreach(F, GroupNames),
+    %% kill process
+    syn_test_suite_helper:kill_process(Pid).
 
 two_nodes_kill(Config) ->
     %% get slave
