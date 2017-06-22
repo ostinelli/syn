@@ -40,10 +40,7 @@
 initdb() ->
     %% ensure all nodes are added
     ClusterNodes = [node() | nodes()],
-    case mnesia:change_config(extra_db_nodes, ClusterNodes) of
-        {ok, Nodes} -> error_logger:info_msg("Mnesia replication was successfully created at nodes: ~p", [Nodes]);
-        {error, Reason} -> error_logger:error_msg("Error while creating Mnesia replication for reason: ~p", [Reason])
-    end,
+    {ok, _} = mnesia:change_config(extra_db_nodes, ClusterNodes),
     %% create tables
     create_table(syn_registry_table, [
         {type, set},
