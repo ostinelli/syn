@@ -40,7 +40,7 @@
 initdb() ->
     %% ensure all nodes are added
     ClusterNodes = [node() | nodes()],
-    mnesia:change_config(extra_db_nodes, ClusterNodes),
+    {ok, _} = mnesia:change_config(extra_db_nodes, ClusterNodes),
     %% create tables
     create_table(syn_registry_table, [
         {type, set},
