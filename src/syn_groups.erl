@@ -246,6 +246,8 @@ handle_info({'EXIT', Pid, Reason}, #state{
             %% log
             case Reason of
                 normal -> ok;
+                shutdown -> ok;
+                {shutdown, _} -> ok;
                 killed -> ok;
                 _ ->
                     error_logger:error_msg("Received an exit message from an unlinked process ~p with reason: ~p", [Pid, Reason])
@@ -259,6 +261,8 @@ handle_info({'EXIT', Pid, Reason}, #state{
                 %% log
                 case Reason of
                     normal -> ok;
+                    shutdown -> ok;
+                    {shutdown, _} -> ok;
                     killed -> ok;
                     _ ->
                         error_logger:error_msg("Process of group ~p and pid ~p exited with reason: ~p", [Name, Pid, Reason])
