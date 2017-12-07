@@ -97,7 +97,7 @@ init([]) ->
     {stop, Reason :: any(), #state{}}.
 
 handle_call(Request, From, State) ->
-    error_logger:warning_msg("Received from ~p an unknown call message: ~p", [Request, From]),
+    error_logger:warning_msg("Received from ~p an unknown call message: ~p~n", [Request, From]),
     {reply, undefined, State}.
 
 %% ----------------------------------------------------------------------------------------------------------
@@ -109,7 +109,7 @@ handle_call(Request, From, State) ->
     {stop, Reason :: any(), #state{}}.
 
 handle_cast(Msg, State) ->
-    error_logger:warning_msg("Received an unknown cast message: ~p", [Msg]),
+    error_logger:warning_msg("Received an unknown cast message: ~p~n", [Msg]),
     {noreply, State}.
 
 %% ----------------------------------------------------------------------------------------------------------
@@ -121,12 +121,12 @@ handle_cast(Msg, State) ->
     {stop, Reason :: any(), #state{}}.
 
 handle_info({mnesia_system_event, {inconsistent_database, Context, RemoteNode}}, State) ->
-    error_logger:error_msg("MNESIA signalled an inconsistent database on node ~p for remote node ~p with context: ~p, initiating automerge", [node(), RemoteNode, Context]),
+    error_logger:error_msg("MNESIA signalled an inconsistent database on node ~p for remote node ~p with context: ~p, initiating automerge~n", [node(), RemoteNode, Context]),
     automerge(RemoteNode),
     {noreply, State};
 
 handle_info({mnesia_system_event, {mnesia_down, RemoteNode}}, State) when RemoteNode =/= node() ->
-    error_logger:error_msg("Received a MNESIA down event, removing on node ~p all pids of node ~p", [node(), RemoteNode]),
+    error_logger:error_msg("Received a MNESIA down event, removing on node ~p all pids of node ~p~n", [node(), RemoteNode]),
     delete_registry_pids_of_disconnected_node(RemoteNode),
     delete_groups_pids_of_disconnected_node(RemoteNode),
     {noreply, State};
@@ -139,12 +139,12 @@ handle_info({handle_purged_registry_double_processes, DoubleRegistryProcessesInf
     registry_conflicting_process_callback_module = RegistryConflictingProcessCallbackModule,
     registry_conflicting_process_callback_function = RegistryConflictingProcessCallbackFunction
 } = State) ->
-    error_logger:warning_msg("About to purge double processes after netsplit"),
+    error_logger:warning_msg("About to purge double processes after netsplit~n"),
     handle_purged_registry_double_processes(RegistryConflictingProcessCallbackModule, RegistryConflictingProcessCallbackFunction, DoubleRegistryProcessesInfo),
     {noreply, State};
 
 handle_info(Info, State) ->
-    error_logger:warning_msg("Received an unknown info message: ~p", [Info]),
+    error_logger:warning_msg("Received an unknown info message: ~p~n", [Info]),
     {noreply, State}.
 
 %% ----------------------------------------------------------------------------------------------------------
@@ -152,7 +152,7 @@ handle_info(Info, State) ->
 %% ----------------------------------------------------------------------------------------------------------
 -spec terminate(Reason :: any(), #state{}) -> terminated.
 terminate(Reason, _State) ->
-    error_logger:info_msg("Terminating syn consistency with reason: ~p", [Reason]),
+    error_logger:info_msg("Terminating syn consistency with reason: ~p~n", [Reason]),
     terminated.
 
 %% ----------------------------------------------------------------------------------------------------------
@@ -194,9 +194,9 @@ automerge(RemoteNode) ->
     %% resolve conflicts
     global:trans({{?MODULE, automerge}, self()},
         fun() ->
-            error_logger:warning_msg("AUTOMERGE starting on node ~p for remote node ~p (global lock is set)", [node(), RemoteNode]),
+            error_logger:warning_msg("AUTOMERGE starting on node ~p for remote node ~p (global lock is set)~n", [node(), RemoteNode]),
             check_stitch(RemoteNode),
-            error_logger:warning_msg("AUTOMERGE done (global lock about to be unset)")
+            error_logger:warning_msg("AUTOMERGE done (global lock about to be unset)~n")
         end
     ),
     %% resume processes able to modify mnesia tables
@@ -207,13 +207,13 @@ automerge(RemoteNode) ->
 check_stitch(RemoteNode) ->
     case catch lists:member(RemoteNode, mnesia:system_info(running_db_nodes)) of
         true ->
-            error_logger:warning_msg("Remote node ~p is already stitched.", [RemoteNode]),
+            error_logger:warning_msg("Remote node ~p is already stitched.~n", [RemoteNode]),
             ok;
         false ->
             catch stitch(RemoteNode),
             ok;
         Error ->
-            error_logger:error_msg("Could not check if node is stiched: ~p", [Error]),
+            error_logger:error_msg("Could not check if node is stiched: ~p~n", [Error]),
             ok
     end.
 
@@ -358,7 +358,7 @@ write_groups_processes_info_to_node(Node, GroupsRegistryProcessesInfo) ->
 ) -> ok.
 handle_purged_registry_double_processes(undefined, _, DoubleRegistryProcessesInfo) ->
     F = fun({Key, LocalProcessPid, _LocalProcessMeta}) ->
-        error_logger:warning_msg("Found a double process for ~s, killing it on local node ~p", [Key, node()]),
+        error_logger:warning_msg("Found a double process for ~s, killing it on local node ~p~n", [Key, node()]),
         exit(LocalProcessPid, kill)
     end,
     lists:foreach(F, DoubleRegistryProcessesInfo);
@@ -366,7 +366,7 @@ handle_purged_registry_double_processes(RegistryConflictingProcessCallbackModule
     F = fun({Key, LocalProcessPid, LocalProcessMeta}) ->
         spawn(
             fun() ->
-                error_logger:warning_msg("Found a double process for ~s, about to trigger callback on local node ~p", [Key, node()]),
+                error_logger:warning_msg("Found a double process for ~s, about to trigger callback on local node ~p~n", [Key, node()]),
                 RegistryConflictingProcessCallbackModule:RegistryConflictingProcessCallbackFunction(Key, LocalProcessPid, LocalProcessMeta)
             end
         )

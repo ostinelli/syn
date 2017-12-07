@@ -62,7 +62,7 @@ create_table(TableName, Options) ->
     %% ensure table exists
     case mnesia:create_table(TableName, Options) of
         {atomic, ok} ->
-            error_logger:info_msg("~p was successfully created", [TableName]),
+            error_logger:info_msg("~p was successfully created~n", [TableName]),
             ok;
         {aborted, {already_exists, TableName}} ->
             %% table already exists, try to add current node as copy
@@ -71,7 +71,7 @@ create_table(TableName, Options) ->
             %% table already exists, try to add current node as copy
             add_table_copy_to_current_node(TableName);
         Other ->
-            error_logger:error_msg("Error while creating ~p: ~p", [TableName, Other]),
+            error_logger:error_msg("Error while creating ~p: ~p~n", [TableName, Other]),
             {error, Other}
     end.
 
@@ -83,15 +83,15 @@ add_table_copy_to_current_node(TableName) ->
     %% add copy
     case mnesia:add_table_copy(TableName, CurrentNode, ram_copies) of
         {atomic, ok} ->
-            error_logger:info_msg("Copy of ~p was successfully added to current node", [TableName]),
+            error_logger:info_msg("Copy of ~p was successfully added to current node~n", [TableName]),
             ok;
         {aborted, {already_exists, TableName}} ->
-            error_logger:info_msg("Copy of ~p is already added to current node", [TableName]),
+            error_logger:info_msg("Copy of ~p is already added to current node~n", [TableName]),
             ok;
         {aborted, {already_exists, TableName, CurrentNode}} ->
-            error_logger:info_msg("Copy of ~p is already added to current node", [TableName]),
+            error_logger:info_msg("Copy of ~p is already added to current node~n", [TableName]),
             ok;
         {aborted, Reason} ->
-            error_logger:error_msg("Error while creating copy of ~p: ~p", [TableName, Reason]),
+            error_logger:error_msg("Error while creating copy of ~p: ~p~n", [TableName, Reason]),
             {error, Reason}
     end.
