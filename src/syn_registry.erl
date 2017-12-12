@@ -204,7 +204,7 @@ handle_call({unlink_process, Pid}, _From, State) ->
     {reply, ok, State};
 
 handle_call(Request, From, State) ->
-    error_logger:warning_msg("Received from ~p an unknown call message: ~p", [Request, From]),
+    error_logger:warning_msg("Received from ~p an unknown call message: ~p~n", [Request, From]),
     {reply, undefined, State}.
 
 %% ----------------------------------------------------------------------------------------------------------
@@ -216,7 +216,7 @@ handle_call(Request, From, State) ->
     {stop, Reason :: any(), #state{}}.
 
 handle_cast(Msg, State) ->
-    error_logger:warning_msg("Received an unknown cast message: ~p", [Msg]),
+    error_logger:warning_msg("Received an unknown cast message: ~p~n", [Msg]),
     {noreply, State}.
 
 %% ----------------------------------------------------------------------------------------------------------
@@ -237,9 +237,11 @@ handle_info({'EXIT', Pid, Reason}, #state{
             %% log
             case Reason of
                 normal -> ok;
+                shutdown -> ok;
+                {shutdown, _} -> ok;
                 killed -> ok;
                 _ ->
-                    error_logger:error_msg("Received an exit message from an unlinked process ~p with reason: ~p", [Pid, Reason])
+                    error_logger:error_msg("Received an exit message from an unlinked process ~p with reason: ~p~n", [Pid, Reason])
             end,
             
             %% return
@@ -254,9 +256,11 @@ handle_info({'EXIT', Pid, Reason}, #state{
             case Reason of
                 normal -> ok;
                 shutdown -> ok;
+                shutdown -> ok;
+                {shutdown, _} -> ok;
                 killed -> ok;
                 _ ->
-                    error_logger:error_msg("Process with key ~p and pid ~p exited with reason: ~p", [Key0, Pid, Reason])
+                    error_logger:error_msg("Process with key ~p and pid ~p exited with reason: ~p~n", [Key0, Pid, Reason])
             end,
             
             %% delete from table
@@ -280,7 +284,7 @@ handle_info({'EXIT', Pid, Reason}, #state{
     {noreply, State};
 
 handle_info(Info, State) ->
-    error_logger:warning_msg("Received an unknown info message: ~p", [Info]),
+    error_logger:warning_msg("Received an unknown info message: ~p~n", [Info]),
     {noreply, State}.
 
 %% ----------------------------------------------------------------------------------------------------------
@@ -288,7 +292,7 @@ handle_info(Info, State) ->
 %% ----------------------------------------------------------------------------------------------------------
 -spec terminate(Reason :: any(), #state{}) -> terminated.
 terminate(Reason, _State) ->
-    error_logger:info_msg("Terminating syn_registry with reason: ~p", [Reason]),
+    error_logger:info_msg("Terminating syn_registry with reason: ~p~n", [Reason]),
     terminated.
 
 %% ----------------------------------------------------------------------------------------------------------
