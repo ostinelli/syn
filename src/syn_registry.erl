@@ -256,7 +256,6 @@ handle_info({'EXIT', Pid, Reason}, #state{
             case Reason of
                 normal -> ok;
                 shutdown -> ok;
-                shutdown -> ok;
                 {shutdown, _} -> ok;
                 killed -> ok;
                 _ ->
