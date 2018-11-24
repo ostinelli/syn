@@ -28,7 +28,7 @@
 
 %% API
 -export([start_link/0]).
--export([register/2, register/3]).
+-export([register/2, register/3, register_local/2, register_local/3]).
 -export([unregister/1]).
 -export([find_by_key/1, find_by_key/2]).
 -export([find_by_pid/1, find_by_pid/2]).
@@ -101,6 +101,14 @@ unregister(Key) ->
             Node = node(Process#syn_registry_table.pid),
             gen_server:call({?MODULE, Node}, {unregister_on_node, Key})
     end.
+
+-spec register_local(Key :: any(), Pid :: pid()) -> ok | {error, taken | pid_already_registered}.
+register_local(Key, Pid) when is_pid(Pid) ->
+    register_local(Key, Pid, undefined).
+
+-spec register_local(Key :: any(), Pid :: pid(), Meta :: any()) -> ok | {error, taken | pid_already_registered}.
+register_local(Key, Pid, Meta) when is_pid(Pid) ->
+    gen_server:call(?MODULE, {register_on_node, Key, Pid, Meta}).
 
 -spec count() -> non_neg_integer().
 count() ->

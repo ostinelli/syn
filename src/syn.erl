@@ -31,6 +31,7 @@
 
 %% registry
 -export([register/2, register/3]).
+-export([register_local/2, register_local/3]).
 -export([unregister/1]).
 -export([find_by_key/1, find_by_key/2]).
 -export([find_by_pid/1, find_by_pid/2]).
@@ -81,6 +82,14 @@ register(Key, Pid, Meta) ->
 -spec unregister(Key :: any()) -> ok | {error, undefined}.
 unregister(Key) ->
     syn_registry:unregister(Key).
+
+-spec register_local(Key :: any(), Pid :: pid()) -> ok | {error, taken | pid_already_registered}.
+register_local(Key, Pid) ->
+    syn_registry:register_local(Key, Pid).
+
+-spec register_local(Key :: any(), Pid :: pid(), Meta :: any()) -> ok | {error, taken | pid_already_registered}.
+register_local(Key, Pid, Meta) ->
+    syn_registry:register_local(Key, Pid, Meta).
 
 -spec find_by_key(Key :: any()) -> pid() | undefined.
 find_by_key(Key) ->
