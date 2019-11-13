@@ -101,10 +101,11 @@ sync_unregister(Name) ->
 
 -spec get_local_registry_tuples_and_suspend(FromNode :: node()) -> list(syn_registry_tuple()).
 get_local_registry_tuples_and_suspend(FromNode) ->
-    Result = gen_server:call(?MODULE, {get_local_registry_tuples_and_suspend, FromNode}),
+    error_logger:info_msg("Received request of local registry tuples from remote node: ~p~n", [FromNode]),
     %% suspend self to not modify table
     sys:suspend(?MODULE),
-    Result.
+    %% get tuples
+    get_registry_tuples_of_current_node().
 
 -spec count() -> non_neg_integer().
 count() ->
@@ -187,13 +188,6 @@ handle_call({unregister_on_node, Name}, _From, State) ->
     rpc:eval_everywhere(nodes(), ?MODULE, sync_unregister, [Name]),
     %% return
     {reply, ok, State};
-
-handle_call({get_local_registry_tuples_and_suspend, FromNode}, _From, State) ->
-    error_logger:info_msg("Received request of local registry tuples from remote node: ~p~n", [FromNode]),
-    %% get tuples
-    RegistryTuples = get_registry_tuples_of_current_node(),
-    %% return
-    {reply, RegistryTuples, State};
 
 handle_call(Request, From, State) ->
     error_logger:warning_msg("Received from ~p an unknown call message: ~p~n", [Request, From]),
