@@ -24,16 +24,10 @@
 %% THE SOFTWARE.
 %% ==========================================================================================================
 -module(syn_backbone).
--behaviour(gen_server).
 
 %% API
--export([start_link/0]).
-
-%% gen_server callbacks
--export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
-
-%% records
--record(state, {}).
+-export([init/0]).
+-export([deinit/0]).
 
 %% includes
 -include("syn.hrl").
@@ -41,93 +35,8 @@
 %% ===================================================================
 %% API
 %% ===================================================================
--spec start_link() -> {ok, pid()} | {error, any()}.
-start_link() ->
-    Options = [],
-    gen_server:start_link({local, ?MODULE}, ?MODULE, [], Options).
-
-%% ===================================================================
-%% Callbacks
-%% ===================================================================
-
-%% ----------------------------------------------------------------------------------------------------------
-%% Init
-%% ----------------------------------------------------------------------------------------------------------
--spec init([]) ->
-    {ok, #state{}} |
-    {ok, #state{}, Timeout :: non_neg_integer()} |
-    ignore |
-    {stop, Reason :: any()}.
-init([]) ->
-    error_logger:info_msg("Syn(~p): Creating tables", [node()]),
-    case create_ram_tables() of
-        ok ->
-            %% init
-            {ok, #state{}};
-        Other ->
-            Other
-    end.
-
-%% ----------------------------------------------------------------------------------------------------------
-%% Call messages
-%% ----------------------------------------------------------------------------------------------------------
--spec handle_call(Request :: any(), From :: any(), #state{}) ->
-    {reply, Reply :: any(), #state{}} |
-    {reply, Reply :: any(), #state{}, Timeout :: non_neg_integer()} |
-    {noreply, #state{}} |
-    {noreply, #state{}, Timeout :: non_neg_integer()} |
-    {stop, Reason :: any(), Reply :: any(), #state{}} |
-    {stop, Reason :: any(), #state{}}.
-
-handle_call(Request, From, State) ->
-    error_logger:warning_msg("Syn(~p): Received from ~p an unknown call message: ~p~n", [node(), Request, From]),
-    {reply, undefined, State}.
-
-%% ----------------------------------------------------------------------------------------------------------
-%% Cast messages
-%% ----------------------------------------------------------------------------------------------------------
--spec handle_cast(Msg :: any(), #state{}) ->
-    {noreply, #state{}} |
-    {noreply, #state{}, Timeout :: non_neg_integer()} |
-    {stop, Reason :: any(), #state{}}.
-
-handle_cast(Msg, State) ->
-    error_logger:warning_msg("Syn(~p): Received an unknown cast message: ~p~n", [node(), Msg]),
-    {noreply, State}.
-
-%% ----------------------------------------------------------------------------------------------------------
-%% All non Call / Cast messages
-%% ----------------------------------------------------------------------------------------------------------
--spec handle_info(Info :: any(), #state{}) ->
-    {noreply, #state{}} |
-    {noreply, #state{}, Timeout :: non_neg_integer()} |
-    {stop, Reason :: any(), #state{}}.
-
-handle_info(Info, State) ->
-    error_logger:warning_msg("Syn(~p): Received an unknown info message: ~p~n", [node(), Info]),
-    {noreply, State}.
-
-%% ----------------------------------------------------------------------------------------------------------
-%% Terminate
-%% ----------------------------------------------------------------------------------------------------------
--spec terminate(Reason :: any(), #state{}) -> terminated.
-terminate(Reason, _State) ->
-    error_logger:info_msg("Syn(~p): Terminating with reason: ~p~n", [node(), Reason]),
-    delete_ram_tables(),
-    terminated.
-
-%% ----------------------------------------------------------------------------------------------------------
-%% Convert process state when code is changed.
-%% ----------------------------------------------------------------------------------------------------------
--spec code_change(OldVsn :: any(), #state{}, Extra :: any()) -> {ok, #state{}}.
-code_change(_OldVsn, State, _Extra) ->
-    {ok, State}.
-
-%% ===================================================================
-%% Internal
-%% ===================================================================
--spec create_ram_tables() -> ok | {error, Reason :: term()}.
-create_ram_tables() ->
+-spec init() -> ok | {error, Reason :: term()}.
+init() ->
     case create_registry_table() of
         {atomic, ok} ->
             case create_groups_table() of
@@ -138,6 +47,15 @@ create_ram_tables() ->
             {error, {could_not_create_syn_registry_table, Reason}}
     end.
 
+-spec deinit() -> ok.
+deinit() ->
+    mnesia:delete_table(syn_registry_table),
+    mnesia:delete_table(syn_groups_table),
+    ok.
+
+%% ===================================================================
+%% Internal
+%% ===================================================================
 -spec create_registry_table() -> {atomic, ok} | {aborted, Reason :: term()}.
 create_registry_table() ->
     mnesia:create_table(syn_registry_table, [
@@ -155,9 +73,3 @@ create_groups_table() ->
         {index, [#syn_groups_table.pid]},
         {storage_properties, [{ets, [{read_concurrency, true}]}]}
     ]).
-
--spec delete_ram_tables() -> ok.
-delete_ram_tables() ->
-    mnesia:delete_table(syn_registry_table),
-    mnesia:delete_table(syn_groups_table),
-    ok.

@@ -3,7 +3,6 @@
         {description, "A global Process Registry and Process Group manager."},
         {vsn, "2.0.0"},
         {registered, [
-            syn_backbone,
             syn_registry,
             syn_sup
         ]},
