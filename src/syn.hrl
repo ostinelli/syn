@@ -26,10 +26,10 @@
 %% records
 -record(syn_registry_table, {
     name = undefined :: any(),
-    pid = undefined :: undefined | pid(),
+    pid = undefined :: atom() | pid(),
     node = undefined :: atom(),
     meta = undefined :: any(),
-    monitor_ref = undefined :: undefined | reference()
+    monitor_ref = undefined :: undefined | '_' | reference()
 }).
 -record(syn_groups_table, {
     name = undefined :: any(),
@@ -37,5 +37,11 @@
     node = undefined :: atom(),
     meta = undefined :: any()
 }).
--type syn_registry_tuple() :: {Name :: term(), Pid :: pid(), Meta :: term()}.
+
+%% types
+-type syn_registry_tuple() :: {
+    Name :: term(),
+    Pid :: pid(),
+    Meta :: term()
+}.
 -export_type([syn_registry_tuple/0]).

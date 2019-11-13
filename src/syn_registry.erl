@@ -93,7 +93,7 @@ unregister(Name) ->
 count() ->
     mnesia:table_info(syn_registry_table, size).
 
--spec count(Node :: atom()) -> non_neg_integer().
+-spec count(Node :: node()) -> non_neg_integer().
 count(Node) ->
     %% build match specs
     MatchHead = #syn_registry_table{node = '$2', _ = '_'},
@@ -176,16 +176,11 @@ handle_call({register_on_node, Name, Pid, Meta}, _From, State) ->
     end;
 
 handle_call({unregister_on_node, Name}, _From, State) ->
-    case unregister_on_node(Name) of
-        {error, Error} ->
-            {reply, {error, Error}, State};
-
-        ok ->
-            %% multicast
-            rpc:eval_everywhere(nodes(), ?MODULE, sync_unregister, [Name]),
-            %% return
-            {reply, ok, State}
-    end;
+    unregister_on_node(Name),
+    %% multicast
+    rpc:eval_everywhere(nodes(), ?MODULE, sync_unregister, [Name]),
+    %% return
+    {reply, ok, State};
 
 handle_call(Request, From, State) ->
     error_logger:warning_msg("Syn(~p): Received from ~p an unknown call message: ~p~n", [node(), Request, From]),
@@ -290,6 +285,7 @@ code_change(_OldVsn, State, _Extra) ->
 %% ===================================================================
 %% Internal
 %% ===================================================================
+-spec register_on_node(Name :: any(), Pid :: pid(), Meta :: any()) -> ok.
 register_on_node(Name, Pid, Meta) ->
     MonitorRef = case find_processes_entry_by_pid(Pid) of
         [] ->
@@ -301,6 +297,7 @@ register_on_node(Name, Pid, Meta) ->
     %% add to table
     add_to_local_table(Name, Pid, Meta, MonitorRef).
 
+-spec unregister_on_node(Name :: any()) -> ok.
 unregister_on_node(Name) ->
     case find_process_entry_by_name(Name) of
         undefined ->
@@ -313,7 +310,7 @@ unregister_on_node(Name) ->
             remove_from_local_table(Name)
     end.
 
--spec add_to_local_table(Name :: any(), Pid :: pid(), Node :: atom(), Meta :: any()) -> true.
+-spec add_to_local_table(Name :: any(), Pid :: pid(), Meta :: any(), MonitorRef :: undefined | reference()) -> ok.
 add_to_local_table(Name, Pid, Meta, MonitorRef) ->
     mnesia:dirty_write(#syn_registry_table{
         name = Name,
@@ -362,6 +359,7 @@ log_process_exit(Name, Pid, Reason) ->
             end
     end.
 
+-spec sync_registry_tuples(RemoteNode :: node(), RegistryTuples :: [syn_registry_tuple()]) -> ok.
 sync_registry_tuples(RemoteNode, RegistryTuples) ->
     %% ensure that registry doesn't have any joining node's entries (here again for race conditions)
     purge_registry_entries_for_remote_node(RemoteNode),
