@@ -159,8 +159,16 @@ handle_call({register_on_node, Name, Pid, Meta}, _From, State) ->
             %% check if name available
             case find_process_entry_by_name(Name) of
                 undefined ->
+                    MonitorRef = case find_processes_entry_by_pid(Pid) of
+                        [] ->
+                            %% process is not monitored yet, add
+                            erlang:monitor(process, Pid);
+                        [Entry | _] ->
+                            Entry#syn_registry_table.monitor_ref
+                    end,
+
                     %% add to table
-                    register_on_node(Name, Pid, node(Pid), Meta),
+                    register_on_node(Name, Pid, Meta, MonitorRef),
                     %% multicast
                     rpc:eval_everywhere(nodes(), ?MODULE, sync_register, [Name, Pid, Meta]),
                     %% return
@@ -201,7 +209,7 @@ handle_call(Request, From, State) ->
 
 handle_cast({sync_register, Name, Pid, Meta}, State) ->
     %% add to table
-    register_on_node(Name, Pid, node(Pid), Meta),
+    register_on_node(Name, Pid, Meta, undefined),
     %% return
     {noreply, State};
 
@@ -236,7 +244,9 @@ handle_info({'DOWN', _MonitorRef, process, Pid, Reason}, State) ->
                 %% log
                 log_process_exit(Name, Pid, Reason),
                 %% delete from table
-                unregister_on_node(Name)
+                unregister_on_node(Name),
+                %% multicast
+                rpc:eval_everywhere(nodes(), ?MODULE, sync_unregister, [Name])
             end, Entries)
     end,
     %% return
@@ -265,19 +275,12 @@ code_change(_OldVsn, State, _Extra) ->
 %% Internal
 %% ===================================================================
 -spec register_on_node(Name :: any(), Pid :: pid(), Node :: atom(), Meta :: any()) -> true.
-register_on_node(Name, Pid, Node, Meta) ->
-    MonitorRef = case find_processes_entry_by_pid(Pid) of
-        [] ->
-            %% process is not monitored yet, add
-            erlang:monitor(process, Pid);
-        [Entry | _] ->
-            Entry#syn_registry_table.monitor_ref
-    end,
+register_on_node(Name, Pid, Meta, MonitorRef) ->
     %% add to table
     mnesia:dirty_write(#syn_registry_table{
         name = Name,
         pid = Pid,
-        node = Node,
+        node = node(Pid),
         meta = Meta,
         monitor_ref = MonitorRef
     }).

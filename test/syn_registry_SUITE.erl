@@ -527,12 +527,7 @@ three_nodes_consistency_full_net_split(Config) ->
     syn_test_suite_helper:connect_node(SlaveNode1),
     syn_test_suite_helper:connect_node(SlaveNode2),
     rpc:call(SlaveNode1, syn_test_suite_helper, connect_node, [SlaveNode2]),
-    timer:sleep(5000),
-
-    ct:pal("0: ~p",[nodes()]),
-    ct:pal("1: ~p",[rpc:call(SlaveNode1, erlang, nodes, [])]),
-    ct:pal("2: ~p",[rpc:call(SlaveNode2, erlang, nodes, [])]),
-
+    timer:sleep(1500),
     %% retrieve
     Pid0 = syn:whereis(<<"proc0">>),
     undefined = syn:whereis(<<"proc0b">>),

@@ -128,6 +128,7 @@ handle_info({nodeup, RemoteNode}, State) ->
 
 handle_info({nodedown, RemoteNode}, State) ->
     error_logger:warning_msg("Node ~p has left the cluster of local node ~p~n", [RemoteNode, node()]),
+    purge_registry_entries_for_node(RemoteNode),
     {noreply, State};
 
 
