@@ -127,7 +127,7 @@ handle_info({nodeup, RemoteNode}, State) ->
     {noreply, State};
 
 handle_info({nodedown, RemoteNode}, State) ->
-    error_logger:warning_msg("Syn(~p): Node ~p has left the cluster~n", [node(), RemoteNode]),
+    error_logger:warning_msg("Syn(~p): Node ~p has left the cluster, removing its entries on local~n", [node(), RemoteNode]),
     purge_registry_entries_for_node(RemoteNode),
     {noreply, State};
 
