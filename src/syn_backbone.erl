@@ -28,6 +28,7 @@
 
 %% API
 -export([start_link/0]).
+-export([resume_local_syn_registry/0]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
@@ -46,6 +47,10 @@ start_link() ->
     Options = [],
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], Options).
 
+-spec resume_local_syn_registry() -> ok.
+resume_local_syn_registry() ->
+    sys:resume(syn_registry).
+
 %% ===================================================================
 %% Callbacks
 %% ===================================================================
@@ -61,8 +66,13 @@ start_link() ->
 init([]) ->
     error_logger:info_msg("Creating syn tables"),
     case create_ram_tables() of
-        ok -> {ok, #state{}};
-        Other -> Other
+        ok ->
+            %% monitor nodes
+            ok = net_kernel:monitor_nodes(true),
+            %% init
+            {ok, #state{}};
+        Other ->
+            Other
     end.
 
 %% ----------------------------------------------------------------------------------------------------------
@@ -99,6 +109,27 @@ handle_cast(Msg, State) ->
     {noreply, #state{}} |
     {noreply, #state{}, Timeout :: non_neg_integer()} |
     {stop, Reason :: any(), #state{}}.
+
+handle_info({nodeup, RemoteNode}, State) ->
+    error_logger:info_msg("Node ~p has joined the cluster of local node ~p~n", [RemoteNode, node()]),
+    global:trans({{?MODULE, auto_merge_node_up}, self()},
+        fun() ->
+            error_logger:info_msg("Merge: ----> Initiating on ~p for remote node ~p~n", [node(), RemoteNode]),
+            %% request remote node process info & suspend remote registry
+            RegistryTuples = rpc:call(RemoteNode, syn_registry, get_local_registry_tuples_and_suspend, [node()]),
+            sync_registry_tuples(RemoteNode, RegistryTuples),
+            error_logger:error_msg("Merge: <---- Done on ~p for remote node ~p~n", [node(), RemoteNode])
+        end
+    ),
+    %% resume remote processes able to modify tables
+    ok = rpc:call(RemoteNode, sys, resume, [syn_registry]),
+    %% resume
+    {noreply, State};
+
+handle_info({nodedown, RemoteNode}, State) ->
+    error_logger:warning_msg("Node ~p has left the cluster of local node ~p~n", [RemoteNode, node()]),
+    purge_registry_entries_for_node(RemoteNode),
+    {noreply, State};
 
 handle_info(Info, State) ->
     error_logger:warning_msg("Received an unknown info message: ~p~n", [Info]),
@@ -159,3 +190,38 @@ delete_ram_tables() ->
     mnesia:delete_table(syn_registry_table),
     mnesia:delete_table(syn_groups_table),
     ok.
+
+sync_registry_tuples(RemoteNode, RegistryTuples) ->
+    %% ensure that registry doesn't have any joining node's entries
+    purge_registry_entries_for_node(RemoteNode),
+    %% loop
+    F = fun({Name, RemotePid, _RemoteNode, RemoteMeta}) ->
+        %% check if same name is registered
+        case syn_registry:find_process_entry_by_name(Name) of
+            undefined ->
+                %% no conflict
+                ok;
+            Entry ->
+                error_logger:warning_msg(
+                    "Conflicting name process found for: ~p, processes are ~p, ~p, killing local~n",
+                    [Name, Entry#syn_registry_table.pid, RemotePid]
+                ),
+                %% kill the local one
+                exit(Entry#syn_registry_table.pid, kill)
+        end,
+        %% enqueue registration (to be done on syn_registry for monitor)
+        syn_registry:sync_register(Name, RemotePid, RemoteMeta)
+    end,
+    %% add to table
+    lists:foreach(F, RegistryTuples).
+
+-spec purge_registry_entries_for_node(Node :: atom()) -> ok.
+purge_registry_entries_for_node(Node) ->
+    %% build match specs
+    MatchHead = #syn_registry_table{name = '$1', node = '$2', _ = '_'},
+    Guard = {'=:=', '$2', Node},
+    IdFormat = '$1',
+    %% delete
+    NodePids = mnesia:dirty_select(syn_registry_table, [{MatchHead, [Guard], [IdFormat]}]),
+    DelF = fun(Id) -> mnesia:dirty_delete({syn_registry_table, Id}) end,
+    lists:foreach(DelF, NodePids).
