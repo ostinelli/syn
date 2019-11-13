@@ -44,7 +44,7 @@
 -record(state, {}).
 
 %% includes
--include("syn_records.hrl").
+-include("syn.hrl").
 
 %% ===================================================================
 %% API
