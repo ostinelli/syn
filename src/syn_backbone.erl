@@ -3,7 +3,7 @@
 %%
 %% The MIT License (MIT)
 %%
-%% Copyright (c) 2015 Roberto Ostinelli <roberto@ostinelli.net> and Neato Robotics, Inc.
+%% Copyright (c) 2015-2019 Roberto Ostinelli <roberto@ostinelli.net> and Neato Robotics, Inc.
 %%
 %% Permission is hereby granted, free of charge, to any person obtaining a copy
 %% of this software and associated documentation files (the "Software"), to deal
@@ -24,74 +24,138 @@
 %% THE SOFTWARE.
 %% ==========================================================================================================
 -module(syn_backbone).
+-behaviour(gen_server).
 
 %% API
--export([initdb/0]).
+-export([start_link/0]).
 
-%% include
--include("syn.hrl").
+%% gen_server callbacks
+-export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
+%% records
+-record(state, {}).
+
+%% includes
+-include("syn_records.hrl").
 
 %% ===================================================================
 %% API
 %% ===================================================================
+-spec start_link() -> {ok, pid()} | {error, any()}.
+start_link() ->
+    Options = [],
+    gen_server:start_link({local, ?MODULE}, ?MODULE, [], Options).
 
--spec initdb() -> ok | {error, any()}.
-initdb() ->
-    %% ensure all nodes are added
-    ClusterNodes = [node() | nodes()],
-    {ok, _} = mnesia:change_config(extra_db_nodes, ClusterNodes),
-    %% create tables
-    create_table(syn_registry_table, [
+%% ===================================================================
+%% Callbacks
+%% ===================================================================
+
+%% ----------------------------------------------------------------------------------------------------------
+%% Init
+%% ----------------------------------------------------------------------------------------------------------
+-spec init([]) ->
+    {ok, #state{}} |
+    {ok, #state{}, Timeout :: non_neg_integer()} |
+    ignore |
+    {stop, Reason :: any()}.
+init([]) ->
+    error_logger:info_msg("Creating syn tables"),
+    case create_ram_tables() of
+        ok -> {ok, #state{}};
+        Other -> Other
+    end.
+
+%% ----------------------------------------------------------------------------------------------------------
+%% Call messages
+%% ----------------------------------------------------------------------------------------------------------
+-spec handle_call(Request :: any(), From :: any(), #state{}) ->
+    {reply, Reply :: any(), #state{}} |
+    {reply, Reply :: any(), #state{}, Timeout :: non_neg_integer()} |
+    {noreply, #state{}} |
+    {noreply, #state{}, Timeout :: non_neg_integer()} |
+    {stop, Reason :: any(), Reply :: any(), #state{}} |
+    {stop, Reason :: any(), #state{}}.
+
+handle_call(Request, From, State) ->
+    error_logger:warning_msg("Received from ~p an unknown call message: ~p~n", [Request, From]),
+    {reply, undefined, State}.
+
+%% ----------------------------------------------------------------------------------------------------------
+%% Cast messages
+%% ----------------------------------------------------------------------------------------------------------
+-spec handle_cast(Msg :: any(), #state{}) ->
+    {noreply, #state{}} |
+    {noreply, #state{}, Timeout :: non_neg_integer()} |
+    {stop, Reason :: any(), #state{}}.
+
+handle_cast(Msg, State) ->
+    error_logger:warning_msg("Received an unknown cast message: ~p~n", [Msg]),
+    {noreply, State}.
+
+%% ----------------------------------------------------------------------------------------------------------
+%% All non Call / Cast messages
+%% ----------------------------------------------------------------------------------------------------------
+-spec handle_info(Info :: any(), #state{}) ->
+    {noreply, #state{}} |
+    {noreply, #state{}, Timeout :: non_neg_integer()} |
+    {stop, Reason :: any(), #state{}}.
+
+handle_info(Info, State) ->
+    error_logger:warning_msg("Received an unknown info message: ~p~n", [Info]),
+    {noreply, State}.
+
+%% ----------------------------------------------------------------------------------------------------------
+%% Terminate
+%% ----------------------------------------------------------------------------------------------------------
+-spec terminate(Reason :: any(), #state{}) -> terminated.
+terminate(Reason, _State) ->
+    error_logger:info_msg("Terminating with reason: ~p~n", [Reason]),
+    error_logger:info_msg("Removing syn tables~n", [Reason]),
+    delete_ram_tables(),
+    terminated.
+
+%% ----------------------------------------------------------------------------------------------------------
+%% Convert process state when code is changed.
+%% ----------------------------------------------------------------------------------------------------------
+-spec code_change(OldVsn :: any(), #state{}, Extra :: any()) -> {ok, #state{}}.
+code_change(_OldVsn, State, _Extra) ->
+    {ok, State}.
+
+%% ===================================================================
+%% Internal
+%% ===================================================================
+-spec create_ram_tables() -> ok | {error, Reason :: term()}.
+create_ram_tables() ->
+    case create_registry_table() of
+        {atomic, ok} ->
+            case create_groups_table() of
+                {atomic, ok} -> ok;
+                {aborted, Reason} -> {error, {could_not_create_syn_groups_table, Reason}}
+            end;
+        {aborted, Reason} ->
+            {error, {could_not_create_syn_registry_table, Reason}}
+    end.
+
+-spec create_registry_table() -> {atomic, ok} | {aborted, Reason :: term()}.
+create_registry_table() ->
+    mnesia:create_table(syn_registry_table, [
         {type, set},
-        {ram_copies, ClusterNodes},
         {attributes, record_info(fields, syn_registry_table)},
         {index, [#syn_registry_table.pid]},
-        {storage_properties, [{ets, [{read_concurrency, true}]}]}
-    ]),
-    create_table(syn_groups_table, [
+        {storage_properties, [{ets, [{read_concurrency, true}, {write_concurrency, true}]}]}
+    ]).
+
+-spec create_groups_table() -> {atomic, ok} | {aborted, Reason :: term()}.
+create_groups_table() ->
+    mnesia:create_table(syn_groups_table, [
         {type, bag},
-        {ram_copies, ClusterNodes},
         {attributes, record_info(fields, syn_groups_table)},
         {index, [#syn_groups_table.pid]},
         {storage_properties, [{ets, [{read_concurrency, true}]}]}
     ]).
 
-create_table(TableName, Options) ->
-    CurrentNode = node(),
-    %% ensure table exists
-    case mnesia:create_table(TableName, Options) of
-        {atomic, ok} ->
-            error_logger:info_msg("~p was successfully created~n", [TableName]),
-            ok;
-        {aborted, {already_exists, TableName}} ->
-            %% table already exists, try to add current node as copy
-            add_table_copy_to_current_node(TableName);
-        {aborted, {already_exists, TableName, CurrentNode}} ->
-            %% table already exists, try to add current node as copy
-            add_table_copy_to_current_node(TableName);
-        Other ->
-            error_logger:error_msg("Error while creating ~p: ~p~n", [TableName, Other]),
-            {error, Other}
-    end.
-
--spec add_table_copy_to_current_node(TableName :: atom()) -> ok | {error, any()}.
-add_table_copy_to_current_node(TableName) ->
-    CurrentNode = node(),
-    %% wait for table
-    mnesia:wait_for_tables([TableName], 10000),
-    %% add copy
-    case mnesia:add_table_copy(TableName, CurrentNode, ram_copies) of
-        {atomic, ok} ->
-            error_logger:info_msg("Copy of ~p was successfully added to current node~n", [TableName]),
-            ok;
-        {aborted, {already_exists, TableName}} ->
-            error_logger:info_msg("Copy of ~p is already added to current node~n", [TableName]),
-            ok;
-        {aborted, {already_exists, TableName, CurrentNode}} ->
-            error_logger:info_msg("Copy of ~p is already added to current node~n", [TableName]),
-            ok;
-        {aborted, Reason} ->
-            error_logger:error_msg("Error while creating copy of ~p: ~p~n", [TableName, Reason]),
-            {error, Reason}
-    end.
+-spec delete_ram_tables() -> ok.
+delete_ram_tables() ->
+    mnesia:delete_table(syn_registry_table),
+    mnesia:delete_table(syn_groups_table),
+    ok.

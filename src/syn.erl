@@ -3,7 +3,7 @@
 %%
 %% The MIT License (MIT)
 %%
-%% Copyright (c) 2015 Roberto Ostinelli <roberto@ostinelli.net> and Neato Robotics, Inc.
+%% Copyright (c) 2015-2019 Roberto Ostinelli <roberto@ostinelli.net> and Neato Robotics, Inc.
 %%
 %% Permission is hereby granted, free of charge, to any person obtaining a copy
 %% of this software and associated documentation files (the "Software"), to deal
@@ -27,76 +27,42 @@
 
 %% API
 -export([start/0, stop/0]).
--export([init/0]).
-
-%% registry
+-export([whereis/1, whereis/2]).
 -export([register/2, register/3]).
 -export([unregister/1]).
--export([find_by_key/1, find_by_key/2]).
--export([find_by_pid/1, find_by_pid/2]).
 -export([registry_count/0, registry_count/1]).
-
-%% registry for gen_server name via-tuples
--export([register_name/2]).
--export([unregister_name/1]).
--export([whereis_name/1]).
--export([send/2]).
-
-%% groups
--export([join/2, join/3]).
--export([leave/2]).
--export([member/2]).
--export([get_members/1, get_members/2]).
--export([get_local_members/1, get_local_members/2]).
--export([publish/2]).
--export([publish_to_local/2]).
--export([multi_call/2, multi_call/3]).
--export([multi_call_reply/2]).
 
 %% ===================================================================
 %% API
 %% ===================================================================
 -spec start() -> ok.
 start() ->
-    ok = start_application(mnesia),
-    ok = start_application(syn),
+    {ok, _} = application:ensure_all_started(syn),
     ok.
 
 -spec stop() -> ok.
 stop() ->
     ok = application:stop(syn).
 
--spec init() -> ok.
-init() ->
-    ok = syn_backbone:initdb().
+-spec whereis(Name :: term()) -> pid() | undefined.
+whereis(Name) ->
+    syn_registry:whereis(Name).
 
--spec register(Key :: any(), Pid :: pid()) -> ok | {error, taken | pid_already_registered}.
-register(Key, Pid) ->
-    syn_registry:register(Key, Pid).
+-spec whereis(Name :: term(), with_meta) -> {pid(), Meta :: term()} | undefined.
+whereis(Name, with_meta) ->
+    syn_registry:whereis(Name, with_meta).
 
--spec register(Key :: any(), Pid :: pid(), Meta :: any()) -> ok | {error, taken | pid_already_registered}.
-register(Key, Pid, Meta) ->
-    syn_registry:register(Key, Pid, Meta).
+-spec register(Name :: term(), Pid :: pid()) -> ok | {error, Reason :: term()}.
+register(Name, Pid) ->
+    syn_registry:register(Name, Pid).
 
--spec unregister(Key :: any()) -> ok | {error, undefined}.
-unregister(Key) ->
-    syn_registry:unregister(Key).
+-spec register(Name :: term(), Pid :: pid(), Meta :: term()) -> ok | {error, Reason :: term()}.
+register(Name, Pid, Meta) ->
+    syn_registry:register(Name, Pid, Meta).
 
--spec find_by_key(Key :: any()) -> pid() | undefined.
-find_by_key(Key) ->
-    syn_registry:find_by_key(Key).
-
--spec find_by_key(Key :: any(), with_meta) -> {pid(), Meta :: any()} | undefined.
-find_by_key(Key, with_meta) ->
-    syn_registry:find_by_key(Key, with_meta).
-
--spec find_by_pid(Pid :: pid()) -> Key :: any() | undefined.
-find_by_pid(Pid) ->
-    syn_registry:find_by_pid(Pid).
-
--spec find_by_pid(Pid :: pid(), with_meta) -> {Key :: any(), Meta :: any()} | undefined.
-find_by_pid(Pid, with_meta) ->
-    syn_registry:find_by_pid(Pid, with_meta).
+-spec unregister(Name :: term()) -> ok | {error, Reason :: term()}.
+unregister(Name) ->
+    syn_registry:unregister(Name).
 
 -spec registry_count() -> non_neg_integer().
 registry_count() ->
@@ -105,94 +71,3 @@ registry_count() ->
 -spec registry_count(Node :: atom()) -> non_neg_integer().
 registry_count(Node) ->
     syn_registry:count(Node).
-
--spec register_name(Name :: term(), Pid :: pid()) -> 'yes' | 'no'.
-register_name(Name, Pid) when is_pid(Pid) ->
-    case syn_registry:register(Name, Pid) of
-        ok -> yes;
-        {error, _} -> no;
-        _ -> no
-    end.
-
--spec unregister_name(Name :: term()) -> _.
-unregister_name(Name) ->
-    case syn_registry:unregister(Name) of
-        ok -> Name;
-        {error, _} -> nil;
-        _ -> nil
-    end.
-
--spec whereis_name(Name :: term()) -> pid() | 'undefined'.
-whereis_name(Name) -> syn_registry:find_by_key(Name).
-
--spec send(Name :: term(), Message :: term()) -> pid().
-send(Name, Message) ->
-    case whereis_name(Name) of
-        undefined -> {badarg, {Name, Message}};
-        Pid -> Pid ! Message, Pid
-    end.
-
--spec join(Name :: any(), Pid :: pid()) -> ok.
-join(Name, Pid) ->
-    syn_groups:join(Name, Pid).
-
--spec join(Name :: any(), Pid :: pid(), Meta :: any()) -> ok.
-join(Name, Pid, Meta) ->
-    syn_groups:join(Name, Pid, Meta).
-
--spec leave(Name :: any(), Pid :: pid()) -> ok | {error, pid_not_in_group}.
-leave(Name, Pid) ->
-    syn_groups:leave(Name, Pid).
-
--spec member(Pid :: pid(), Name :: any()) -> boolean().
-member(Pid, Name) ->
-    syn_groups:member(Pid, Name).
-
--spec get_members(Name :: any()) -> [pid()].
-get_members(Name) ->
-    syn_groups:get_members(Name).
-
--spec get_members(Name :: any(), with_meta) -> [{pid(), Meta :: any()}].
-get_members(Name, with_meta) ->
-    syn_groups:get_members(Name, with_meta).
-
--spec get_local_members(Name :: any()) -> [pid()].
-get_local_members(Name) ->
-    syn_groups:get_local_members(Name).
-
--spec get_local_members(Name :: any(), with_meta) -> [{pid(), Meta :: any()}].
-get_local_members(Name, with_meta) ->
-    syn_groups:get_local_members(Name, with_meta).
-
--spec publish(Name :: any(), Message :: any()) -> {ok, RecipientCount :: non_neg_integer()}.
-publish(Name, Message) ->
-    syn_groups:publish(Name, Message).
-
--spec publish_to_local(Name :: any(), Message :: any()) -> {ok, RecipientCount :: non_neg_integer()}.
-publish_to_local(Name, Message) ->
-    syn_groups:publish_to_local(Name, Message).
-
--spec multi_call(Name :: any(), Message :: any()) ->
-    {[{pid(), Reply :: any()}], [BadPid :: pid()]}.
-multi_call(Name, Message) ->
-    syn_groups:multi_call(Name, Message).
-
--spec multi_call(Name :: any(), Message :: any(), Timeout :: non_neg_integer()) ->
-    {[{pid(), Reply :: any()}], [BadPid :: pid()]}.
-multi_call(Name, Message, Timeout) ->
-    syn_groups:multi_call(Name, Message, Timeout).
-
--spec multi_call_reply(CallerPid :: pid(), Reply :: any()) -> {syn_multi_call_reply, pid(), Reply :: any()}.
-multi_call_reply(CallerPid, Reply) ->
-    syn_groups:multi_call_reply(CallerPid, Reply).
-
-%% ===================================================================
-%% Internal
-%% ===================================================================
--spec start_application(atom()) -> ok | {error, any()}.
-start_application(Application) ->
-    case application:start(Application) of
-        ok -> ok;
-        {error, {already_started, Application}} -> ok;
-        Error -> Error
-    end.

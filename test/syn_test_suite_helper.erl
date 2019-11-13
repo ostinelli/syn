@@ -26,10 +26,9 @@
 -module(syn_test_suite_helper).
 
 %% API
--export([set_environment_variables/0, set_environment_variables/1]).
 -export([start_slave/1, stop_slave/1]).
 -export([connect_node/1, disconnect_node/1]).
--export([clean_after_test/0, clean_after_test/1]).
+-export([clean_after_test/0]).
 -export([start_process/0, start_process/1, start_process/2]).
 -export([kill_process/1]).
 
@@ -43,18 +42,6 @@
 %% ===================================================================
 %% API
 %% ===================================================================
-set_environment_variables() ->
-    set_environment_variables(node()).
-set_environment_variables(Node) ->
-    % read config file
-    ConfigFilePath = filename:join([filename:dirname(code:which(?MODULE)), ?SYN_TEST_CONFIG_FILENAME]),
-    {ok, [AppsConfig]} = file:consult(ConfigFilePath),
-    % loop to set variables
-    F = fun({AppName, AppConfig}) ->
-        set_environment_for_app(Node, AppName, AppConfig)
-    end,
-    lists:foreach(F, AppsConfig).
-
 start_slave(NodeShortName) ->
     CodePath = code:get_path(),
     {ok, Node} = ct_slave:start(NodeShortName, [{boot_timeout, 10}]),
@@ -71,28 +58,14 @@ disconnect_node(Node) ->
     erlang:disconnect_node(Node).
 
 clean_after_test() ->
-    %% delete table
-    {atomic, ok} = mnesia:delete_table(syn_registry_table),
-    %% stop mnesia
-    mnesia:stop(),
-    %% delete schema
-    mnesia:delete_schema([node()]),
-    %% stop syn
-    syn:stop().
-
-clean_after_test(undefined) ->
-    clean_after_test();
-clean_after_test(Node) ->
-    %% delete table
-    {atomic, ok} = mnesia:delete_table(syn_registry_table),
-    %% stop mnesia
-    mnesia:stop(),
-    rpc:call(Node, mnesia, stop, []),
-    %% delete schema
-    mnesia:delete_schema([node(), Node]),
-    %% stop syn
-    syn:stop(),
-    rpc:call(Node, syn, stop, []).
+    Nodes = [node() | nodes()],
+    %% shutdown
+    lists:foreach(fun(Node) ->
+        ok = rpc:call(Node, syn, stop, []),
+        ok = rpc:call(Node, application, stop, [mnesia])
+    end, Nodes),
+    %% clean mnesia
+    mnesia:delete_schema(Nodes).
 
 start_process() ->
     Pid = spawn(fun process_main/0),
@@ -103,7 +76,7 @@ start_process(Node) when is_atom(Node) ->
 start_process(Loop) when is_function(Loop) ->
     Pid = spawn(Loop),
     Pid.
-start_process(Node, Loop)->
+start_process(Node, Loop) ->
     Pid = spawn(Node, Loop),
     Pid.
 
@@ -113,12 +86,6 @@ kill_process(Pid) ->
 %% ===================================================================
 %% Internal
 %% ===================================================================
-set_environment_for_app(Node, AppName, AppConfig) ->
-    F = fun({Key, Val}) ->
-        ok = rpc:call(Node, application, set_env, [AppName, Key, Val])
-    end,
-    lists:foreach(F, AppConfig).
-
 process_main() ->
     receive
         _ -> process_main()

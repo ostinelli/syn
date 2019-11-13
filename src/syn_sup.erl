@@ -3,7 +3,7 @@
 %%
 %% The MIT License (MIT)
 %%
-%% Copyright (c) 2015 Roberto Ostinelli <roberto@ostinelli.net> and Neato Robotics, Inc.
+%% Copyright (c) 2015-2019 Roberto Ostinelli <roberto@ostinelli.net> and Neato Robotics, Inc.
 %%
 %% Permission is hereby granted, free of charge, to any person obtaining a copy
 %% of this software and associated documentation files (the "Software"), to deal
@@ -50,8 +50,8 @@ start_link() ->
     {ok, {{supervisor:strategy(), non_neg_integer(), pos_integer()}, [supervisor:child_spec()]}}.
 init([]) ->
     Children = [
-        ?CHILD(syn_registry, worker),
-        ?CHILD(syn_groups, worker),
-        ?CHILD(syn_consistency, worker)
+        ?CHILD(syn_backbone, worker),
+        ?CHILD(syn_consistency, worker),
+        ?CHILD(syn_registry, worker)
     ],
     {ok, {{one_for_one, 10, 10}, Children}}.

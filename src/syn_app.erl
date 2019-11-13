@@ -3,7 +3,7 @@
 %%
 %% The MIT License (MIT)
 %%
-%% Copyright (c) 2015 Roberto Ostinelli <roberto@ostinelli.net> and Neato Robotics, Inc.
+%% Copyright (c) 2015-2019 Roberto Ostinelli <roberto@ostinelli.net> and Neato Robotics, Inc.
 %%
 %% Permission is hereby granted, free of charge, to any person obtaining a copy
 %% of this software and associated documentation files (the "Software"), to deal
@@ -29,7 +29,6 @@
 %% API
 -export([start/2, stop/1]).
 
-
 %% ===================================================================
 %% API
 %% ===================================================================
@@ -38,7 +37,6 @@
     StartArgs :: any()
 ) -> {ok, pid()} | {ok, pid(), State :: any()} | {error, any()}.
 start(_StartType, _StartArgs) ->
-    %% start sup
     syn_sup:start_link().
 
 -spec stop(State :: any()) -> ok.

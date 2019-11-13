@@ -3,7 +3,7 @@
 %%
 %% The MIT License (MIT)
 %%
-%% Copyright (c) 2015 Roberto Ostinelli <roberto@ostinelli.net> and Neato Robotics, Inc.
+%% Copyright (c) 2015-2019 Roberto Ostinelli <roberto@ostinelli.net> and Neato Robotics, Inc.
 %%
 %% Permission is hereby granted, free of charge, to any person obtaining a copy
 %% of this software and associated documentation files (the "Software"), to deal
@@ -28,24 +28,26 @@
 
 %% API
 -export([start_link/0]).
+-export([whereis/1, whereis/2]).
 -export([register/2, register/3]).
 -export([unregister/1]).
--export([find_by_key/1, find_by_key/2]).
--export([find_by_pid/1, find_by_pid/2]).
 -export([count/0, count/1]).
+
+%% sync API
+-export([sync_register/3, sync_unregister/1]).
+-export([get_local_registry_tuples_and_suspend/1]).
+
+%% internal
+-export([find_process_entry_by_name/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
 %% records
--record(state, {
-    registry_process_exit_callback_module = undefined :: atom(),
-    registry_process_exit_callback_function = undefined :: atom()
-}).
+-record(state, {}).
 
-%% include
--include("syn.hrl").
-
+%% includes
+-include("syn_records.hrl").
 
 %% ===================================================================
 %% API
@@ -55,52 +57,54 @@ start_link() ->
     Options = [],
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], Options).
 
--spec find_by_key(Key :: any()) -> pid() | undefined.
-find_by_key(Key) ->
-    case i_find_by_key(on_connected_node, Key) of
+-spec whereis(Name :: term()) -> pid() | undefined.
+whereis(Name) ->
+    case find_process_entry_by_name(Name) of
         undefined -> undefined;
-        Process -> Process#syn_registry_table.pid
+        Entry -> Entry#syn_registry_table.pid
     end.
 
--spec find_by_key(Key :: any(), with_meta) -> {pid(), Meta :: any()} | undefined.
-find_by_key(Key, with_meta) ->
-    case i_find_by_key(on_connected_node, Key) of
+-spec whereis(Name :: term(), with_meta) -> {pid(), Meta :: term()} | undefined.
+whereis(Name, with_meta) ->
+    case find_process_entry_by_name(Name) of
         undefined -> undefined;
-        Process -> {Process#syn_registry_table.pid, Process#syn_registry_table.meta}
+        Entry -> {Entry#syn_registry_table.pid, Entry#syn_registry_table.meta}
     end.
 
--spec find_by_pid(Pid :: pid()) -> Key :: any() | undefined.
-find_by_pid(Pid) when is_pid(Pid) ->
-    case i_find_by_pid(on_connected_node, Pid) of
-        undefined -> undefined;
-        Process -> Process#syn_registry_table.key
-    end.
+-spec register(Name :: term(), Pid :: pid()) -> ok | {error, Reason :: term()}.
+register(Name, Pid) ->
+    register(Name, Pid, undefined).
 
--spec find_by_pid(Pid :: pid(), with_meta) -> {Key :: any(), Meta :: any()} | undefined.
-find_by_pid(Pid, with_meta) when is_pid(Pid) ->
-    case i_find_by_pid(on_connected_node, Pid) of
-        undefined -> undefined;
-        Process -> {Process#syn_registry_table.key, Process#syn_registry_table.meta}
-    end.
-
--spec register(Key :: any(), Pid :: pid()) -> ok | {error, taken | pid_already_registered}.
-register(Key, Pid) when is_pid(Pid) ->
-    register(Key, Pid, undefined).
-
--spec register(Key :: any(), Pid :: pid(), Meta :: any()) -> ok | {error, taken | pid_already_registered}.
-register(Key, Pid, Meta) when is_pid(Pid) ->
+-spec register(Name :: term(), Pid :: pid(), Meta :: term()) -> ok | {error, Reason :: term()}.
+register(Name, Pid, Meta) when is_pid(Pid) ->
     Node = node(Pid),
-    gen_server:call({?MODULE, Node}, {register_on_node, Key, Pid, Meta}).
+    gen_server:call({?MODULE, Node}, {register_on_node, Name, Pid, Meta}).
 
--spec unregister(Key :: any()) -> ok | {error, undefined}.
-unregister(Key) ->
-    case i_find_by_key(Key) of
+-spec unregister(Name :: term()) -> ok | {error, Reason :: term()}.
+unregister(Name) ->
+    % get process' node
+    case find_process_entry_by_name(Name) of
         undefined ->
             {error, undefined};
-        Process ->
-            Node = node(Process#syn_registry_table.pid),
-            gen_server:call({?MODULE, Node}, {unregister_on_node, Key})
+        Entry ->
+            Node = node(Entry#syn_registry_table.pid),
+            gen_server:call({?MODULE, Node}, {unregister_on_node, Name})
     end.
+
+-spec sync_register(Name :: term(), Pid :: pid(), Meta :: term()) -> ok.
+sync_register(Name, Pid, Meta) ->
+    gen_server:cast(?MODULE, {sync_register, Name, Pid, Meta}).
+
+-spec sync_unregister(Name :: term()) -> ok.
+sync_unregister(Name) ->
+    gen_server:cast(?MODULE, {sync_unregister, Name}).
+
+-spec get_local_registry_tuples_and_suspend(FromNode :: node()) -> list(syn_registry_tuple()).
+get_local_registry_tuples_and_suspend(FromNode) ->
+    Result = gen_server:call(?MODULE, {get_local_registry_tuples_and_suspend, FromNode}),
+    %% suspend self to not modify table
+    sys:suspend(?MODULE),
+    Result.
 
 -spec count() -> non_neg_integer().
 count() ->
@@ -129,20 +133,13 @@ count(Node) ->
     ignore |
     {stop, Reason :: any()}.
 init([]) ->
-    %% trap linked processes signal
-    process_flag(trap_exit, true),
-    
-    %% get options
-    {ok, [ProcessExitCallbackModule, ProcessExitCallbackFunction]} = syn_utils:get_env_value(
-        registry_process_exit_callback,
-        [undefined, undefined]
-    ),
-    
-    %% build state
-    {ok, #state{
-        registry_process_exit_callback_module = ProcessExitCallbackModule,
-        registry_process_exit_callback_function = ProcessExitCallbackFunction
-    }}.
+    %% wait for table
+    case mnesia:wait_for_tables([syn_registry_table], 10000) of
+        ok ->
+            {ok, #state{}};
+        Reason ->
+            {stop, {error_waiting_for_process_registry_table, Reason}}
+    end.
 
 %% ----------------------------------------------------------------------------------------------------------
 %% Call messages
@@ -155,53 +152,40 @@ init([]) ->
     {stop, Reason :: any(), Reply :: any(), #state{}} |
     {stop, Reason :: any(), #state{}}.
 
-handle_call({register_on_node, Key, Pid, Meta}, _From, State) ->
-    %% check & register in gen_server process to ensure atomicity at node level without transaction lock
-    %% atomicity is obviously not at cluster level, which is covered by syn_consistency.
-    
-    %% check if key registered
-    case i_find_by_key(Key) of
-        undefined ->
-            %% check if pid registered with different key
-            case i_find_by_pid(Pid) of
+handle_call({register_on_node, Name, Pid, Meta}, _From, State) ->
+    %% check if pid is alive
+    case is_process_alive(Pid) of
+        true ->
+            %% check if name available
+            case find_process_entry_by_name(Name) of
                 undefined ->
                     %% add to table
-                    register_on_node(Key, Pid, node(), Meta),
+                    register_on_node(Name, Pid, node(Pid), Meta),
+                    %% multicast
+                    rpc:eval_everywhere(nodes(), ?MODULE, sync_register, [Name, Pid, Meta]),
                     %% return
                     {reply, ok, State};
-                
                 _ ->
-                    {reply, {error, pid_already_registered}, State}
+                    {reply, {error, taken}, State}
             end;
-        
-        Process when Process#syn_registry_table.pid =:= Pid ->
-            %% re-register (maybe different metadata?)
-            register_on_node(Key, Pid, node(), Meta),
-            %% return
-            {reply, ok, State};
-        
         _ ->
-            {reply, {error, taken}, State}
+            {reply, {error, not_alive}, State}
     end;
 
-handle_call({unregister_on_node, Key}, _From, State) ->
-    %% we check again for key to return the correct response regardless of race conditions
-    case i_find_by_key(Key) of
-        undefined ->
-            {reply, {error, undefined}, State};
-        Process ->
-            %% remove from table
-            remove_process_by_key(Key),
-            %% unlink
-            Pid = Process#syn_registry_table.pid,
-            erlang:unlink(Pid),
-            %% reply
-            {reply, ok, State}
-    end;
-
-handle_call({unlink_process, Pid}, _From, State) ->
-    erlang:unlink(Pid),
+handle_call({unregister_on_node, Name}, _From, State) ->
+    %% remove from table
+    unregister_on_node(Name),
+    %% multicast
+    rpc:eval_everywhere(nodes(), ?MODULE, sync_unregister, [Name]),
+    %% return
     {reply, ok, State};
+
+handle_call({get_local_registry_tuples_and_suspend, FromNode}, _From, State) ->
+    error_logger:info_msg("Received request of local registry tuples from remote node: ~p~n", [FromNode]),
+    %% get tuples
+    RegistryTuples = get_registry_tuples_of_current_node(),
+    %% return
+    {reply, RegistryTuples, State};
 
 handle_call(Request, From, State) ->
     error_logger:warning_msg("Received from ~p an unknown call message: ~p~n", [Request, From]),
@@ -215,6 +199,18 @@ handle_call(Request, From, State) ->
     {noreply, #state{}, Timeout :: non_neg_integer()} |
     {stop, Reason :: any(), #state{}}.
 
+handle_cast({sync_register, Name, Pid, Meta}, State) ->
+    %% add to table
+    register_on_node(Name, Pid, node(Pid), Meta),
+    %% return
+    {noreply, State};
+
+handle_cast({sync_unregister, Name}, State) ->
+    %% add to table
+    unregister_on_node(Name),
+    %% return
+    {noreply, State};
+
 handle_cast(Msg, State) ->
     error_logger:warning_msg("Received an unknown cast message: ~p~n", [Msg]),
     {noreply, State}.
@@ -227,58 +223,22 @@ handle_cast(Msg, State) ->
     {noreply, #state{}, Timeout :: non_neg_integer()} |
     {stop, Reason :: any(), #state{}}.
 
-handle_info({'EXIT', Pid, Reason}, #state{
-    registry_process_exit_callback_module = ProcessExitCallbackModule,
-    registry_process_exit_callback_function = ProcessExitCallbackFunction
-} = State) ->
-    %% check if pid is in table
-    {Key, Meta} = case i_find_by_pid(Pid) of
-        undefined ->
+handle_info({'DOWN', _MonitorRef, process, Pid, Reason}, State) ->
+    case find_processes_entry_by_pid(Pid) of
+        [] ->
             %% log
-            case Reason of
-                normal -> ok;
-                shutdown -> ok;
-                {shutdown, _} -> ok;
-                killed -> ok;
-                _ ->
-                    error_logger:error_msg("Received an exit message from an unlinked process ~p with reason: ~p~n", [Pid, Reason])
-            end,
-            
-            %% return
-            {undefined, undefined};
-        
-        Process ->
-            %% get process info
-            Key0 = Process#syn_registry_table.key,
-            Meta0 = Process#syn_registry_table.meta,
-            
-            %% log
-            case Reason of
-                normal -> ok;
-                shutdown -> ok;
-                {shutdown, _} -> ok;
-                killed -> ok;
-                _ ->
-                    error_logger:error_msg("Process with key ~p and pid ~p exited with reason: ~p~n", [Key0, Pid, Reason])
-            end,
-            
-            %% delete from table
-            remove_process_by_key(Key0),
-            
-            %% return
-            {Key0, Meta0}
+            log_process_exit(undefined, Pid, Reason);
+
+        Entries ->
+            lists:foreach(fun(Entry) ->
+                %% get process info
+                Name = Entry#syn_registry_table.name,
+                %% log
+                log_process_exit(Name, Pid, Reason),
+                %% delete from table
+                unregister_on_node(Name)
+            end, Entries)
     end,
-    
-    %% callback
-    case ProcessExitCallbackModule of
-        undefined ->
-            ok;
-        _ ->
-            spawn(fun() ->
-                ProcessExitCallbackModule:ProcessExitCallbackFunction(Key, Pid, Meta, Reason)
-            end)
-    end,
-    
     %% return
     {noreply, State};
 
@@ -291,7 +251,7 @@ handle_info(Info, State) ->
 %% ----------------------------------------------------------------------------------------------------------
 -spec terminate(Reason :: any(), #state{}) -> terminated.
 terminate(Reason, _State) ->
-    error_logger:info_msg("Terminating syn_registry with reason: ~p~n", [Reason]),
+    error_logger:info_msg("Terminating with reason: ~p~n", [Reason]),
     terminated.
 
 %% ----------------------------------------------------------------------------------------------------------
@@ -304,53 +264,69 @@ code_change(_OldVsn, State, _Extra) ->
 %% ===================================================================
 %% Internal
 %% ===================================================================
--spec i_find_by_key(on_connected_node, Key :: any()) -> Process :: #syn_registry_table{} | undefined.
-i_find_by_key(on_connected_node, Key) ->
-    case i_find_by_key(Key) of
-        undefined -> undefined;
-        Process -> return_if_on_connected_node(Process)
-    end.
-
--spec i_find_by_key(Key :: any()) -> Process :: #syn_registry_table{} | undefined.
-i_find_by_key(Key) ->
-    case mnesia:dirty_read(syn_registry_table, Key) of
-        [Process] -> Process;
-        _ -> undefined
-    end.
-
--spec i_find_by_pid(on_connected_node, Pid :: pid()) -> Process :: #syn_registry_table{} | undefined.
-i_find_by_pid(on_connected_node, Pid) ->
-    case i_find_by_pid(Pid) of
-        undefined -> undefined;
-        Process -> return_if_on_connected_node(Process)
-    end.
-
--spec i_find_by_pid(Pid :: pid()) -> Process :: #syn_registry_table{} | undefined.
-i_find_by_pid(Pid) ->
-    case mnesia:dirty_index_read(syn_registry_table, Pid, #syn_registry_table.pid) of
-        [Process] -> Process;
-        _ -> undefined
-    end.
-
--spec return_if_on_connected_node(Process :: #syn_registry_table{}) -> Process :: #syn_registry_table{} | undefined.
-return_if_on_connected_node(Process) ->
-    case lists:member(Process#syn_registry_table.node, [node() | nodes()]) of
-        true -> Process;
-        _ -> undefined
-    end.
-
--spec remove_process_by_key(Key :: any()) -> ok.
-remove_process_by_key(Key) ->
-    mnesia:dirty_delete(syn_registry_table, Key).
-
--spec register_on_node(Key :: any(), Pid :: pid(), Node :: atom(), Meta :: any()) -> true.
-register_on_node(Key, Pid, Node, Meta) ->
+-spec register_on_node(Name :: any(), Pid :: pid(), Node :: atom(), Meta :: any()) -> true.
+register_on_node(Name, Pid, Node, Meta) ->
+    MonitorRef = case find_processes_entry_by_pid(Pid) of
+        [] ->
+            %% process is not monitored yet, add
+            erlang:monitor(process, Pid);
+        [Entry | _] ->
+            Entry#syn_registry_table.monitor_ref
+    end,
     %% add to table
     mnesia:dirty_write(#syn_registry_table{
-        key = Key,
+        name = Name,
         pid = Pid,
         node = Node,
-        meta = Meta
-    }),
-    %% link
-    erlang:link(Pid).
+        meta = Meta,
+        monitor_ref = MonitorRef
+    }).
+
+-spec unregister_on_node(Name :: any()) -> ok.
+unregister_on_node(Name) ->
+    mnesia:dirty_delete(syn_registry_table, Name).
+%% TODO: unmonitor process!
+
+-spec find_processes_entry_by_pid(Pid :: pid()) -> Entries :: list(#syn_registry_table{}).
+find_processes_entry_by_pid(Pid) when is_pid(Pid) ->
+    mnesia:dirty_index_read(syn_registry_table, Pid, #syn_registry_table.pid).
+
+-spec find_process_entry_by_name(Name :: term()) -> Entry :: #syn_registry_table{} | undefined.
+find_process_entry_by_name(Name) ->
+    case mnesia:dirty_read(syn_registry_table, Name) of
+        [Entry] -> Entry;
+        _ -> undefined
+    end.
+
+-spec get_registry_tuples_of_current_node() -> list(syn_registry_tuple()).
+get_registry_tuples_of_current_node() ->
+    %% build match specs
+    MatchHead = #syn_registry_table{name = '$1', pid = '$2', node = '$3', meta = '$4', _ = '_'},
+    Guard = {'=:=', '$3', node()},
+    RegistryTupleFormat = {{'$1', '$2', '$3', '$4'}},
+    %% select
+    mnesia:dirty_select(syn_registry_table, [{MatchHead, [Guard], [RegistryTupleFormat]}]).
+
+-spec log_process_exit(Name :: term(), Pid :: pid(), Reason :: term()) -> ok.
+log_process_exit(Name, Pid, Reason) ->
+    case Reason of
+        normal -> ok;
+        shutdown -> ok;
+        {shutdown, _} -> ok;
+        killed -> ok;
+        noconnection -> ok;
+        noproc -> ok;
+        _ ->
+            case Name of
+                undefined ->
+                    error_logger:error_msg(
+                        "Received a DOWN message from an unmonitored process ~p on local node ~p with reason: ~p~n",
+                        [Pid, node(), Reason]
+                    );
+                _ ->
+                    error_logger:error_msg(
+                        "Process with name ~p and pid ~p on local node ~p exited with reason: ~p~n",
+                        [Name, Pid, node(), Reason]
+                    )
+            end
+    end.

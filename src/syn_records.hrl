@@ -3,7 +3,7 @@
 %%
 %% The MIT License (MIT)
 %%
-%% Copyright (c) 2015 Roberto Ostinelli <roberto@ostinelli.net> and Neato Robotics, Inc.
+%% Copyright (c) 2015-2019 Roberto Ostinelli <roberto@ostinelli.net> and Neato Robotics, Inc.
 %%
 %% Permission is hereby granted, free of charge, to any person obtaining a copy
 %% of this software and associated documentation files (the "Software"), to deal
@@ -23,47 +23,19 @@
 %% OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 %% THE SOFTWARE.
 %% ==========================================================================================================
--module(syn_test_gen_server).
--behaviour(gen_server).
-
--export([start_link/2, stop/1]).
-
-%% gen_server callbacks
--export([
-    init/1,
-    handle_call/3,
-    handle_cast/2,
-    handle_info/2,
-    terminate/2,
-    code_change/3
-]).
-
-start_link(Parent, Name) ->
-    gen_server:start_link(Name, ?MODULE, Parent, []).
-
-stop(Server) ->
-    gen_server:cast(Server, stop).
-
-init(State) ->
-    {ok, State}.
-
-handle_call(_Request, _From, State) ->
-    {reply, call_received, State}.
-
-handle_cast(stop, State) ->
-    State ! stop_received,
-    {stop, normal, State};
-
-handle_cast(_Msg, State) ->
-    State ! cast_received,
-    {noreply, State}.
-
-handle_info(_Info, State) ->
-    State ! info_received,
-    {noreply, State}.
-
-terminate(_Reason, _State) ->
-    ok.
-
-code_change(_OldVsn, State, _Extra) ->
-    {ok, State}.
+%% records
+-record(syn_registry_table, {
+    name = undefined :: any(),
+    pid = undefined :: undefined | pid(),
+    node = undefined :: atom(),
+    meta = undefined :: any(),
+    monitor_ref = undefined :: undefined | reference()
+}).
+-record(syn_groups_table, {
+    name = undefined :: any(),
+    pid = undefined :: undefined | pid(),
+    node = undefined :: atom(),
+    meta = undefined :: any()
+}).
+-type syn_registry_tuple() :: {Name :: term(), Pid :: pid(), Node :: node(), Meta :: term()}.
+-export_type([syn_registry_tuple/0]).

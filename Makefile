@@ -3,25 +3,44 @@ PROJECT_DIR:=$(strip $(shell dirname $(realpath $(lastword $(MAKEFILE_LIST)))))
 all:
 	@rebar3 compile
 
+compile_test:
+	@rebar3 as test compile
+
 clean:
 	@rebar3 clean
 	@find $(PROJECT_DIR)/. -name "erl_crash\.dump" | xargs rm -f
+	@find $(PROJECT_DIR)/. -name "*\.beam" | xargs rm -f
+	@find $(PROJECT_DIR)/. -name "*\.so" | xargs rm -f
 
-dialyze:
+dialyzer:
 	@rebar3 dialyzer
 
-run:
+run: all
 	@erl -pa `rebar3 path` \
 	-name syn@127.0.0.1 \
 	+K true \
 	-mnesia schema_location ram \
-	-eval 'syn:start(),syn:init().'
+	-eval 'syn:start().'
 
-test: all
+console: all
+	@# 'make console sname=syn1'
+	@erl -pa `rebar3 path` \
+	-name $(sname)@127.0.0.1 \
+	+K true \
+	-mnesia schema_location ram
+
+test: compile_test
+ifdef suite
+	@# 'make test suite=syn_registry_SUITE'
 	ct_run -dir $(PROJECT_DIR)/test -logdir $(PROJECT_DIR)/test/results \
-	-pa `rebar3 path`
+	-suite $(suite) \
+	-pa `rebar3 as test path`
+else
+	ct_run -dir $(PROJECT_DIR)/test -logdir $(PROJECT_DIR)/test/results \
+	-pa `rebar3 as test path`
+endif
 
 travis:
-	@$(PROJECT_DIR)/rebar3 compile
+	@$(PROJECT_DIR)/rebar3 as test compile
 	ct_run -dir $(PROJECT_DIR)/test -logdir $(PROJECT_DIR)/test/results \
-	-pa `$(PROJECT_DIR)/rebar3 path`
+	-pa `$(PROJECT_DIR)/rebar3 as test path`
