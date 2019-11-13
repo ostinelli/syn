@@ -36,6 +36,7 @@
 %% sync API
 -export([sync_register/3, sync_unregister/1]).
 -export([sync_get_local_registry_tuples/1]).
+-export([unregister_on_node/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
@@ -361,7 +362,6 @@ log_process_exit(Name, Pid, Reason) ->
             end
     end.
 
-
 sync_registry_tuples(RemoteNode, RegistryTuples) ->
     %% ensure that registry doesn't have any joining node's entries (here again for race conditions)
     purge_registry_entries_for_remote_node(RemoteNode),
@@ -377,15 +377,16 @@ sync_registry_tuples(RemoteNode, RegistryTuples) ->
                     "Syn(~p): Conflicting name process found for: ~p, processes are ~p, ~p~n",
                     [node(), Name, Entry#syn_registry_table.pid, RemotePid]
                 ),
-                %% remove from local table
+                %% unregister local
                 unregister_on_node(Name),
-                %% remove from remote table
+                %% unregister remote
                 ok = rpc:call(RemoteNode, syn_registry, unregister_on_node, [Name]),
 
-                %% TODO: call conflict resolution fun, for now kill the local one
-                exit(Entry#syn_registry_table.pid, kill),
-                register_on_node(Name, RemotePid, RemoteMeta)
-                %% TODO
+                %% TODO: call conflict resolution fun, for now kill the remote one
+                exit(RemotePid, kill),
+
+                %% register local
+                register_on_node(Name, Entry#syn_registry_table.pid, Entry#syn_registry_table.meta)
         end
     end,
     %% add to table
