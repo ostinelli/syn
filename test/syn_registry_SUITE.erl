@@ -43,8 +43,14 @@
     two_nodes_registry_count/1
 ]).
 -export([
-    three_nodes_consistency_partial_net_split/1,
-    three_nodes_consistency_full_net_split/1
+    three_nodes_partial_netsplit_consistency/1,
+    three_nodes_full_netsplit_consistency/1,
+    three_nodes_start_syn_before_connecting_cluster/1
+]).
+
+%% support
+-export([
+    start_syn_delayed_and_register_local_process/3
 ]).
 
 %% include
@@ -94,8 +100,9 @@ groups() ->
             two_nodes_registry_count
         ]},
         {three_nodes_process_registration, [shuffle], [
-            three_nodes_consistency_partial_net_split,
-            three_nodes_consistency_full_net_split
+            three_nodes_partial_netsplit_consistency,
+            three_nodes_full_netsplit_consistency,
+            three_nodes_start_syn_before_connecting_cluster
         ]}
     ].
 %% -------------------------------------------------------------------
@@ -146,14 +153,16 @@ init_per_group(_GroupName, Config) ->
 end_per_group(two_nodes_process_registration, Config) ->
     SlaveNode = proplists:get_value(slave_node, Config),
     syn_test_suite_helper:connect_node(SlaveNode),
-    syn_test_suite_helper:stop_slave(syn_slave);
+    syn_test_suite_helper:stop_slave(syn_slave),
+    timer:sleep(1000);
 end_per_group(three_nodes_process_registration, Config) ->
     SlaveNode1 = proplists:get_value(slave_node_1, Config),
     syn_test_suite_helper:connect_node(SlaveNode1),
     SlaveNode2 = proplists:get_value(slave_node_2, Config),
     syn_test_suite_helper:connect_node(SlaveNode2),
     syn_test_suite_helper:stop_slave(syn_slave_1),
-    syn_test_suite_helper:stop_slave(syn_slave_2);
+    syn_test_suite_helper:stop_slave(syn_slave_2),
+    timer:sleep(1000);
 end_per_group(_GroupName, _Config) ->
     ok.
 
@@ -350,7 +359,7 @@ two_nodes_registry_count(Config) ->
     %% kill proc
     syn_test_suite_helper:kill_process(RemotePid).
 
-three_nodes_consistency_partial_net_split(Config) ->
+three_nodes_partial_netsplit_consistency(Config) ->
     %% get slaves
     SlaveNode1 = proplists:get_value(slave_node_1, Config),
     SlaveNode2 = proplists:get_value(slave_node_2, Config),
@@ -441,7 +450,7 @@ three_nodes_consistency_partial_net_split(Config) ->
     syn_test_suite_helper:kill_process(Pid1),
     syn_test_suite_helper:kill_process(Pid2).
 
-three_nodes_consistency_full_net_split(Config) ->
+three_nodes_full_netsplit_consistency(Config) ->
     %% get slaves
     SlaveNode1 = proplists:get_value(slave_node_1, Config),
     SlaveNode2 = proplists:get_value(slave_node_2, Config),
@@ -546,3 +555,55 @@ three_nodes_consistency_full_net_split(Config) ->
     syn_test_suite_helper:kill_process(Pid0b),
     syn_test_suite_helper:kill_process(Pid1),
     syn_test_suite_helper:kill_process(Pid2).
+
+three_nodes_start_syn_before_connecting_cluster(Config) ->
+    ConflictingName = "COMMON",
+    %% get slaves
+    SlaveNode1 = proplists:get_value(slave_node_1, Config),
+    SlaveNode2 = proplists:get_value(slave_node_2, Config),
+    %% start processes
+    Pid0 = syn_test_suite_helper:start_process(),
+    Pid1 = syn_test_suite_helper:start_process(SlaveNode1),
+    Pid2 = syn_test_suite_helper:start_process(SlaveNode2),
+    %% start delayed
+    start_syn_delayed_and_register_local_process(ConflictingName, Pid0, 1500),
+    rpc:cast(SlaveNode1, ?MODULE, start_syn_delayed_and_register_local_process, [ConflictingName, Pid1, 1500]),
+    rpc:cast(SlaveNode2, ?MODULE, start_syn_delayed_and_register_local_process, [ConflictingName, Pid2, 1500]),
+    timer:sleep(500),
+    %% disconnect all
+    rpc:call(SlaveNode1, syn_test_suite_helper, disconnect_node, [SlaveNode2]),
+    syn_test_suite_helper:disconnect_node(SlaveNode1),
+    syn_test_suite_helper:disconnect_node(SlaveNode2),
+    timer:sleep(1000),
+    [] = nodes(),
+    %% reconnect all
+    syn_test_suite_helper:connect_node(SlaveNode1),
+    syn_test_suite_helper:connect_node(SlaveNode2),
+    rpc:call(SlaveNode1, syn_test_suite_helper, connect_node, [SlaveNode2]),
+    timer:sleep(1500),
+    %% count
+    1 = syn:registry_count(),
+    1 = rpc:call(SlaveNode1, syn, registry_count, []),
+    1 = rpc:call(SlaveNode2, syn, registry_count, []),
+    %% retrieve
+    true = lists:member(syn:whereis(ConflictingName), [Pid0, Pid1, Pid2]),
+    true = lists:member(rpc:call(SlaveNode1, syn, whereis, [ConflictingName]), [Pid0, Pid1, Pid2]),
+    true = lists:member(rpc:call(SlaveNode2, syn, whereis, [ConflictingName]), [Pid0, Pid1, Pid2]),
+    %% kill processes
+    syn_test_suite_helper:kill_process(Pid0),
+    syn_test_suite_helper:kill_process(Pid1),
+    syn_test_suite_helper:kill_process(Pid2).
+
+%% ===================================================================
+%% Internal
+%% ===================================================================
+start_syn_delayed_and_register_local_process(Name, Pid, Ms) ->
+    spawn(fun() ->
+        lists:foreach(fun(Node) ->
+            syn_test_suite_helper:disconnect_node(Node)
+        end, nodes()),
+        timer:sleep(Ms),
+        [] = nodes(),
+        syn:start(),
+        ok = syn:register(Name, Pid, node())
+    end).

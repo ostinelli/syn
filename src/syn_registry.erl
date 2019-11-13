@@ -35,10 +35,7 @@
 
 %% sync API
 -export([sync_register/3, sync_unregister/1]).
--export([get_local_registry_tuples_and_suspend/1]).
-
-%% internal
--export([find_process_entry_by_name/1]).
+-export([sync_get_local_registry_tuples/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
@@ -113,13 +110,15 @@ sync_register(Name, Pid, Meta) ->
 sync_unregister(Name) ->
     gen_server:cast(?MODULE, {sync_unregister, Name}).
 
--spec get_local_registry_tuples_and_suspend(FromNode :: node()) -> list(syn_registry_tuple()).
-get_local_registry_tuples_and_suspend(FromNode) ->
+-spec sync_get_local_registry_tuples(FromNode :: node()) -> list(syn_registry_tuple()).
+sync_get_local_registry_tuples(FromNode) ->
     error_logger:info_msg("Syn(~p): Received request of local registry tuples from remote node: ~p~n", [node(), FromNode]),
-    %% suspend self to not modify table
-    sys:suspend(?MODULE),
-    %% get tuples
-    get_registry_tuples_of_current_node().
+    %% build match specs
+    MatchHead = #syn_registry_table{name = '$1', pid = '$2', node = '$3', meta = '$4', _ = '_'},
+    Guard = {'=:=', '$3', node()},
+    RegistryTupleFormat = {{'$1', '$2', '$4'}},
+    %% select
+    mnesia:dirty_select(syn_registry_table, [{MatchHead, [Guard], [RegistryTupleFormat]}]).
 
 %% ===================================================================
 %% Callbacks
@@ -137,6 +136,9 @@ init([]) ->
     %% wait for table
     case mnesia:wait_for_tables([syn_registry_table], 10000) of
         ok ->
+            %% monitor nodes
+            ok = net_kernel:monitor_nodes(true),
+            %% init
             {ok, #state{}};
         Reason ->
             {stop, {error_waiting_for_process_registry_table, Reason}}
@@ -160,16 +162,7 @@ handle_call({register_on_node, Name, Pid, Meta}, _From, State) ->
             %% check if name available
             case find_process_entry_by_name(Name) of
                 undefined ->
-                    MonitorRef = case find_processes_entry_by_pid(Pid) of
-                        [] ->
-                            %% process is not monitored yet, add
-                            erlang:monitor(process, Pid);
-                        [Entry | _] ->
-                            Entry#syn_registry_table.monitor_ref
-                    end,
-
-                    %% add to table
-                    register_on_node(Name, Pid, Meta, MonitorRef),
+                    register_on_node(Name, Pid, Meta),
                     %% multicast
                     rpc:eval_everywhere(nodes(), ?MODULE, sync_register, [Name, Pid, Meta]),
                     %% return
@@ -182,12 +175,16 @@ handle_call({register_on_node, Name, Pid, Meta}, _From, State) ->
     end;
 
 handle_call({unregister_on_node, Name}, _From, State) ->
-    %% remove from table
-    unregister_on_node(Name),
-    %% multicast
-    rpc:eval_everywhere(nodes(), ?MODULE, sync_unregister, [Name]),
-    %% return
-    {reply, ok, State};
+    case unregister_on_node(Name) of
+        {error, Error} ->
+            {reply, {error, Error}, State};
+
+        ok ->
+            %% multicast
+            rpc:eval_everywhere(nodes(), ?MODULE, sync_unregister, [Name]),
+            %% return
+            {reply, ok, State}
+    end;
 
 handle_call(Request, From, State) ->
     error_logger:warning_msg("Syn(~p): Received from ~p an unknown call message: ~p~n", [node(), Request, From]),
@@ -203,13 +200,13 @@ handle_call(Request, From, State) ->
 
 handle_cast({sync_register, Name, Pid, Meta}, State) ->
     %% add to table
-    register_on_node(Name, Pid, Meta, undefined),
+    add_to_local_table(Name, Pid, Meta, undefined),
     %% return
     {noreply, State};
 
 handle_cast({sync_unregister, Name}, State) ->
-    %% add to table
-    unregister_on_node(Name),
+    %% remove from table
+    remove_from_local_table(Name),
     %% return
     {noreply, State};
 
@@ -237,13 +234,37 @@ handle_info({'DOWN', _MonitorRef, process, Pid, Reason}, State) ->
                 Name = Entry#syn_registry_table.name,
                 %% log
                 log_process_exit(Name, Pid, Reason),
-                %% delete from table
-                unregister_on_node(Name),
+                %% remove from table
+                remove_from_local_table(Name),
                 %% multicast
                 rpc:eval_everywhere(nodes(), ?MODULE, sync_unregister, [Name])
             end, Entries)
     end,
     %% return
+    {noreply, State};
+
+handle_info({nodeup, RemoteNode}, State) ->
+    error_logger:info_msg("Syn(~p): Node ~p has joined the cluster~n", [node(), RemoteNode]),
+    global:trans({{?MODULE, auto_merge_node_up}, self()},
+        fun() ->
+            error_logger:warning_msg("Syn(~p): AUTOMERGE ----> Initiating for remote node ~p~n", [node(), RemoteNode]),
+            %% get processes info from remote node
+            RegistryTuples = rpc:call(RemoteNode, ?MODULE, sync_get_local_registry_tuples, [node()]),
+            error_logger:warning_msg(
+                "Syn(~p): Received ~p registry entrie(s) from remote node ~p, writing to local~n",
+                [node(), length(RegistryTuples), RemoteNode]
+            ),
+            sync_registry_tuples(RemoteNode, RegistryTuples),
+            %% exit
+            error_logger:warning_msg("Syn(~p): AUTOMERGE <---- Done for remote node ~p~n", [node(), RemoteNode])
+        end
+    ),
+    %% resume
+    {noreply, State};
+
+handle_info({nodedown, RemoteNode}, State) ->
+    error_logger:warning_msg("Syn(~p): Node ~p has left the cluster, removing its entries on local~n", [node(), RemoteNode]),
+    purge_registry_entries_for_remote_node(RemoteNode),
     {noreply, State};
 
 handle_info(Info, State) ->
@@ -268,9 +289,31 @@ code_change(_OldVsn, State, _Extra) ->
 %% ===================================================================
 %% Internal
 %% ===================================================================
--spec register_on_node(Name :: any(), Pid :: pid(), Node :: atom(), Meta :: any()) -> true.
-register_on_node(Name, Pid, Meta, MonitorRef) ->
+register_on_node(Name, Pid, Meta) ->
+    MonitorRef = case find_processes_entry_by_pid(Pid) of
+        [] ->
+            %% process is not monitored yet, add
+            erlang:monitor(process, Pid);
+        [Entry | _] ->
+            Entry#syn_registry_table.monitor_ref
+    end,
     %% add to table
+    add_to_local_table(Name, Pid, Meta, MonitorRef).
+
+unregister_on_node(Name) ->
+    case find_process_entry_by_name(Name) of
+        undefined ->
+            {error, undefined};
+
+        Entry when Entry#syn_registry_table.monitor_ref =/= undefined ->
+            %% demonitor
+            erlang:demonitor(Entry#syn_registry_table.monitor_ref),
+            %% remove from table
+            remove_from_local_table(Name)
+    end.
+
+-spec add_to_local_table(Name :: any(), Pid :: pid(), Node :: atom(), Meta :: any()) -> true.
+add_to_local_table(Name, Pid, Meta, MonitorRef) ->
     mnesia:dirty_write(#syn_registry_table{
         name = Name,
         pid = Pid,
@@ -279,10 +322,9 @@ register_on_node(Name, Pid, Meta, MonitorRef) ->
         monitor_ref = MonitorRef
     }).
 
--spec unregister_on_node(Name :: any()) -> ok.
-unregister_on_node(Name) ->
+-spec remove_from_local_table(Name :: any()) -> ok.
+remove_from_local_table(Name) ->
     mnesia:dirty_delete(syn_registry_table, Name).
-%% TODO: unmonitor process!
 
 -spec find_processes_entry_by_pid(Pid :: pid()) -> Entries :: list(#syn_registry_table{}).
 find_processes_entry_by_pid(Pid) when is_pid(Pid) ->
@@ -294,15 +336,6 @@ find_process_entry_by_name(Name) ->
         [Entry] -> Entry;
         _ -> undefined
     end.
-
--spec get_registry_tuples_of_current_node() -> list(syn_registry_tuple()).
-get_registry_tuples_of_current_node() ->
-    %% build match specs
-    MatchHead = #syn_registry_table{name = '$1', pid = '$2', node = '$3', meta = '$4', _ = '_'},
-    Guard = {'=:=', '$3', node()},
-    RegistryTupleFormat = {{'$1', '$2', '$3', '$4'}},
-    %% select
-    mnesia:dirty_select(syn_registry_table, [{MatchHead, [Guard], [RegistryTupleFormat]}]).
 
 -spec log_process_exit(Name :: term(), Pid :: pid(), Reason :: term()) -> ok.
 log_process_exit(Name, Pid, Reason) ->
@@ -327,3 +360,45 @@ log_process_exit(Name, Pid, Reason) ->
                     )
             end
     end.
+
+
+sync_registry_tuples(RemoteNode, RegistryTuples) ->
+    %% ensure that registry doesn't have any joining node's entries (here again for race conditions)
+    purge_registry_entries_for_remote_node(RemoteNode),
+    %% loop
+    F = fun({Name, RemotePid, RemoteMeta}) ->
+        %% check if same name is registered
+        case find_process_entry_by_name(Name) of
+            undefined ->
+                %% no conflict
+                register_on_node(Name, RemotePid, RemoteMeta);
+            Entry ->
+                error_logger:warning_msg(
+                    "Syn(~p): Conflicting name process found for: ~p, processes are ~p, ~p~n",
+                    [node(), Name, Entry#syn_registry_table.pid, RemotePid]
+                ),
+                %% remove from local table
+                unregister_on_node(Name),
+                %% remove from remote table
+                ok = rpc:call(RemoteNode, syn_registry, unregister_on_node, [Name]),
+
+                %% TODO: call conflict resolution fun, for now kill the local one
+                exit(Entry#syn_registry_table.pid, kill),
+                register_on_node(Name, RemotePid, RemoteMeta)
+                %% TODO
+        end
+    end,
+    %% add to table
+    lists:foreach(F, RegistryTuples).
+
+-spec purge_registry_entries_for_remote_node(Node :: atom()) -> ok.
+purge_registry_entries_for_remote_node(Node) when Node =/= node() ->
+    %% NB: no demonitoring is done, hence why this needs to run for a remote node
+    %% build match specs
+    MatchHead = #syn_registry_table{name = '$1', node = '$2', _ = '_'},
+    Guard = {'=:=', '$2', Node},
+    IdFormat = '$1',
+    %% delete
+    NodePids = mnesia:dirty_select(syn_registry_table, [{MatchHead, [Guard], [IdFormat]}]),
+    DelF = fun(Id) -> mnesia:dirty_delete({syn_registry_table, Id}) end,
+    lists:foreach(DelF, NodePids).

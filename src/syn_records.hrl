@@ -37,5 +37,5 @@
     node = undefined :: atom(),
     meta = undefined :: any()
 }).
--type syn_registry_tuple() :: {Name :: term(), Pid :: pid(), Node :: node(), Meta :: term()}.
+-type syn_registry_tuple() :: {Name :: term(), Pid :: pid(), Meta :: term()}.
 -export_type([syn_registry_tuple/0]).
