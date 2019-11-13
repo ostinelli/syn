@@ -91,22 +91,6 @@ unregister(Name) ->
             gen_server:call({?MODULE, Node}, {unregister_on_node, Name})
     end.
 
--spec sync_register(Name :: term(), Pid :: pid(), Meta :: term()) -> ok.
-sync_register(Name, Pid, Meta) ->
-    gen_server:cast(?MODULE, {sync_register, Name, Pid, Meta}).
-
--spec sync_unregister(Name :: term()) -> ok.
-sync_unregister(Name) ->
-    gen_server:cast(?MODULE, {sync_unregister, Name}).
-
--spec get_local_registry_tuples_and_suspend(FromNode :: node()) -> list(syn_registry_tuple()).
-get_local_registry_tuples_and_suspend(FromNode) ->
-    error_logger:info_msg("Received request of local registry tuples from remote node: ~p~n", [FromNode]),
-    %% suspend self to not modify table
-    sys:suspend(?MODULE),
-    %% get tuples
-    get_registry_tuples_of_current_node().
-
 -spec count() -> non_neg_integer().
 count() ->
     mnesia:table_info(syn_registry_table, size).
@@ -120,6 +104,22 @@ count(Node) ->
     %% select
     Processes = mnesia:dirty_select(syn_registry_table, [{MatchHead, [Guard], [Result]}]),
     length(Processes).
+
+-spec sync_register(Name :: term(), Pid :: pid(), Meta :: term()) -> ok.
+sync_register(Name, Pid, Meta) ->
+    gen_server:cast(?MODULE, {sync_register, Name, Pid, Meta}).
+
+-spec sync_unregister(Name :: term()) -> ok.
+sync_unregister(Name) ->
+    gen_server:cast(?MODULE, {sync_unregister, Name}).
+
+-spec get_local_registry_tuples_and_suspend(FromNode :: node()) -> list(syn_registry_tuple()).
+get_local_registry_tuples_and_suspend(FromNode) ->
+    error_logger:info_msg("Syn(~p): Received request of local registry tuples from remote node: ~p~n", [node(), FromNode]),
+    %% suspend self to not modify table
+    sys:suspend(?MODULE),
+    %% get tuples
+    get_registry_tuples_of_current_node().
 
 %% ===================================================================
 %% Callbacks
@@ -190,7 +190,7 @@ handle_call({unregister_on_node, Name}, _From, State) ->
     {reply, ok, State};
 
 handle_call(Request, From, State) ->
-    error_logger:warning_msg("Received from ~p an unknown call message: ~p~n", [Request, From]),
+    error_logger:warning_msg("Syn(~p): Received from ~p an unknown call message: ~p~n", [node(), Request, From]),
     {reply, undefined, State}.
 
 %% ----------------------------------------------------------------------------------------------------------
@@ -214,7 +214,7 @@ handle_cast({sync_unregister, Name}, State) ->
     {noreply, State};
 
 handle_cast(Msg, State) ->
-    error_logger:warning_msg("Received an unknown cast message: ~p~n", [Msg]),
+    error_logger:warning_msg("Syn(~p): Received an unknown cast message: ~p~n", [node(), Msg]),
     {noreply, State}.
 
 %% ----------------------------------------------------------------------------------------------------------
@@ -247,7 +247,7 @@ handle_info({'DOWN', _MonitorRef, process, Pid, Reason}, State) ->
     {noreply, State};
 
 handle_info(Info, State) ->
-    error_logger:warning_msg("Received an unknown info message: ~p~n", [Info]),
+    error_logger:warning_msg("Syn(~p): Received an unknown info message: ~p~n", [node(), Info]),
     {noreply, State}.
 
 %% ----------------------------------------------------------------------------------------------------------
@@ -255,7 +255,7 @@ handle_info(Info, State) ->
 %% ----------------------------------------------------------------------------------------------------------
 -spec terminate(Reason :: any(), #state{}) -> terminated.
 terminate(Reason, _State) ->
-    error_logger:info_msg("Terminating with reason: ~p~n", [Reason]),
+    error_logger:info_msg("Syn(~p): Terminating with reason: ~p~n", [node(), Reason]),
     terminated.
 
 %% ----------------------------------------------------------------------------------------------------------
@@ -317,13 +317,13 @@ log_process_exit(Name, Pid, Reason) ->
             case Name of
                 undefined ->
                     error_logger:error_msg(
-                        "Received a DOWN message from an unmonitored process ~p on local node ~p with reason: ~p~n",
-                        [Pid, node(), Reason]
+                        "Syn(~p): Received a DOWN message from an unmonitored process ~p with reason: ~p~n",
+                        [node(), Pid, Reason]
                     );
                 _ ->
                     error_logger:error_msg(
-                        "Process with name ~p and pid ~p on local node ~p exited with reason: ~p~n",
-                        [Name, Pid, node(), Reason]
+                        "Syn(~p): Process with name ~p and pid ~p exited with reason: ~p~n",
+                        [node(), Name, Pid, Reason]
                     )
             end
     end.

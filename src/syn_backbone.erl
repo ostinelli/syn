@@ -64,7 +64,7 @@ resume_local_syn_registry() ->
     ignore |
     {stop, Reason :: any()}.
 init([]) ->
-    error_logger:info_msg("Creating syn tables"),
+    error_logger:info_msg("Syn(~p): Creating tables", [node()]),
     case create_ram_tables() of
         ok ->
             %% monitor nodes
@@ -87,7 +87,7 @@ init([]) ->
     {stop, Reason :: any(), #state{}}.
 
 handle_call(Request, From, State) ->
-    error_logger:warning_msg("Received from ~p an unknown call message: ~p~n", [Request, From]),
+    error_logger:warning_msg("Syn(~p): Received from ~p an unknown call message: ~p~n", [node(), Request, From]),
     {reply, undefined, State}.
 
 %% ----------------------------------------------------------------------------------------------------------
@@ -99,7 +99,7 @@ handle_call(Request, From, State) ->
     {stop, Reason :: any(), #state{}}.
 
 handle_cast(Msg, State) ->
-    error_logger:warning_msg("Received an unknown cast message: ~p~n", [Msg]),
+    error_logger:warning_msg("Syn(~p): Received an unknown cast message: ~p~n", [node(), Msg]),
     {noreply, State}.
 
 %% ----------------------------------------------------------------------------------------------------------
@@ -111,14 +111,14 @@ handle_cast(Msg, State) ->
     {stop, Reason :: any(), #state{}}.
 
 handle_info({nodeup, RemoteNode}, State) ->
-    error_logger:info_msg("Node ~p has joined the cluster of local node ~p~n", [RemoteNode, node()]),
+    error_logger:info_msg("Syn(~p): Node ~p has joined the cluster~n", [node(), RemoteNode]),
     global:trans({{?MODULE, auto_merge_node_up}, self()},
         fun() ->
-            error_logger:info_msg("Merge: ----> Initiating on ~p for remote node ~p~n", [node(), RemoteNode]),
+            error_logger:warning_msg("Syn(~p): AUTOMERGE ----> Initiating for remote node ~p~n", [node(), RemoteNode]),
             %% request remote node process info & suspend remote registry
             RegistryTuples = rpc:call(RemoteNode, syn_registry, get_local_registry_tuples_and_suspend, [node()]),
             sync_registry_tuples(RemoteNode, RegistryTuples),
-            error_logger:error_msg("Merge: <---- Done on ~p for remote node ~p~n", [node(), RemoteNode])
+            error_logger:warning_msg("Syn(~p): AUTOMERGE <---- Done for remote node ~p~n", [node(), RemoteNode])
         end
     ),
     %% resume remote processes able to modify tables
@@ -127,12 +127,12 @@ handle_info({nodeup, RemoteNode}, State) ->
     {noreply, State};
 
 handle_info({nodedown, RemoteNode}, State) ->
-    error_logger:warning_msg("Node ~p has left the cluster of local node ~p~n", [RemoteNode, node()]),
+    error_logger:warning_msg("Syn(~p): Node ~p has left the cluster~n", [node(), RemoteNode]),
     purge_registry_entries_for_node(RemoteNode),
     {noreply, State};
 
 handle_info(Info, State) ->
-    error_logger:warning_msg("Received an unknown info message: ~p~n", [Info]),
+    error_logger:warning_msg("Syn(~p): Received an unknown info message: ~p~n", [node(), Info]),
     {noreply, State}.
 
 %% ----------------------------------------------------------------------------------------------------------
@@ -140,8 +140,7 @@ handle_info(Info, State) ->
 %% ----------------------------------------------------------------------------------------------------------
 -spec terminate(Reason :: any(), #state{}) -> terminated.
 terminate(Reason, _State) ->
-    error_logger:info_msg("Terminating with reason: ~p~n", [Reason]),
-    error_logger:info_msg("Removing syn tables~n", [Reason]),
+    error_logger:info_msg("Syn(~p): Terminating with reason: ~p~n", [node(), Reason]),
     delete_ram_tables(),
     terminated.
 
@@ -203,8 +202,8 @@ sync_registry_tuples(RemoteNode, RegistryTuples) ->
                 ok;
             Entry ->
                 error_logger:warning_msg(
-                    "Conflicting name process found for: ~p, processes are ~p, ~p, killing local~n",
-                    [Name, Entry#syn_registry_table.pid, RemotePid]
+                    "Syn(~p): Conflicting name process found for: ~p, processes are ~p, ~p, killing local~n",
+                    [node(), Name, Entry#syn_registry_table.pid, RemotePid]
                 ),
                 %% kill the local one
                 exit(Entry#syn_registry_table.pid, kill)
