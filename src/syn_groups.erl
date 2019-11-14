@@ -39,7 +39,7 @@
 -export([multi_call/2, multi_call/3, multi_call_reply/2]).
 
 %% sync API
--export([sync_join/3, sync_leave/2]).
+-export([sync_join/4, sync_leave/3]).
 -export([sync_get_local_group_tuples/1]).
 
 %% gen_server callbacks
@@ -178,13 +178,13 @@ multi_call(GroupName, Message, Timeout) ->
 multi_call_reply(CallerPid, Reply) ->
     CallerPid ! {syn_multi_call_reply, self(), Reply}.
 
--spec sync_join(GroupName :: any(), Pid :: pid(), Meta :: any()) -> ok.
-sync_join(GroupName, Pid, Meta) ->
-    gen_server:cast(?MODULE, {sync_join, GroupName, Pid, Meta}).
+-spec sync_join(RemoteNode :: node(), GroupName :: any(), Pid :: pid(), Meta :: any()) -> ok.
+sync_join(RemoteNode, GroupName, Pid, Meta) ->
+    gen_server:cast({?MODULE, RemoteNode}, {sync_join, GroupName, Pid, Meta}).
 
--spec sync_leave(GroupName :: any(), Pid :: pid()) -> ok.
-sync_leave(GroupName, Pid) ->
-    gen_server:cast(?MODULE, {sync_leave, GroupName, Pid}).
+-spec sync_leave(RemoteNode :: node(), GroupName :: any(), Pid :: pid()) -> ok.
+sync_leave(RemoteNode, GroupName, Pid) ->
+    gen_server:cast({?MODULE, RemoteNode}, {sync_leave, GroupName, Pid}).
 
 -spec sync_get_local_group_tuples(FromNode :: node()) -> list(syn_group_tuple()).
 sync_get_local_group_tuples(FromNode) ->
@@ -237,7 +237,9 @@ handle_call({join_on_node, GroupName, Pid, Meta}, _From, State) ->
         true ->
             join_on_node(GroupName, Pid, Meta),
             %% multicast
-            rpc:eval_everywhere(nodes(), ?MODULE, sync_join, [GroupName, Pid, Meta]),
+            lists:foreach(fun(RemoteNode) ->
+                sync_join(RemoteNode, GroupName, Pid, Meta)
+            end, nodes()),
             %% return
             {reply, ok, State};
         _ ->
@@ -248,7 +250,9 @@ handle_call({leave_on_node, GroupName, Pid}, _From, State) ->
     case leave_on_node(GroupName, Pid) of
         ok ->
             %% multicast
-            rpc:eval_everywhere(nodes(), ?MODULE, sync_leave, [GroupName, Pid]),
+            lists:foreach(fun(RemoteNode) ->
+                sync_leave(RemoteNode, GroupName, Pid)
+            end, nodes()),
             %% return
             {reply, ok, State};
         {error, Reason} ->
@@ -307,7 +311,9 @@ handle_info({'DOWN', _MonitorRef, process, Pid, Reason}, State) ->
                 %% remove from table
                 remove_from_local_table(Entry),
                 %% multicast
-                rpc:eval_everywhere(nodes(), ?MODULE, sync_leave, [GroupName, Pid])
+                lists:foreach(fun(RemoteNode) ->
+                    sync_leave(RemoteNode, GroupName, Pid)
+                end, nodes())
             end, Entries)
     end,
     %% return

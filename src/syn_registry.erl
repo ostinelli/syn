@@ -34,7 +34,7 @@
 -export([count/0, count/1]).
 
 %% sync API
--export([sync_register/3, sync_unregister/1]).
+-export([sync_register/4, sync_unregister/2]).
 -export([sync_get_local_registry_tuples/1]).
 -export([unregister_on_node/1]).
 
@@ -103,13 +103,13 @@ count(Node) ->
     Processes = mnesia:dirty_select(syn_registry_table, [{MatchHead, [Guard], [Result]}]),
     length(Processes).
 
--spec sync_register(Name :: any(), Pid :: pid(), Meta :: any()) -> ok.
-sync_register(Name, Pid, Meta) ->
-    gen_server:cast(?MODULE, {sync_register, Name, Pid, Meta}).
+-spec sync_register(RemoteNode :: node(), Name :: any(), Pid :: pid(), Meta :: any()) -> ok.
+sync_register(RemoteNode, Name, Pid, Meta) ->
+    gen_server:cast({?MODULE, RemoteNode}, {sync_register, Name, Pid, Meta}).
 
--spec sync_unregister(Name :: any()) -> ok.
-sync_unregister(Name) ->
-    gen_server:cast(?MODULE, {sync_unregister, Name}).
+-spec sync_unregister(RemoteNode :: node(), Name :: any()) -> ok.
+sync_unregister(RemoteNode, Name) ->
+    gen_server:cast({?MODULE, RemoteNode}, {sync_unregister, Name}).
 
 -spec sync_get_local_registry_tuples(FromNode :: node()) -> list(syn_registry_tuple()).
 sync_get_local_registry_tuples(FromNode) ->
@@ -165,14 +165,18 @@ handle_call({register_on_node, Name, Pid, Meta}, _From, State) ->
                 undefined ->
                     register_on_node(Name, Pid, Meta),
                     %% multicast
-                    rpc:eval_everywhere(nodes(), ?MODULE, sync_register, [Name, Pid, Meta]),
+                    lists:foreach(fun(RemoteNode) ->
+                        sync_register(RemoteNode, Name, Pid, Meta)
+                    end, nodes()),
                     %% return
                     {reply, ok, State};
 
                 Entry when Entry#syn_registry_table.pid == Pid ->
                     register_on_node(Name, Pid, Meta),
                     %% multicast
-                    rpc:eval_everywhere(nodes(), ?MODULE, sync_register, [Name, Pid, Meta]),
+                    lists:foreach(fun(RemoteNode) ->
+                        sync_register(RemoteNode, Name, Pid, Meta)
+                    end, nodes()),
                     %% return
                     {reply, ok, State};
 
@@ -187,7 +191,9 @@ handle_call({unregister_on_node, Name}, _From, State) ->
     case unregister_on_node(Name) of
         ok ->
             %% multicast
-            rpc:eval_everywhere(nodes(), ?MODULE, sync_unregister, [Name]),
+            lists:foreach(fun(RemoteNode) ->
+                sync_unregister(RemoteNode, Name)
+            end, nodes()),
             %% return
             {reply, ok, State};
         {error, Reason} ->
@@ -246,7 +252,9 @@ handle_info({'DOWN', _MonitorRef, process, Pid, Reason}, State) ->
                 %% remove from table
                 remove_from_local_table(Name),
                 %% multicast
-                rpc:eval_everywhere(nodes(), ?MODULE, sync_unregister, [Name])
+                lists:foreach(fun(RemoteNode) ->
+                    sync_unregister(RemoteNode, Name)
+                end, nodes())
             end, Entries)
     end,
     %% return
