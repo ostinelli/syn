@@ -45,4 +45,12 @@
     Pid :: pid(),
     Meta :: any()
 }.
--export_type([syn_registry_tuple/0]).
+-type syn_group_tuple() :: {
+    Name :: any(),
+    Pid :: pid(),
+    Meta :: any()
+}.
+-export_type([
+    syn_registry_tuple/0,
+    syn_group_tuple/0
+]).

@@ -254,10 +254,10 @@ handle_info({'DOWN', _MonitorRef, process, Pid, Reason}, State) ->
 
 handle_info({nodeup, RemoteNode}, State) ->
     error_logger:info_msg("Syn(~p): Node ~p has joined the cluster~n", [node(), RemoteNode]),
-    global:trans({{?MODULE, auto_merge_node_up}, self()},
+    global:trans({{?MODULE, auto_merge_registry}, self()},
         fun() ->
-            error_logger:warning_msg("Syn(~p): AUTOMERGE ----> Initiating for remote node ~p~n", [node(), RemoteNode]),
-            %% get processes info from remote node
+            error_logger:warning_msg("Syn(~p): REGISTRY AUTOMERGE ----> Initiating for remote node ~p~n", [node(), RemoteNode]),
+            %% get registry tuples from remote node
             RegistryTuples = rpc:call(RemoteNode, ?MODULE, sync_get_local_registry_tuples, [node()]),
             error_logger:warning_msg(
                 "Syn(~p): Received ~p registry entrie(s) from remote node ~p, writing to local~n",
@@ -265,14 +265,14 @@ handle_info({nodeup, RemoteNode}, State) ->
             ),
             sync_registry_tuples(RemoteNode, RegistryTuples),
             %% exit
-            error_logger:warning_msg("Syn(~p): AUTOMERGE <---- Done for remote node ~p~n", [node(), RemoteNode])
+            error_logger:warning_msg("Syn(~p): REGISTRY AUTOMERGE <---- Done for remote node ~p~n", [node(), RemoteNode])
         end
     ),
     %% resume
     {noreply, State};
 
 handle_info({nodedown, RemoteNode}, State) ->
-    error_logger:warning_msg("Syn(~p): Node ~p has left the cluster, removing its entries on local~n", [node(), RemoteNode]),
+    error_logger:warning_msg("Syn(~p): Node ~p has left the cluster, removing registry entries on local~n", [node(), RemoteNode]),
     purge_registry_entries_for_remote_node(RemoteNode),
     {noreply, State};
 
@@ -407,8 +407,8 @@ purge_registry_entries_for_remote_node(Node) when Node =/= node() ->
     %% build match specs
     MatchHead = #syn_registry_table{name = '$1', node = '$2', _ = '_'},
     Guard = {'=:=', '$2', Node},
-    NameFormat = '$1',
+    IdFormat = '$1',
     %% delete
-    NodePids = mnesia:dirty_select(syn_registry_table, [{MatchHead, [Guard], [NameFormat]}]),
+    NodePids = mnesia:dirty_select(syn_registry_table, [{MatchHead, [Guard], [IdFormat]}]),
     DelF = fun(Id) -> mnesia:dirty_delete({syn_registry_table, Id}) end,
     lists:foreach(DelF, NodePids).

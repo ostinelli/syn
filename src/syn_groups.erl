@@ -37,6 +37,7 @@
 
 %% sync API
 -export([sync_join/3, sync_leave/2]).
+-export([sync_get_local_group_tuples/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
@@ -138,6 +139,16 @@ sync_join(GroupName, Pid, Meta) ->
 -spec sync_leave(GroupName :: any(), Pid :: pid()) -> ok.
 sync_leave(GroupName, Pid) ->
     gen_server:cast(?MODULE, {sync_leave, GroupName, Pid}).
+
+-spec sync_get_local_group_tuples(FromNode :: node()) -> list(syn_group_tuple()).
+sync_get_local_group_tuples(FromNode) ->
+    error_logger:info_msg("Syn(~p): Received request of local group tuples from remote node: ~p~n", [node(), FromNode]),
+    %% build match specs
+    MatchHead = #syn_groups_table{name = '$1', pid = '$2', node = '$3', meta = '$4', _ = '_'},
+    Guard = {'=:=', '$3', node()},
+    GroupTupleFormat = {{'$1', '$2', '$4'}},
+    %% select
+    mnesia:dirty_select(syn_groups_table, [{MatchHead, [Guard], [GroupTupleFormat]}]).
 
 %% ===================================================================
 %% Callbacks
@@ -254,6 +265,30 @@ handle_info({'DOWN', _MonitorRef, process, Pid, Reason}, State) ->
             end, Entries)
     end,
     %% return
+    {noreply, State};
+
+handle_info({nodeup, RemoteNode}, State) ->
+    error_logger:info_msg("Syn(~p): Node ~p has joined the cluster~n", [node(), RemoteNode]),
+    global:trans({{?MODULE, auto_merge_groups}, self()},
+        fun() ->
+            error_logger:warning_msg("Syn(~p): GROUPS AUTOMERGE ----> Initiating for remote node ~p~n", [node(), RemoteNode]),
+            %% get group tuples from remote node
+            GroupTuples = rpc:call(RemoteNode, ?MODULE, sync_get_local_group_tuples, [node()]),
+            error_logger:warning_msg(
+                "Syn(~p): Received ~p group entrie(s) from remote node ~p, writing to local~n",
+                [node(), length(GroupTuples), RemoteNode]
+            ),
+            sync_group_tuples(RemoteNode, GroupTuples),
+            %% exit
+            error_logger:warning_msg("Syn(~p): GROUPS AUTOMERGE <---- Done for remote node ~p~n", [node(), RemoteNode])
+        end
+    ),
+    %% resume
+    {noreply, State};
+
+handle_info({nodedown, RemoteNode}, State) ->
+    error_logger:warning_msg("Syn(~p): Node ~p has left the cluster, removing group entries on local~n", [node(), RemoteNode]),
+    purge_group_entries_for_remote_node(RemoteNode),
     {noreply, State};
 
 handle_info(Info, State) ->
@@ -373,3 +408,24 @@ log_process_exit(GroupName, Pid, Reason) ->
                     )
             end
     end.
+
+-spec sync_group_tuples(RemoteNode :: node(), GroupTuples :: [syn_registry_tuple()]) -> ok.
+sync_group_tuples(RemoteNode, GroupTuples) ->
+    %% ensure that groups doesn't have any joining node's entries (here again for race conditions)
+    purge_group_entries_for_remote_node(RemoteNode),
+    %% loop
+    F = fun({Name, RemotePid, RemoteMeta}) ->
+        join_on_node(Name, RemotePid, RemoteMeta)
+    end,
+    %% add to table
+    lists:foreach(F, GroupTuples).
+
+-spec purge_group_entries_for_remote_node(Node :: atom()) -> ok.
+purge_group_entries_for_remote_node(Node) when Node =/= node() ->
+    %% NB: no demonitoring is done, hence why this needs to run for a remote node
+    %% build match specs
+    Pattern = #syn_groups_table{node = Node, _ = '_'},
+    ObjectsToDelete = mnesia:dirty_match_object(syn_groups_table, Pattern),
+    %% delete
+    DelF = fun(Record) -> mnesia:dirty_delete_object(syn_groups_table, Record) end,
+    lists:foreach(DelF, ObjectsToDelete).

@@ -41,6 +41,9 @@
     two_nodes_join_monitor_and_unregister/1,
     two_nodes_local_members/1
 ]).
+-export([
+    three_nodes_partial_netsplit_consistency/1
+]).
 
 %% include
 -include_lib("common_test/include/ct.hrl").
@@ -60,7 +63,8 @@
 all() ->
     [
         {group, single_node_groups},
-        {group, two_nodes_groups}
+        {group, two_nodes_groups},
+        {group, three_nodes_groups}
     ].
 
 %% -------------------------------------------------------------------
@@ -85,6 +89,9 @@ groups() ->
         {two_nodes_groups, [shuffle], [
             two_nodes_join_monitor_and_unregister,
             two_nodes_local_members
+        ]},
+        {three_nodes_groups, [shuffle], [
+            three_nodes_partial_netsplit_consistency
         ]}
     ].
 %% -------------------------------------------------------------------
@@ -408,3 +415,182 @@ two_nodes_local_members(Config) ->
     %% kill processes
     syn_test_suite_helper:kill_process(LocalPid),
     syn_test_suite_helper:kill_process(RemotePid).
+
+three_nodes_partial_netsplit_consistency(Config) ->
+    GroupName = "my group",
+    %% get slaves
+    SlaveNode1 = proplists:get_value(slave_node_1, Config),
+    SlaveNode2 = proplists:get_value(slave_node_2, Config),
+    %% start syn on nodes
+    ok = syn:start(),
+    ok = rpc:call(SlaveNode1, syn, start, []),
+    ok = rpc:call(SlaveNode2, syn, start, []),
+    timer:sleep(100),
+    %% start processes
+    Pid0 = syn_test_suite_helper:start_process(),
+    Pid0Changed = syn_test_suite_helper:start_process(),
+    Pid1 = syn_test_suite_helper:start_process(SlaveNode1),
+    Pid2 = syn_test_suite_helper:start_process(SlaveNode2),
+    OtherPid = syn_test_suite_helper:start_process(),
+    timer:sleep(100),
+    %% retrieve local
+    [] = syn:get_members("group-1"),
+    [] = syn:get_members(GroupName),
+    [] = syn:get_members(GroupName, with_meta),
+    false = syn:member(Pid0, GroupName),
+    false = syn:member(Pid0Changed, GroupName),
+    false = syn:member(Pid1, GroupName),
+    false = syn:member(Pid2, GroupName),
+    %% retrieve slave 1
+    [] = rpc:call(SlaveNode1, syn, get_members, [GroupName]),
+    [] = rpc:call(SlaveNode1, syn, get_members, [GroupName, with_meta]),
+    false = rpc:call(SlaveNode1, syn, member, [Pid0, GroupName]),
+    false = rpc:call(SlaveNode1, syn, member, [Pid0Changed, GroupName]),
+    false = rpc:call(SlaveNode1, syn, member, [Pid1, GroupName]),
+    false = rpc:call(SlaveNode1, syn, member, [Pid2, GroupName]),
+    %% retrieve slave 2
+    [] = rpc:call(SlaveNode2, syn, get_members, [GroupName]),
+    [] = rpc:call(SlaveNode2, syn, get_members, [GroupName, with_meta]),
+    false = rpc:call(SlaveNode2, syn, member, [Pid0, GroupName]),
+    false = rpc:call(SlaveNode2, syn, member, [Pid0Changed, GroupName]),
+    false = rpc:call(SlaveNode2, syn, member, [Pid1, GroupName]),
+    false = rpc:call(SlaveNode2, syn, member, [Pid2, GroupName]),
+    %% join
+    ok = syn:join(GroupName, Pid0),
+    ok = syn:join(GroupName, Pid0Changed, {meta, changed}),
+    ok = rpc:call(SlaveNode1, syn, join, [GroupName, Pid1]),
+    ok = rpc:call(SlaveNode2, syn, join, [GroupName, Pid2, {meta, 2}]),
+    ok = syn:join("other-group", OtherPid),
+    timer:sleep(200),
+    %% retrieve local
+    true = lists:sort([Pid0, Pid0Changed, Pid1, Pid2]) =:= lists:sort(syn:get_members(GroupName)),
+    true = lists:sort([
+        {Pid0, undefined},
+        {Pid0Changed, {meta, changed}},
+        {Pid1, undefined},
+        {Pid2, {meta, 2}}
+    ]) =:= lists:sort(syn:get_members(GroupName, with_meta)),
+    true = syn:member(Pid0, GroupName),
+    true = syn:member(Pid0Changed, GroupName),
+    true = syn:member(Pid1, GroupName),
+    true = syn:member(Pid2, GroupName),
+    false = syn:member(OtherPid, GroupName),
+    %% retrieve slave 1
+    true = lists:sort([Pid0, Pid0Changed, Pid1, Pid2])
+        =:= lists:sort(rpc:call(SlaveNode1, syn, get_members, [GroupName])),
+    true = lists:sort([
+        {Pid0, undefined},
+        {Pid0Changed, {meta, changed}},
+        {Pid1, undefined},
+        {Pid2, {meta, 2}}
+    ]) =:= lists:sort(rpc:call(SlaveNode1, syn, get_members, [GroupName, with_meta])),
+    true = rpc:call(SlaveNode1, syn, member, [Pid0, GroupName]),
+    true = rpc:call(SlaveNode1, syn, member, [Pid0Changed, GroupName]),
+    true = rpc:call(SlaveNode1, syn, member, [Pid1, GroupName]),
+    true = rpc:call(SlaveNode1, syn, member, [Pid2, GroupName]),
+    false = rpc:call(SlaveNode1, syn, member, [OtherPid, GroupName]),
+    %% retrieve slave 2
+    true = lists:sort([Pid0, Pid0Changed, Pid1, Pid2])
+        =:= lists:sort(rpc:call(SlaveNode2, syn, get_members, [GroupName])),
+    true = lists:sort([
+        {Pid0, undefined},
+        {Pid0Changed, {meta, changed}},
+        {Pid1, undefined},
+        {Pid2, {meta, 2}}
+    ]) =:= lists:sort(rpc:call(SlaveNode2, syn, get_members, [GroupName, with_meta])),
+    true = rpc:call(SlaveNode2, syn, member, [Pid0, GroupName]),
+    true = rpc:call(SlaveNode2, syn, member, [Pid0Changed, GroupName]),
+    true = rpc:call(SlaveNode2, syn, member, [Pid1, GroupName]),
+    true = rpc:call(SlaveNode2, syn, member, [Pid2, GroupName]),
+    false = rpc:call(SlaveNode2, syn, member, [OtherPid, GroupName]),
+    %% disconnect slave 2 from main (slave 1 can still see slave 2)
+    syn_test_suite_helper:disconnect_node(SlaveNode2),
+    timer:sleep(500),
+    %% retrieve local
+    true = lists:sort([Pid0, Pid0Changed, Pid1]) =:= lists:sort(syn:get_members(GroupName)),
+    true = lists:sort([
+        {Pid0, undefined},
+        {Pid0Changed, {meta, changed}},
+        {Pid1, undefined}
+    ]) =:= lists:sort(syn:get_members(GroupName, with_meta)),
+    true = syn:member(Pid0, GroupName),
+    true = syn:member(Pid0Changed, GroupName),
+    true = syn:member(Pid1, GroupName),
+    false = syn:member(Pid2, GroupName),
+    false = syn:member(OtherPid, GroupName),
+    %% retrieve slave 1
+    true = lists:sort([Pid0, Pid0Changed, Pid1, Pid2])
+        =:= lists:sort(rpc:call(SlaveNode1, syn, get_members, [GroupName])),
+    true = lists:sort([
+        {Pid0, undefined},
+        {Pid0Changed, {meta, changed}},
+        {Pid1, undefined},
+        {Pid2, {meta, 2}}
+    ]) =:= lists:sort(rpc:call(SlaveNode1, syn, get_members, [GroupName, with_meta])),
+    true = rpc:call(SlaveNode1, syn, member, [Pid0, GroupName]),
+    true = rpc:call(SlaveNode1, syn, member, [Pid0Changed, GroupName]),
+    true = rpc:call(SlaveNode1, syn, member, [Pid1, GroupName]),
+    true = rpc:call(SlaveNode1, syn, member, [Pid2, GroupName]),
+    false = rpc:call(SlaveNode1, syn, member, [OtherPid, GroupName]),
+    %% disconnect slave 1
+    syn_test_suite_helper:disconnect_node(SlaveNode1),
+    timer:sleep(500),
+    %% unregister 0Changed
+    ok = syn:leave(GroupName, Pid0Changed),
+    %% retrieve local
+    true = lists:sort([Pid0]) =:= lists:sort(syn:get_members(GroupName)),
+    true = lists:sort([
+        {Pid0, undefined}
+    ]) =:= lists:sort(syn:get_members(GroupName, with_meta)),
+    true = syn:member(Pid0, GroupName),
+    false = syn:member(Pid0Changed, GroupName),
+    false = syn:member(Pid1, GroupName),
+    false = syn:member(Pid2, GroupName),
+    false = syn:member(OtherPid, GroupName),
+    %% reconnect all
+    syn_test_suite_helper:connect_node(SlaveNode1),
+    syn_test_suite_helper:connect_node(SlaveNode2),
+    timer:sleep(5000),
+    %% retrieve local
+    true = lists:sort([Pid0, Pid1, Pid2]) =:= lists:sort(syn:get_members(GroupName)),
+    true = lists:sort([
+        {Pid0, undefined},
+        {Pid1, undefined},
+        {Pid2, {meta, 2}}
+    ]) =:= lists:sort(syn:get_members(GroupName, with_meta)),
+    true = syn:member(Pid0, GroupName),
+    false = syn:member(Pid0Changed, GroupName),
+    true = syn:member(Pid1, GroupName),
+    true = syn:member(Pid2, GroupName),
+    false = syn:member(OtherPid, GroupName),
+    %% retrieve slave 1
+    true = lists:sort([Pid0, Pid1, Pid2])
+        =:= lists:sort(rpc:call(SlaveNode1, syn, get_members, [GroupName])),
+    true = lists:sort([
+        {Pid0, undefined},
+        {Pid1, undefined},
+        {Pid2, {meta, 2}}
+    ]) =:= lists:sort(rpc:call(SlaveNode1, syn, get_members, [GroupName, with_meta])),
+    true = rpc:call(SlaveNode1, syn, member, [Pid0, GroupName]),
+    false = rpc:call(SlaveNode1, syn, member, [Pid0Changed, GroupName]),
+    true = rpc:call(SlaveNode1, syn, member, [Pid1, GroupName]),
+    true = rpc:call(SlaveNode1, syn, member, [Pid2, GroupName]),
+    false = rpc:call(SlaveNode1, syn, member, [OtherPid, GroupName]),
+    %% retrieve slave 2
+    true = lists:sort([Pid0,  Pid1, Pid2])
+        =:= lists:sort(rpc:call(SlaveNode2, syn, get_members, [GroupName])),
+    true = lists:sort([
+        {Pid0, undefined},
+        {Pid1, undefined},
+        {Pid2, {meta, 2}}
+    ]) =:= lists:sort(rpc:call(SlaveNode2, syn, get_members, [GroupName, with_meta])),
+    true = rpc:call(SlaveNode2, syn, member, [Pid0, GroupName]),
+    false = rpc:call(SlaveNode2, syn, member, [Pid0Changed, GroupName]),
+    true = rpc:call(SlaveNode2, syn, member, [Pid1, GroupName]),
+    true = rpc:call(SlaveNode2, syn, member, [Pid2, GroupName]),
+    false = rpc:call(SlaveNode2, syn, member, [OtherPid, GroupName]),
+    %% kill processes
+    syn_test_suite_helper:kill_process(Pid0),
+    syn_test_suite_helper:kill_process(Pid0Changed),
+    syn_test_suite_helper:kill_process(Pid1),
+    syn_test_suite_helper:kill_process(Pid2).
