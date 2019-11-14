@@ -283,29 +283,41 @@ two_nodes_join_monitor_and_unregister(Config) ->
     OtherPid = syn_test_suite_helper:start_process(),
     %% retrieve
     [] = syn:get_members("group-1"),
+    [] = syn:get_members(GroupName),
     [] = syn:get_members(GroupName, with_meta),
     false = syn:member(LocalPid, GroupName),
     false = syn:member(RemotePid, GroupName),
     false = syn:member(RemotePidJoinRemote, GroupName),
     false = syn:member(OtherPid, GroupName),
+    [] = rpc:call(SlaveNode, syn, get_members, [GroupName]),
+    [] = rpc:call(SlaveNode, syn, get_members, [GroupName, with_meta]),
+    false = rpc:call(SlaveNode, syn, member, [LocalPid, GroupName]),
+    false = rpc:call(SlaveNode, syn, member, [RemotePid, GroupName]),
+    false = rpc:call(SlaveNode, syn, member, [RemotePidJoinRemote, GroupName]),
+    false = rpc:call(SlaveNode, syn, member, [OtherPid, GroupName]),
     %% join
     ok = syn:join(GroupName, LocalPid),
-    ok = syn:join(GroupName, RemotePid),
+    ok = syn:join(GroupName, RemotePid, {with_meta}),
     ok = rpc:call(SlaveNode, syn, join, [GroupName, RemotePidJoinRemote]),
     ok = syn:join("other-group", OtherPid),
     timer:sleep(200),
-    %% retrieve
+    %% retrieve local
+    true = lists:sort([LocalPid, RemotePid, RemotePidJoinRemote]) =:= lists:sort(syn:get_members(GroupName)),
+    true = lists:sort([{LocalPid, undefined}, {RemotePid, {with_meta}}, {RemotePidJoinRemote, undefined}])
+        =:= lists:sort(syn:get_members(GroupName, with_meta)),
     true = syn:member(LocalPid, GroupName),
     true = syn:member(RemotePid, GroupName),
     true = syn:member(RemotePidJoinRemote, GroupName),
     false = syn:member(OtherPid, GroupName),
-    true = lists:sort([LocalPid, RemotePid, RemotePidJoinRemote]) =:= lists:sort(syn:get_members(GroupName)),
+    %% retrieve remote
+    true = lists:sort([LocalPid, RemotePid, RemotePidJoinRemote])
+        =:= lists:sort(rpc:call(SlaveNode, syn, get_members, [GroupName])),
+    true = lists:sort([{LocalPid, undefined}, {RemotePid, {with_meta}}, {RemotePidJoinRemote, undefined}])
+        =:= lists:sort(rpc:call(SlaveNode, syn, get_members, [GroupName, with_meta])),
     true = rpc:call(SlaveNode, syn, member, [LocalPid, GroupName]),
     true = rpc:call(SlaveNode, syn, member, [RemotePid, GroupName]),
     true = rpc:call(SlaveNode, syn, member, [RemotePidJoinRemote, GroupName]),
     false = rpc:call(SlaveNode, syn, member, [OtherPid, GroupName]),
-    true = lists:sort([LocalPid, RemotePid, RemotePidJoinRemote])
-        =:= lists:sort(rpc:call(SlaveNode, syn, get_members, [GroupName])),
     %% leave & kill
     ok = rpc:call(SlaveNode, syn, leave, [GroupName, LocalPid]),
     ok = syn:leave(GroupName, RemotePid),
@@ -314,11 +326,18 @@ two_nodes_join_monitor_and_unregister(Config) ->
     timer:sleep(200),
     %% retrieve
     [] = syn:get_members("group-1"),
+    [] = syn:get_members(GroupName),
     [] = syn:get_members(GroupName, with_meta),
     false = syn:member(LocalPid, GroupName),
     false = syn:member(RemotePid, GroupName),
     false = syn:member(RemotePidJoinRemote, GroupName),
     false = syn:member(OtherPid, GroupName),
+    [] = rpc:call(SlaveNode, syn, get_members, [GroupName]),
+    [] = rpc:call(SlaveNode, syn, get_members, [GroupName, with_meta]),
+    false = rpc:call(SlaveNode, syn, member, [LocalPid, GroupName]),
+    false = rpc:call(SlaveNode, syn, member, [RemotePid, GroupName]),
+    false = rpc:call(SlaveNode, syn, member, [RemotePidJoinRemote, GroupName]),
+    false = rpc:call(SlaveNode, syn, member, [OtherPid, GroupName]),
     %% kill processes
     syn_test_suite_helper:kill_process(LocalPid),
     syn_test_suite_helper:kill_process(RemotePid).
