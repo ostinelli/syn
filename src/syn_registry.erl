@@ -42,7 +42,12 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
 %% records
--record(state, {}).
+-record(state, {
+    custom_event_handler = undefined :: module()
+}).
+
+%% macros
+-define(DEFAULT_EVENT_HANDLER_MODULE, syn_event_handler).
 
 %% includes
 -include("syn.hrl").
@@ -139,8 +144,12 @@ init([]) ->
         ok ->
             %% monitor nodes
             ok = net_kernel:monitor_nodes(true),
+            %% get handler
+            CustomEventHandler = application:get_env(syn, event_handler, ?DEFAULT_EVENT_HANDLER_MODULE),
             %% init
-            {ok, #state{}};
+            {ok, #state{
+                custom_event_handler = CustomEventHandler
+            }};
         Reason ->
             {stop, {error_waiting_for_registry_table, Reason}}
     end.
@@ -271,7 +280,7 @@ handle_info({nodeup, RemoteNode}, State) ->
                 "Syn(~p): Received ~p registry entrie(s) from remote node ~p, writing to local~n",
                 [node(), length(RegistryTuples), RemoteNode]
             ),
-            sync_registry_tuples(RemoteNode, RegistryTuples),
+            sync_registry_tuples(RemoteNode, RegistryTuples, State),
             %% exit
             error_logger:warning_msg("Syn(~p): REGISTRY AUTOMERGE <---- Done for remote node ~p~n", [node(), RemoteNode])
         end
@@ -378,8 +387,10 @@ log_process_exit(Name, Pid, Reason) ->
             end
     end.
 
--spec sync_registry_tuples(RemoteNode :: node(), RegistryTuples :: [syn_registry_tuple()]) -> ok.
-sync_registry_tuples(RemoteNode, RegistryTuples) ->
+-spec sync_registry_tuples(RemoteNode :: node(), RegistryTuples :: [syn_registry_tuple()], #state{}) -> ok.
+sync_registry_tuples(RemoteNode, RegistryTuples, #state{
+    custom_event_handler = CustomEventHandler
+}) ->
     %% ensure that registry doesn't have any joining node's entries (here again for race conditions)
     purge_registry_entries_for_remote_node(RemoteNode),
     %% loop
@@ -389,21 +400,44 @@ sync_registry_tuples(RemoteNode, RegistryTuples) ->
             undefined ->
                 %% no conflict
                 register_on_node(Name, RemotePid, RemoteMeta);
+
             Entry ->
+                LocalPid = Entry#syn_registry_table.pid,
+                LocalMeta = Entry#syn_registry_table.meta,
+
                 error_logger:warning_msg(
                     "Syn(~p): Conflicting name process found for: ~p, processes are ~p, ~p~n",
-                    [node(), Name, Entry#syn_registry_table.pid, RemotePid]
+                    [node(), Name, LocalPid, RemotePid]
                 ),
                 %% unregister local
                 unregister_on_node(Name),
                 %% unregister remote
                 ok = rpc:call(RemoteNode, syn_registry, unregister_on_node, [Name]),
 
-                %% TODO: call conflict resolution fun, for now kill the remote one
-                exit(RemotePid, kill),
+                %% call conflict resolution
+                PidToKeep = syn_event_handler:resolve_registry_conflict(
+                    Name,
+                    {LocalPid, LocalMeta},
+                    {RemotePid, RemoteMeta},
+                    CustomEventHandler
+                ),
 
-                %% register local
-                register_on_node(Name, Entry#syn_registry_table.pid, Entry#syn_registry_table.meta)
+                %% keep chosen one
+                case PidToKeep of
+                    LocalPid ->
+                        %% keep local
+                        exit(RemotePid, kill),
+                        register_on_node(Name, LocalPid, LocalMeta);
+
+                    RemotePid ->
+                        %% keep remote
+                        exit(LocalPid, kill),
+                        register_on_node(Name, RemotePid, RemoteMeta);
+
+                    _ ->
+                        % don't keep any of the two
+                        ok
+                end
         end
     end,
     %% add to table
