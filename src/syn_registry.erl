@@ -350,8 +350,6 @@ log_process_exit(Name, Pid, Reason) ->
         shutdown -> ok;
         {shutdown, _} -> ok;
         killed -> ok;
-        noconnection -> ok;
-        noproc -> ok;
         _ ->
             case Name of
                 undefined ->
