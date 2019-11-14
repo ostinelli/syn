@@ -35,6 +35,7 @@
 -export([get_local_members/1, get_local_members/2]).
 -export([local_member/2]).
 -export([publish/2]).
+-export([publish_to_local/2]).
 
 %% sync API
 -export([sync_join/3, sync_leave/2]).
@@ -136,6 +137,15 @@ local_member(Pid, GroupName) ->
 -spec publish(GroupName :: any(), Message :: any()) -> {ok, RecipientCount :: non_neg_integer()}.
 publish(GroupName, Message) ->
     MemberPids = get_members(GroupName),
+    FSend = fun(Pid) ->
+        Pid ! Message
+    end,
+    lists:foreach(FSend, MemberPids),
+    {ok, length(MemberPids)}.
+
+-spec publish_to_local(Name :: any(), Message :: any()) -> {ok, RecipientCount :: non_neg_integer()}.
+publish_to_local(Name, Message) ->
+    MemberPids = get_local_members(Name),
     FSend = fun(Pid) ->
         Pid ! Message
     end,

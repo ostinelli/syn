@@ -41,7 +41,8 @@
 -export([
     two_nodes_join_monitor_and_unregister/1,
     two_nodes_local_members/1,
-    two_nodes_publish/1
+    two_nodes_publish/1,
+    two_nodes_local_publish/1
 ]).
 -export([
     three_nodes_partial_netsplit_consistency/1,
@@ -65,9 +66,9 @@
 %% -------------------------------------------------------------------
 all() ->
     [
-        {group, single_node_groups},
-        {group, two_nodes_groups},
-        {group, three_nodes_groups}
+        {group, single_node_groups}
+%%        {group, two_nodes_groups}
+%%        {group, three_nodes_groups}
     ].
 
 %% -------------------------------------------------------------------
@@ -85,15 +86,17 @@ all() ->
 groups() ->
     [
         {single_node_groups, [shuffle], [
-            single_node_join_and_monitor,
-            single_node_join_and_leave,
-            single_node_join_errors,
-            single_node_publish
+%%            single_node_join_and_monitor,
+%%            single_node_join_and_leave,
+%%            single_node_join_errors,
+%%            single_node_publish,
+            single_node_multicall
         ]},
         {two_nodes_groups, [shuffle], [
-            two_nodes_join_monitor_and_unregister,
-            two_nodes_local_members,
-            two_nodes_publish
+%%            two_nodes_join_monitor_and_unregister,
+%%            two_nodes_local_members,
+%%            two_nodes_publish,
+%%            two_nodes_local_publish,
         ]},
         {three_nodes_groups, [shuffle], [
             three_nodes_partial_netsplit_consistency,
@@ -492,7 +495,7 @@ two_nodes_publish(Config) ->
     receive
         {received, LocalPid, Message} -> ok
     after 2000 ->
-        ok = published_message_was_not_received_by_local_pid_1
+        ok = published_message_was_not_received_by_local_pid
     end,
     receive
         {received, LocalPid2, Message} -> ok
@@ -502,18 +505,90 @@ two_nodes_publish(Config) ->
     receive
         {received, RemotePid, Message} -> ok
     after 2000 ->
-        ok = published_message_was_not_received_by_remote_pid_2
+        ok = published_message_was_not_received_by_remote_pid
     end,
     receive
         {received, RemotePid2, Message} -> ok
     after 2000 ->
         ok = published_message_was_not_received_by_remote_pid_2
     end,
+    receive
+        {received, OtherPid, Message} ->
+            ok = published_message_was_received_by_other_pid
+    after 250 ->
+        ok
+    end,
     %% kill processes
     syn_test_suite_helper:kill_process(LocalPid),
     syn_test_suite_helper:kill_process(LocalPid2),
     syn_test_suite_helper:kill_process(RemotePid),
-    syn_test_suite_helper:kill_process(RemotePid2).
+    syn_test_suite_helper:kill_process(RemotePid2),
+    syn_test_suite_helper:kill_process(OtherPid).
+
+two_nodes_local_publish(Config) ->
+    GroupName = "my group",
+    Message = {test, message},
+    %% get slave
+    SlaveNode = proplists:get_value(slave_node, Config),
+    %% start
+    ok = syn:start(),
+    ok = rpc:call(SlaveNode, syn, start, []),
+    timer:sleep(100),
+    %% start processes
+    ResultPid = self(),
+    F = fun() ->
+        receive
+            Message -> ResultPid ! {received, self(), Message}
+        end
+    end,
+    LocalPid = syn_test_suite_helper:start_process(F),
+    LocalPid2 = syn_test_suite_helper:start_process(F),
+    RemotePid = syn_test_suite_helper:start_process(SlaveNode, F),
+    RemotePid2 = syn_test_suite_helper:start_process(SlaveNode, F),
+    OtherPid = syn_test_suite_helper:start_process(F),
+    %% join
+    ok = syn:join(GroupName, LocalPid),
+    ok = syn:join(GroupName, LocalPid2),
+    ok = syn:join(GroupName, RemotePid),
+    ok = syn:join(GroupName, RemotePid2),
+    timer:sleep(200),
+    %% send
+    {ok, 2} = syn:publish_to_local(GroupName, Message),
+    %% check
+    receive
+        {received, LocalPid, Message} -> ok
+    after 2000 ->
+        ok = published_message_was_not_received_by_local_pid
+    end,
+    receive
+        {received, LocalPid2, Message} -> ok
+    after 2000 ->
+        ok = published_message_was_not_received_by_local_pid_2
+    end,
+    receive
+        {received, RemotePid, Message} ->
+            ok = published_message_was_received_by_remote_pid
+    after 250 ->
+        ok
+    end,
+    receive
+        {received, RemotePid, Message} ->
+            ok = published_message_was_received_by_remote_pid_2
+    after 250 ->
+        ok
+    end,
+    receive
+        {received, OtherPid, Message} ->
+            ok = published_message_was_received_by_other_pid
+    after 250 ->
+        ok
+    end,
+    %% kill processes
+    syn_test_suite_helper:kill_process(LocalPid),
+    syn_test_suite_helper:kill_process(LocalPid2),
+    syn_test_suite_helper:kill_process(RemotePid),
+    syn_test_suite_helper:kill_process(RemotePid2),
+    syn_test_suite_helper:kill_process(OtherPid).
 
 three_nodes_partial_netsplit_consistency(Config) ->
     GroupName = "my group",

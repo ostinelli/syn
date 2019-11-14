@@ -38,6 +38,7 @@
 -export([get_local_members/1, get_local_members/2]).
 -export([local_member/2]).
 -export([publish/2]).
+-export([publish_to_local/2]).
 
 %% gen_server via interface
 -export([register_name/2, unregister_name/1, whereis_name/1, send/2]).
@@ -152,3 +153,7 @@ local_member(GroupName, Pid) ->
 -spec publish(Name :: any(), Message :: any()) -> {ok, RecipientCount :: non_neg_integer()}.
 publish(Name, Message) ->
     syn_groups:publish(Name, Message).
+
+-spec publish_to_local(Name :: any(), Message :: any()) -> {ok, RecipientCount :: non_neg_integer()}.
+publish_to_local(Name, Message) ->
+    syn_groups:publish_to_local(Name, Message).
