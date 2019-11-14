@@ -37,6 +37,9 @@
     single_node_join_and_leave/1,
     single_node_join_errors/1
 ]).
+-export([
+    two_nodes_join_monitor_and_unregister/1
+]).
 
 %% include
 -include_lib("common_test/include/ct.hrl").
@@ -55,7 +58,8 @@
 %% -------------------------------------------------------------------
 all() ->
     [
-        {group, single_node_groups}
+        {group, single_node_groups},
+        {group, two_nodes_groups}
     ].
 
 %% -------------------------------------------------------------------
@@ -76,6 +80,10 @@ groups() ->
             single_node_join_and_monitor,
             single_node_join_and_leave,
             single_node_join_errors
+        ]},
+        {two_nodes_groups, [shuffle], [
+            two_nodes_join_monitor_and_unregister
+%%            two_nodes_local_members
         ]}
     ].
 %% -------------------------------------------------------------------
@@ -103,12 +111,12 @@ end_per_suite(_Config) ->
 %% Config0 = Config1 = [tuple()]
 %% Reason = any()
 %% -------------------------------------------------------------------
-init_per_group(two_nodes_process_registration, Config) ->
+init_per_group(two_nodes_groups, Config) ->
     %% start slave
     {ok, SlaveNode} = syn_test_suite_helper:start_slave(syn_slave),
     %% config
     [{slave_node, SlaveNode} | Config];
-init_per_group(three_nodes_process_registration, Config) ->
+init_per_group(three_nodes_groups, Config) ->
     %% start slave
     {ok, SlaveNode1} = syn_test_suite_helper:start_slave(syn_slave_1),
     {ok, SlaveNode2} = syn_test_suite_helper:start_slave(syn_slave_2),
@@ -123,12 +131,12 @@ init_per_group(_GroupName, Config) ->
 %% GroupName = atom()
 %% Config0 = Config1 = [tuple()]
 %% -------------------------------------------------------------------
-end_per_group(two_nodes_process_registration, Config) ->
+end_per_group(two_nodes_groups, Config) ->
     SlaveNode = proplists:get_value(slave_node, Config),
     syn_test_suite_helper:connect_node(SlaveNode),
     syn_test_suite_helper:stop_slave(syn_slave),
     timer:sleep(1000);
-end_per_group(three_nodes_process_registration, Config) ->
+end_per_group(three_nodes_groups, Config) ->
     SlaveNode1 = proplists:get_value(slave_node_1, Config),
     syn_test_suite_helper:connect_node(SlaveNode1),
     SlaveNode2 = proplists:get_value(slave_node_2, Config),
@@ -255,3 +263,55 @@ single_node_join_errors(_Config) ->
     {error, not_alive} = syn:join(GroupName, Pid2),
     %% kill processes
     syn_test_suite_helper:kill_process(Pid).
+
+two_nodes_join_monitor_and_unregister(Config) ->
+    GroupName = "my group",
+    %% get slave
+    SlaveNode = proplists:get_value(slave_node, Config),
+    %% start
+    ok = syn:start(),
+    ok = rpc:call(SlaveNode, syn, start, []),
+    timer:sleep(100),
+    %% start processes
+    LocalPid = syn_test_suite_helper:start_process(),
+    RemotePid = syn_test_suite_helper:start_process(SlaveNode),
+    RemotePidJoinRemote = syn_test_suite_helper:start_process(SlaveNode),
+    OtherPid = syn_test_suite_helper:start_process(),
+    %% retrieve
+    [] = syn:get_members("group-1"),
+    [] = syn:get_members(GroupName, with_meta),
+    false = syn:member(LocalPid, GroupName),
+    false = syn:member(RemotePid, GroupName),
+    false = syn:member(RemotePidJoinRemote, GroupName),
+    false = syn:member(OtherPid, GroupName),
+    %% join
+    ok = syn:join(GroupName, LocalPid),
+    ok = syn:join(GroupName, RemotePid),
+    ok = rpc:call(SlaveNode, syn, join, [GroupName, RemotePidJoinRemote]),
+    ok = syn:join("other-group", OtherPid),
+    timer:sleep(200),
+    %% retrieve
+    true = syn:member(LocalPid, GroupName),
+    true = syn:member(RemotePid, GroupName),
+    true = syn:member(RemotePidJoinRemote, GroupName),
+    false = syn:member(OtherPid, GroupName),
+    true = rpc:call(SlaveNode, syn, member, [LocalPid, GroupName]),
+    true = rpc:call(SlaveNode, syn, member, [RemotePid, GroupName]),
+    true = rpc:call(SlaveNode, syn, member, [RemotePidJoinRemote, GroupName]),
+    false = rpc:call(SlaveNode, syn, member, [OtherPid, GroupName]),
+    %% leave & kill
+    ok = rpc:call(SlaveNode, syn, leave, [GroupName, LocalPid]),
+    ok = syn:leave(GroupName, RemotePid),
+    syn_test_suite_helper:kill_process(RemotePidJoinRemote),
+    syn_test_suite_helper:kill_process(OtherPid),
+    timer:sleep(200),
+    %% retrieve
+    [] = syn:get_members("group-1"),
+    [] = syn:get_members(GroupName, with_meta),
+    false = syn:member(LocalPid, GroupName),
+    false = syn:member(RemotePid, GroupName),
+    false = syn:member(RemotePidJoinRemote, GroupName),
+    false = syn:member(OtherPid, GroupName),
+    %% kill processes
+    syn_test_suite_helper:kill_process(LocalPid),
+    syn_test_suite_helper:kill_process(RemotePid).
