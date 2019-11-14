@@ -27,10 +27,13 @@
 
 %% API
 -export([start/0, stop/0]).
--export([whereis/1, whereis/2]).
 -export([register/2, register/3]).
 -export([unregister/1]).
+-export([whereis/1, whereis/2]).
 -export([registry_count/0, registry_count/1]).
+
+%% gen_server via interface
+-export([register_name/2, unregister_name/1, whereis_name/1, send/2]).
 
 %% ===================================================================
 %% API
@@ -44,14 +47,6 @@ start() ->
 stop() ->
     ok = application:stop(syn).
 
--spec whereis(Name :: term()) -> pid() | undefined.
-whereis(Name) ->
-    syn_registry:whereis(Name).
-
--spec whereis(Name :: term(), with_meta) -> {pid(), Meta :: term()} | undefined.
-whereis(Name, with_meta) ->
-    syn_registry:whereis(Name, with_meta).
-
 -spec register(Name :: term(), Pid :: pid()) -> ok | {error, Reason :: term()}.
 register(Name, Pid) ->
     syn_registry:register(Name, Pid).
@@ -64,6 +59,14 @@ register(Name, Pid, Meta) ->
 unregister(Name) ->
     syn_registry:unregister(Name).
 
+-spec whereis(Name :: term()) -> pid() | undefined.
+whereis(Name) ->
+    syn_registry:whereis(Name).
+
+-spec whereis(Name :: term(), with_meta) -> {pid(), Meta :: term()} | undefined.
+whereis(Name, with_meta) ->
+    syn_registry:whereis(Name, with_meta).
+
 -spec registry_count() -> non_neg_integer().
 registry_count() ->
     syn_registry:count().
@@ -71,3 +74,32 @@ registry_count() ->
 -spec registry_count(Node :: atom()) -> non_neg_integer().
 registry_count(Node) ->
     syn_registry:count(Node).
+
+%% gen_server via interface
+-spec register_name(Name :: term(), Pid :: pid()) -> yes | no.
+register_name(Name, Pid) ->
+    case syn_registry:register(Name, Pid) of
+        ok -> yes;
+        _ -> no
+    end.
+
+-spec unregister_name(Name :: term()) -> term().
+unregister_name(Name) ->
+    case syn_registry:unregister(Name) of
+        ok -> Name;
+        _ -> nil
+    end.
+
+-spec whereis_name(Name :: term()) -> pid() | undefined.
+whereis_name(Name) ->
+    syn_registry:whereis(Name).
+
+-spec send(Name :: term(), Message :: term()) -> pid().
+send(Name, Message) ->
+    case whereis_name(Name) of
+        undefined ->
+            {badarg, {Name, Message}};
+        Pid ->
+            Pid ! Message,
+            Pid
+    end.

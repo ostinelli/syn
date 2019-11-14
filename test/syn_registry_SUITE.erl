@@ -36,7 +36,8 @@
     single_node_register_and_monitor/1,
     single_node_register_and_unregister/1,
     single_node_registration_errors/1,
-    single_node_registry_count/1
+    single_node_registry_count/1,
+    single_node_register_gen_server/1
 ]).
 -export([
     two_nodes_register_monitor_and_unregister/1,
@@ -93,7 +94,8 @@ groups() ->
             single_node_register_and_monitor,
             single_node_register_and_unregister,
             single_node_registration_errors,
-            single_node_registry_count
+            single_node_registry_count,
+            single_node_register_gen_server
         ]},
         {two_nodes_process_registration, [shuffle], [
             two_nodes_register_monitor_and_unregister,
@@ -281,6 +283,30 @@ single_node_registry_count(_Config) ->
     0 = syn:registry_count(),
     0 = syn:registry_count(node()).
 
+single_node_register_gen_server(_Config) ->
+    %% start
+    ok = syn:start(),
+    %% start gen server via syn
+    {ok, Pid} = syn_test_gen_server:start_link(),
+    %% retrieve
+    Pid = syn:whereis(syn_test_gen_server),
+    %% call
+    pong = syn_test_gen_server:ping(),
+    %% send via syn
+    syn:send(syn_test_gen_server, {self(), send_ping}),
+    receive
+        send_pong -> ok
+    after 1000 ->
+        ok = did_not_receive_gen_server_pong
+    end,
+    %% stop server
+    syn_test_gen_server:stop(),
+    timer:sleep(200),
+    %% retrieve
+    undefined = syn:whereis(syn_test_gen_server),
+    %% send via syn
+    {badarg, {syn_test_gen_server, anything}} = (catch syn:send(syn_test_gen_server, anything)).
+
 two_nodes_register_monitor_and_unregister(Config) ->
     %% get slave
     SlaveNode = proplists:get_value(slave_node, Config),
@@ -357,7 +383,8 @@ two_nodes_registry_count(Config) ->
     0 = syn:registry_count(node()),
     0 = syn:registry_count(SlaveNode),
     %% kill proc
-    syn_test_suite_helper:kill_process(RemotePid).
+    syn_test_suite_helper:kill_process(RemotePid),
+    syn_test_suite_helper:kill_process(PidUnregistered).
 
 three_nodes_partial_netsplit_consistency(Config) ->
     %% get slaves
