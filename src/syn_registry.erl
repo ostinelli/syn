@@ -142,7 +142,7 @@ init([]) ->
             %% init
             {ok, #state{}};
         Reason ->
-            {stop, {error_waiting_for_process_registry_table, Reason}}
+            {stop, {error_waiting_for_registry_table, Reason}}
     end.
 
 %% ----------------------------------------------------------------------------------------------------------
@@ -168,6 +168,14 @@ handle_call({register_on_node, Name, Pid, Meta}, _From, State) ->
                     rpc:eval_everywhere(nodes(), ?MODULE, sync_register, [Name, Pid, Meta]),
                     %% return
                     {reply, ok, State};
+
+                Entry when Entry#syn_registry_table.pid == Pid ->
+                    register_on_node(Name, Pid, Meta),
+                    %% multicast
+                    rpc:eval_everywhere(nodes(), ?MODULE, sync_register, [Name, Pid, Meta]),
+                    %% return
+                    {reply, ok, State};
+
                 _ ->
                     {reply, {error, taken}, State}
             end;

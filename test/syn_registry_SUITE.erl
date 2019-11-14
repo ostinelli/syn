@@ -207,6 +207,9 @@ single_node_register_and_monitor(_Config) ->
     Pid = syn:whereis(<<"my proc">>),
     Pid = syn:whereis(<<"my proc 2">>),
     {PidWithMeta, {meta, <<"meta">>}} = syn:whereis(<<"my proc with meta">>, with_meta),
+    %% re-register
+    ok = syn:register(<<"my proc with meta">>, PidWithMeta, {meta2, <<"meta2">>}),
+    {PidWithMeta, {meta2, <<"meta2">>}} = syn:whereis(<<"my proc with meta">>, with_meta),
     %% kill process
     syn_test_suite_helper:kill_process(Pid),
     syn_test_suite_helper:kill_process(PidWithMeta),
