@@ -34,7 +34,8 @@
 %% tests
 -export([
     single_node_join_and_monitor/1,
-    single_node_join_and_leave/1
+    single_node_join_and_leave/1,
+    single_node_join_errors/1
 ]).
 
 %% include
@@ -50,7 +51,7 @@
 %% GroupsAndTestCases = [{group,GroupName} | TestCase]
 %% GroupName = atom()
 %% TestCase = atom()
-%% Reason = term()
+%% Reason = any()
 %% -------------------------------------------------------------------
 all() ->
     [
@@ -73,7 +74,8 @@ groups() ->
     [
         {single_node_groups, [shuffle], [
             single_node_join_and_monitor,
-            single_node_join_and_leave
+            single_node_join_and_leave,
+            single_node_join_errors
         ]}
     ].
 %% -------------------------------------------------------------------
@@ -81,7 +83,7 @@ groups() ->
 %%				Config1 | {skip,Reason} |
 %%              {skip_and_save,Reason,Config1}
 %% Config0 = Config1 = [tuple()]
-%% Reason = term()
+%% Reason = any()
 %% -------------------------------------------------------------------
 init_per_suite(Config) ->
     Config.
@@ -99,7 +101,7 @@ end_per_suite(_Config) ->
 %%              {skip_and_save,Reason,Config1}
 %% GroupName = atom()
 %% Config0 = Config1 = [tuple()]
-%% Reason = term()
+%% Reason = any()
 %% -------------------------------------------------------------------
 init_per_group(two_nodes_process_registration, Config) ->
     %% start slave
@@ -142,7 +144,7 @@ end_per_group(_GroupName, _Config) ->
 %%				Config1 | {skip,Reason} | {skip_and_save,Reason,Config1}
 %% TestCase = atom()
 %% Config0 = Config1 = [tuple()]
-%% Reason = term()
+%% Reason = any()
 %% -------------------------------------------------------------------
 init_per_testcase(_TestCase, Config) ->
     Config.
@@ -152,7 +154,7 @@ init_per_testcase(_TestCase, Config) ->
 %%				void() | {save_config,Config1} | {fail,Reason}
 %% TestCase = atom()
 %% Config0 = Config1 = [tuple()]
-%% Reason = term()
+%% Reason = any()
 %% -------------------------------------------------------------------
 end_per_testcase(_, _Config) ->
     syn_test_suite_helper:clean_after_test().
@@ -167,26 +169,30 @@ single_node_join_and_monitor(_Config) ->
     %% start processes
     Pid = syn_test_suite_helper:start_process(),
     PidWithMeta = syn_test_suite_helper:start_process(),
+    PidOther = syn_test_suite_helper:start_process(),
     %% retrieve
     [] = syn:get_members(GroupName),
     [] = syn:get_members(GroupName, with_meta),
     false = syn:member(Pid, GroupName),
     false = syn:member(PidWithMeta, GroupName),
+    false = syn:member(PidOther, GroupName),
     %% join
     ok = syn:join(GroupName, Pid),
     ok = syn:join(GroupName, PidWithMeta, {with, meta}),
+    ok = syn:join("other-group", PidOther),
     %% retrieve
     true = syn:member(Pid, GroupName),
     true = syn:member(PidWithMeta, GroupName),
+    false = syn:member(PidOther, GroupName),
     true = lists:sort([Pid, PidWithMeta]) =:= lists:sort(syn:get_members(GroupName)),
     true = lists:sort([{Pid, undefined}, {PidWithMeta, {with, meta}}]) =:= lists:sort(syn:get_members(GroupName, with_meta)),
     %% re-join
     ok = syn:join(GroupName, PidWithMeta, {with2, meta2}),
-    ct:pal("HERE ~p",[lists:sort(syn:get_members(GroupName, with_meta))]),
     true = lists:sort([{Pid, undefined}, {PidWithMeta, {with2, meta2}}]) =:= lists:sort(syn:get_members(GroupName, with_meta)),
     %% kill process
     syn_test_suite_helper:kill_process(Pid),
     syn_test_suite_helper:kill_process(PidWithMeta),
+    syn_test_suite_helper:kill_process(PidOther),
     timer:sleep(100),
     %% retrieve
     [] = syn:get_members(GroupName),
@@ -218,10 +224,34 @@ single_node_join_and_leave(_Config) ->
     ok = syn:leave(GroupName, Pid),
     ok = syn:leave(GroupName, PidWithMeta),
     timer:sleep(100),
-    {error, not_in_group} = syn:leave(GroupName, Pid),
-    {error, not_in_group} = syn:leave(GroupName, PidWithMeta),
     %% retrieve
     [] = syn:get_members(GroupName),
     [] = syn:get_members(GroupName, with_meta),
     false = syn:member(Pid, GroupName),
-    false = syn:member(PidWithMeta, GroupName).
+    false = syn:member(PidWithMeta, GroupName),
+    %% kill processes
+    syn_test_suite_helper:kill_process(Pid),
+    syn_test_suite_helper:kill_process(PidWithMeta).
+
+single_node_join_errors(_Config) ->
+    GroupName = "my group",
+    %% start
+    ok = syn:start(),
+    %% start processes
+    Pid = syn_test_suite_helper:start_process(),
+    Pid2 = syn_test_suite_helper:start_process(),
+    %% join
+    ok = syn:join(GroupName, Pid),
+    ok = syn:join(GroupName, Pid2),
+    true = syn:member(Pid, GroupName),
+    true = syn:member(Pid2, GroupName),
+    %% leave
+    ok = syn:leave(GroupName, Pid),
+    {error, not_in_group} = syn:leave(GroupName, Pid),
+    %% kill
+    syn_test_suite_helper:kill_process(Pid2),
+    timer:sleep(200),
+    {error, not_in_group} = syn:leave(GroupName, Pid2),
+    {error, not_alive} = syn:join(GroupName, Pid2),
+    %% kill processes
+    syn_test_suite_helper:kill_process(Pid).

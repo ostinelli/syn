@@ -67,7 +67,7 @@
 %% GroupsAndTestCases = [{group,GroupName} | TestCase]
 %% GroupName = atom()
 %% TestCase = atom()
-%% Reason = term()
+%% Reason = any()
 %% -------------------------------------------------------------------
 all() ->
     [
@@ -112,7 +112,7 @@ groups() ->
 %%				Config1 | {skip,Reason} |
 %%              {skip_and_save,Reason,Config1}
 %% Config0 = Config1 = [tuple()]
-%% Reason = term()
+%% Reason = any()
 %% -------------------------------------------------------------------
 init_per_suite(Config) ->
     Config.
@@ -130,7 +130,7 @@ end_per_suite(_Config) ->
 %%              {skip_and_save,Reason,Config1}
 %% GroupName = atom()
 %% Config0 = Config1 = [tuple()]
-%% Reason = term()
+%% Reason = any()
 %% -------------------------------------------------------------------
 init_per_group(two_nodes_process_registration, Config) ->
     %% start slave
@@ -167,24 +167,23 @@ end_per_group(three_nodes_process_registration, Config) ->
     timer:sleep(1000);
 end_per_group(_GroupName, _Config) ->
     ok.
-
-% ----------------------------------------------------------------------------------------------------------
-% Function: init_per_testcase(TestCase, Config0) ->
-%				Config1 | {skip,Reason} | {skip_and_save,Reason,Config1}
-% TestCase = atom()
-% Config0 = Config1 = [tuple()]
-% Reason = term()
-% ----------------------------------------------------------------------------------------------------------
+%% -------------------------------------------------------------------
+%% Function: init_per_testcase(TestCase, Config0) ->
+%%				Config1 | {skip,Reason} | {skip_and_save,Reason,Config1}
+%% TestCase = atom()
+%% Config0 = Config1 = [tuple()]
+%% Reason = any()
+%% -------------------------------------------------------------------
 init_per_testcase(_TestCase, Config) ->
     Config.
 
-% ----------------------------------------------------------------------------------------------------------
-% Function: end_per_testcase(TestCase, Config0) ->
-%				void() | {save_config,Config1} | {fail,Reason}
-% TestCase = atom()
-% Config0 = Config1 = [tuple()]
-% Reason = term()
-% ----------------------------------------------------------------------------------------------------------
+%% -------------------------------------------------------------------
+%% Function: end_per_testcase(TestCase, Config0) ->
+%%				void() | {save_config,Config1} | {fail,Reason}
+%% TestCase = atom()
+%% Config0 = Config1 = [tuple()]
+%% Reason = any()
+%% -------------------------------------------------------------------
 end_per_testcase(_, _Config) ->
     syn_test_suite_helper:clean_after_test().
 

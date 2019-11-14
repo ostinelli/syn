@@ -53,7 +53,7 @@ start_link() ->
     Options = [],
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], Options).
 
--spec join(GroupName :: term(), Pid :: pid()) -> ok.
+-spec join(GroupName :: any(), Pid :: pid()) -> ok.
 join(GroupName, Pid) ->
     join(GroupName, Pid, undefined).
 
@@ -62,7 +62,7 @@ join(GroupName, Pid, Meta) when is_pid(Pid) ->
     Node = node(Pid),
     gen_server:call({?MODULE, Node}, {join_on_node, GroupName, Pid, Meta}).
 
--spec leave(GroupName :: term(), Pid :: pid()) -> ok | {error, Reason :: term()}.
+-spec leave(GroupName :: any(), Pid :: pid()) -> ok | {error, Reason :: any()}.
 leave(GroupName, Pid) ->
     case find_process_entry_by_name_and_pid(GroupName, Pid) of
         undefined ->
@@ -84,18 +84,18 @@ get_members(GroupName, with_meta) ->
     Pids = [{Entry#syn_groups_table.pid, Entry#syn_groups_table.meta} || Entry <- Entries],
     lists:sort(Pids).
 
--spec member(Pid :: pid(), GroupName :: term()) -> boolean().
+-spec member(Pid :: pid(), GroupName :: any()) -> boolean().
 member(Pid, GroupName) ->
     case find_process_entry_by_name_and_pid(GroupName, Pid) of
         undefined -> false;
         _ -> true
     end.
 
--spec sync_join(GroupName :: term(), Pid :: pid(), Meta :: term()) -> ok.
+-spec sync_join(GroupName :: any(), Pid :: pid(), Meta :: any()) -> ok.
 sync_join(GroupName, Pid, Meta) ->
     gen_server:cast(?MODULE, {sync_join, GroupName, Pid, Meta}).
 
--spec sync_leave(GroupName :: term(), Pid :: pid()) -> ok.
+-spec sync_leave(GroupName :: any(), Pid :: pid()) -> ok.
 sync_leave(GroupName, Pid) ->
     gen_server:cast(?MODULE, {sync_leave, GroupName, Pid}).
 
@@ -135,11 +135,17 @@ init([]) ->
     {stop, Reason :: any(), #state{}}.
 
 handle_call({join_on_node, GroupName, Pid, Meta}, _From, State) ->
-    join_on_node(GroupName, Pid, Meta),
-    %% multicast
-    rpc:eval_everywhere(nodes(), ?MODULE, sync_join, [GroupName, Pid, Meta]),
-    %% return
-    {reply, ok, State};
+    %% check if pid is alive
+    case is_process_alive(Pid) of
+        true ->
+            join_on_node(GroupName, Pid, Meta),
+            %% multicast
+            rpc:eval_everywhere(nodes(), ?MODULE, sync_join, [GroupName, Pid, Meta]),
+            %% return
+            {reply, ok, State};
+        _ ->
+            {reply, {error, not_alive}, State}
+    end;
 
 handle_call({leave_on_node, GroupName, Pid}, _From, State) ->
     case leave_on_node(GroupName, Pid) of
@@ -244,7 +250,7 @@ join_on_node(GroupName, Pid, Meta) ->
     %% add to table
     add_to_local_table(GroupName, Pid, Meta, MonitorRef).
 
--spec leave_on_node(GroupName :: any(), Pid :: pid()) -> ok | {error, Reason :: term()}.
+-spec leave_on_node(GroupName :: any(), Pid :: pid()) -> ok | {error, Reason :: any()}.
 leave_on_node(GroupName, Pid) ->
     case find_process_entry_by_name_and_pid(GroupName, Pid) of
         undefined ->
@@ -276,7 +282,7 @@ add_to_local_table(GroupName, Pid, Meta, MonitorRef) ->
         monitor_ref = MonitorRef
     }).
 
--spec remove_from_local_table(GroupName :: term(), Pid :: pid()) -> ok | {error, Reason :: term()}.
+-spec remove_from_local_table(GroupName :: any(), Pid :: pid()) -> ok | {error, Reason :: any()}.
 remove_from_local_table(GroupName, Pid) ->
     case find_process_entry_by_name_and_pid(GroupName, Pid) of
         undefined ->
@@ -294,7 +300,7 @@ remove_from_local_table(Entry) ->
 find_processes_entry_by_pid(Pid) when is_pid(Pid) ->
     mnesia:dirty_index_read(syn_groups_table, Pid, #syn_groups_table.pid).
 
--spec find_process_entry_by_name_and_pid(GroupName :: term(), Pid :: pid()) -> Entry :: #syn_groups_table{} | undefined.
+-spec find_process_entry_by_name_and_pid(GroupName :: any(), Pid :: pid()) -> Entry :: #syn_groups_table{} | undefined.
 find_process_entry_by_name_and_pid(GroupName, Pid) ->
     %% build match specs
     MatchHead = #syn_groups_table{name = GroupName, pid = Pid, _ = '_'},
@@ -306,7 +312,7 @@ find_process_entry_by_name_and_pid(GroupName, Pid) ->
         [] -> undefined
     end.
 
--spec log_process_exit(Name :: term(), Pid :: pid(), Reason :: term()) -> ok.
+-spec log_process_exit(Name :: any(), Pid :: pid(), Reason :: any()) -> ok.
 log_process_exit(GroupName, Pid, Reason) ->
     case Reason of
         normal -> ok;

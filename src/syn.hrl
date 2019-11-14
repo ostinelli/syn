@@ -41,8 +41,8 @@
 
 %% types
 -type syn_registry_tuple() :: {
-    Name :: term(),
+    Name :: any(),
     Pid :: pid(),
-    Meta :: term()
+    Meta :: any()
 }.
 -export_type([syn_registry_tuple/0]).

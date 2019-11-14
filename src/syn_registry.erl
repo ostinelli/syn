@@ -28,9 +28,9 @@
 
 %% API
 -export([start_link/0]).
--export([whereis/1, whereis/2]).
 -export([register/2, register/3]).
 -export([unregister/1]).
+-export([whereis/1, whereis/2]).
 -export([count/0, count/1]).
 
 %% sync API
@@ -55,30 +55,16 @@ start_link() ->
     Options = [],
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], Options).
 
--spec whereis(Name :: term()) -> pid() | undefined.
-whereis(Name) ->
-    case find_process_entry_by_name(Name) of
-        undefined -> undefined;
-        Entry -> Entry#syn_registry_table.pid
-    end.
-
--spec whereis(Name :: term(), with_meta) -> {pid(), Meta :: term()} | undefined.
-whereis(Name, with_meta) ->
-    case find_process_entry_by_name(Name) of
-        undefined -> undefined;
-        Entry -> {Entry#syn_registry_table.pid, Entry#syn_registry_table.meta}
-    end.
-
--spec register(Name :: term(), Pid :: pid()) -> ok | {error, Reason :: term()}.
+-spec register(Name :: any(), Pid :: pid()) -> ok | {error, Reason :: any()}.
 register(Name, Pid) ->
     register(Name, Pid, undefined).
 
--spec register(Name :: term(), Pid :: pid(), Meta :: term()) -> ok | {error, Reason :: term()}.
+-spec register(Name :: any(), Pid :: pid(), Meta :: any()) -> ok | {error, Reason :: any()}.
 register(Name, Pid, Meta) when is_pid(Pid) ->
     Node = node(Pid),
     gen_server:call({?MODULE, Node}, {register_on_node, Name, Pid, Meta}).
 
--spec unregister(Name :: term()) -> ok | {error, Reason :: term()}.
+-spec unregister(Name :: any()) -> ok | {error, Reason :: any()}.
 unregister(Name) ->
     % get process' node
     case find_process_entry_by_name(Name) of
@@ -87,6 +73,20 @@ unregister(Name) ->
         Entry ->
             Node = node(Entry#syn_registry_table.pid),
             gen_server:call({?MODULE, Node}, {unregister_on_node, Name})
+    end.
+
+-spec whereis(Name :: any()) -> pid() | undefined.
+whereis(Name) ->
+    case find_process_entry_by_name(Name) of
+        undefined -> undefined;
+        Entry -> Entry#syn_registry_table.pid
+    end.
+
+-spec whereis(Name :: any(), with_meta) -> {pid(), Meta :: any()} | undefined.
+whereis(Name, with_meta) ->
+    case find_process_entry_by_name(Name) of
+        undefined -> undefined;
+        Entry -> {Entry#syn_registry_table.pid, Entry#syn_registry_table.meta}
     end.
 
 -spec count() -> non_neg_integer().
@@ -103,11 +103,11 @@ count(Node) ->
     Processes = mnesia:dirty_select(syn_registry_table, [{MatchHead, [Guard], [Result]}]),
     length(Processes).
 
--spec sync_register(Name :: term(), Pid :: pid(), Meta :: term()) -> ok.
+-spec sync_register(Name :: any(), Pid :: pid(), Meta :: any()) -> ok.
 sync_register(Name, Pid, Meta) ->
     gen_server:cast(?MODULE, {sync_register, Name, Pid, Meta}).
 
--spec sync_unregister(Name :: term()) -> ok.
+-spec sync_unregister(Name :: any()) -> ok.
 sync_unregister(Name) ->
     gen_server:cast(?MODULE, {sync_unregister, Name}).
 
@@ -310,7 +310,7 @@ register_on_node(Name, Pid, Meta) ->
     %% add to table
     add_to_local_table(Name, Pid, Meta, MonitorRef).
 
--spec unregister_on_node(Name :: any()) -> ok.
+-spec unregister_on_node(Name :: any()) -> ok | {error, Reason :: any()}.
 unregister_on_node(Name) ->
     case find_process_entry_by_name(Name) of
         undefined ->
@@ -341,14 +341,14 @@ remove_from_local_table(Name) ->
 find_processes_entry_by_pid(Pid) when is_pid(Pid) ->
     mnesia:dirty_index_read(syn_registry_table, Pid, #syn_registry_table.pid).
 
--spec find_process_entry_by_name(Name :: term()) -> Entry :: #syn_registry_table{} | undefined.
+-spec find_process_entry_by_name(Name :: any()) -> Entry :: #syn_registry_table{} | undefined.
 find_process_entry_by_name(Name) ->
     case mnesia:dirty_read(syn_registry_table, Name) of
         [Entry] -> Entry;
         _ -> undefined
     end.
 
--spec log_process_exit(Name :: term(), Pid :: pid(), Reason :: term()) -> ok.
+-spec log_process_exit(Name :: any(), Pid :: pid(), Reason :: any()) -> ok.
 log_process_exit(Name, Pid, Reason) ->
     case Reason of
         normal -> ok;

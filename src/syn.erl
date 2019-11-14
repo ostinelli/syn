@@ -52,23 +52,23 @@ stop() ->
     ok = application:stop(syn).
 
 %% ----- \/ registry -------------------------------------------------
--spec register(Name :: term(), Pid :: pid()) -> ok | {error, Reason :: term()}.
+-spec register(Name :: any(), Pid :: pid()) -> ok | {error, Reason :: any()}.
 register(Name, Pid) ->
     syn_registry:register(Name, Pid).
 
--spec register(Name :: term(), Pid :: pid(), Meta :: term()) -> ok | {error, Reason :: term()}.
+-spec register(Name :: any(), Pid :: pid(), Meta :: any()) -> ok | {error, Reason :: any()}.
 register(Name, Pid, Meta) ->
     syn_registry:register(Name, Pid, Meta).
 
--spec unregister(Name :: term()) -> ok | {error, Reason :: term()}.
+-spec unregister(Name :: any()) -> ok | {error, Reason :: any()}.
 unregister(Name) ->
     syn_registry:unregister(Name).
 
--spec whereis(Name :: term()) -> pid() | undefined.
+-spec whereis(Name :: any()) -> pid() | undefined.
 whereis(Name) ->
     syn_registry:whereis(Name).
 
--spec whereis(Name :: term(), with_meta) -> {pid(), Meta :: term()} | undefined.
+-spec whereis(Name :: any(), with_meta) -> {pid(), Meta :: any()} | undefined.
 whereis(Name, with_meta) ->
     syn_registry:whereis(Name, with_meta).
 
@@ -81,25 +81,25 @@ registry_count(Node) ->
     syn_registry:count(Node).
 
 %% ----- \/ gen_server via module interface --------------------------
--spec register_name(Name :: term(), Pid :: pid()) -> yes | no.
+-spec register_name(Name :: any(), Pid :: pid()) -> yes | no.
 register_name(Name, Pid) ->
     case syn_registry:register(Name, Pid) of
         ok -> yes;
         _ -> no
     end.
 
--spec unregister_name(Name :: term()) -> term().
+-spec unregister_name(Name :: any()) -> any().
 unregister_name(Name) ->
     case syn_registry:unregister(Name) of
         ok -> Name;
         _ -> nil
     end.
 
--spec whereis_name(Name :: term()) -> pid() | undefined.
+-spec whereis_name(Name :: any()) -> pid() | undefined.
 whereis_name(Name) ->
     syn_registry:whereis(Name).
 
--spec send(Name :: term(), Message :: term()) -> pid().
+-spec send(Name :: any(), Message :: any()) -> pid().
 send(Name, Message) ->
     case whereis_name(Name) of
         undefined ->
@@ -110,26 +110,26 @@ send(Name, Message) ->
     end.
 
 %% ----- \/ groups ---------------------------------------------------
--spec join(GroupName :: term(), Pid :: pid()) -> ok.
+-spec join(GroupName :: any(), Pid :: pid()) -> ok.
 join(GroupName, Pid) ->
     syn_groups:join(GroupName, Pid).
 
--spec join(GroupName :: term(), Pid :: pid(), Meta :: term()) -> ok.
+-spec join(GroupName :: any(), Pid :: pid(), Meta :: any()) -> ok.
 join(GroupName, Pid, Meta) ->
     syn_groups:join(GroupName, Pid, Meta).
 
--spec leave(GroupName :: term(), Pid :: pid()) -> ok | {error, Reason :: term()}.
+-spec leave(GroupName :: any(), Pid :: pid()) -> ok | {error, Reason :: any()}.
 leave(GroupName, Pid) ->
     syn_groups:leave(GroupName, Pid).
 
--spec get_members(GroupName :: term()) -> [pid()].
+-spec get_members(GroupName :: any()) -> [pid()].
 get_members(GroupName) ->
     syn_groups:get_members(GroupName).
 
--spec get_members(GroupName :: term(), with_meta) -> [{pid(), Meta :: term()}].
+-spec get_members(GroupName :: any(), with_meta) -> [{pid(), Meta :: any()}].
 get_members(GroupName, with_meta) ->
     syn_groups:get_members(GroupName, with_meta).
 
--spec member(GroupName :: term(), Pid :: pid()) -> boolean().
+-spec member(GroupName :: any(), Pid :: pid()) -> boolean().
 member(GroupName, Pid) ->
     syn_groups:member(GroupName, Pid).

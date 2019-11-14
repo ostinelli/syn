@@ -35,7 +35,7 @@
 %% ===================================================================
 %% API
 %% ===================================================================
--spec init() -> ok | {error, Reason :: term()}.
+-spec init() -> ok | {error, Reason :: any()}.
 init() ->
     case create_registry_table() of
         {atomic, ok} ->
@@ -56,7 +56,7 @@ deinit() ->
 %% ===================================================================
 %% Internal
 %% ===================================================================
--spec create_registry_table() -> {atomic, ok} | {aborted, Reason :: term()}.
+-spec create_registry_table() -> {atomic, ok} | {aborted, Reason :: any()}.
 create_registry_table() ->
     mnesia:create_table(syn_registry_table, [
         {type, set},
@@ -65,7 +65,7 @@ create_registry_table() ->
         {storage_properties, [{ets, [{read_concurrency, true}, {write_concurrency, true}]}]}
     ]).
 
--spec create_groups_table() -> {atomic, ok} | {aborted, Reason :: term()}.
+-spec create_groups_table() -> {atomic, ok} | {aborted, Reason :: any()}.
 create_groups_table() ->
     mnesia:create_table(syn_groups_table, [
         {type, bag},
