@@ -619,6 +619,16 @@ three_nodes_start_syn_before_connecting_cluster(Config) ->
     true = lists:member(syn:whereis(ConflictingName), [Pid0, Pid1, Pid2]),
     true = lists:member(rpc:call(SlaveNode1, syn, whereis, [ConflictingName]), [Pid0, Pid1, Pid2]),
     true = lists:member(rpc:call(SlaveNode2, syn, whereis, [ConflictingName]), [Pid0, Pid1, Pid2]),
+    %% check metadata
+    case syn:whereis(ConflictingName, with_meta) of
+        {Pid0, Meta} ->
+            CurrentNode = node(),
+            CurrentNode = Meta;
+        {Pid1, Meta} ->
+            SlaveNode1 = Meta;
+        {Pid2, Meta} ->
+            SlaveNode2 = Meta
+    end,
     %% kill processes
     syn_test_suite_helper:kill_process(Pid0),
     syn_test_suite_helper:kill_process(Pid1),
