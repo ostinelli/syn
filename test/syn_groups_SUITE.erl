@@ -36,13 +36,16 @@
     single_node_join_and_monitor/1,
     single_node_join_and_leave/1,
     single_node_join_errors/1,
-    single_node_publish/1
+    single_node_publish/1,
+    single_node_multicall/1,
+    single_node_multicall_with_custom_timeout/1
 ]).
 -export([
     two_nodes_join_monitor_and_unregister/1,
     two_nodes_local_members/1,
     two_nodes_publish/1,
-    two_nodes_local_publish/1
+    two_nodes_local_publish/1,
+    two_nodes_multicall/1
 ]).
 -export([
     three_nodes_partial_netsplit_consistency/1,
@@ -66,9 +69,9 @@
 %% -------------------------------------------------------------------
 all() ->
     [
-        {group, single_node_groups}
-%%        {group, two_nodes_groups}
-%%        {group, three_nodes_groups}
+        {group, single_node_groups},
+        {group, two_nodes_groups},
+        {group, three_nodes_groups}
     ].
 
 %% -------------------------------------------------------------------
@@ -86,17 +89,19 @@ all() ->
 groups() ->
     [
         {single_node_groups, [shuffle], [
-%%            single_node_join_and_monitor,
-%%            single_node_join_and_leave,
-%%            single_node_join_errors,
-%%            single_node_publish,
-            single_node_multicall
+            single_node_join_and_monitor,
+            single_node_join_and_leave,
+            single_node_join_errors,
+            single_node_publish,
+            single_node_multicall,
+            single_node_multicall_with_custom_timeout
         ]},
         {two_nodes_groups, [shuffle], [
-%%            two_nodes_join_monitor_and_unregister,
-%%            two_nodes_local_members,
-%%            two_nodes_publish,
-%%            two_nodes_local_publish,
+            two_nodes_join_monitor_and_unregister,
+            two_nodes_local_members,
+            two_nodes_publish,
+            two_nodes_local_publish,
+            two_nodes_multicall
         ]},
         {three_nodes_groups, [shuffle], [
             three_nodes_partial_netsplit_consistency,
@@ -320,6 +325,72 @@ single_node_publish(_Config) ->
     %% kill processes
     syn_test_suite_helper:kill_process(Pid),
     syn_test_suite_helper:kill_process(Pid2).
+
+single_node_multicall(_Config) ->
+    GroupName = <<"my group">>,
+    %% start
+    ok = syn:start(),
+    %% start processes
+    F = fun() ->
+        receive
+            {syn_multi_call, RequestorPid, get_pid_name} ->
+                syn:multi_call_reply(RequestorPid, {pong, self()})
+        end
+    end,
+    Pid1 = syn_test_suite_helper:start_process(F),
+    Pid2 = syn_test_suite_helper:start_process(F),
+    PidUnresponsive = syn_test_suite_helper:start_process(),
+    %% register
+    ok = syn:join(GroupName, Pid1),
+    ok = syn:join(GroupName, Pid2),
+    ok = syn:join(GroupName, PidUnresponsive),
+    %% call
+    {Replies, BadPids} = syn:multi_call(GroupName, get_pid_name),
+    %% check responses
+    true = lists:sort([
+        {Pid1, {pong, Pid1}},
+        {Pid2, {pong, Pid2}}
+    ]) =:= lists:sort(Replies),
+    [PidUnresponsive] = BadPids,
+    %% kill processes
+    syn_test_suite_helper:kill_process(Pid1),
+    syn_test_suite_helper:kill_process(Pid2),
+    syn_test_suite_helper:kill_process(PidUnresponsive).
+
+single_node_multicall_with_custom_timeout(_Config) ->
+    GroupName = <<"my group">>,
+    %% start
+    ok = syn:start(),
+    %% start processes
+    F1 = fun() ->
+        receive
+            {syn_multi_call, RequestorPid, get_pid_name} ->
+                syn:multi_call_reply(RequestorPid, {pong, self()})
+        end
+    end,
+    Pid1 = syn_test_suite_helper:start_process(F1),
+    F2 = fun() ->
+        receive
+            {syn_multi_call, RequestorPid, get_pid_name} ->
+                timer:sleep(5000),
+                syn:multi_call_reply(RequestorPid, {pong, self()})
+        end
+    end,
+    PidTakesLong = syn_test_suite_helper:start_process(F2),
+    PidUnresponsive = syn_test_suite_helper:start_process(),
+    %% register
+    ok = syn:join(GroupName, Pid1),
+    ok = syn:join(GroupName, PidTakesLong),
+    ok = syn:join(GroupName, PidUnresponsive),
+    %% call
+    {Replies, BadPids} = syn:multi_call(GroupName, get_pid_name, 2000),
+    %% check responses
+    [{Pid1, {pong, Pid1}}] = Replies,
+    true = lists:sort([PidTakesLong, PidUnresponsive]) =:= lists:sort(BadPids),
+    %% kill processes
+    syn_test_suite_helper:kill_process(Pid1),
+    syn_test_suite_helper:kill_process(PidTakesLong),
+    syn_test_suite_helper:kill_process(PidUnresponsive).
 
 two_nodes_join_monitor_and_unregister(Config) ->
     GroupName = "my group",
@@ -589,6 +660,41 @@ two_nodes_local_publish(Config) ->
     syn_test_suite_helper:kill_process(RemotePid),
     syn_test_suite_helper:kill_process(RemotePid2),
     syn_test_suite_helper:kill_process(OtherPid).
+
+two_nodes_multicall(Config) ->
+    GroupName = <<"my group">>,
+    %% get slave
+    SlaveNode = proplists:get_value(slave_node, Config),
+    %% start
+    ok = syn:start(),
+    ok = rpc:call(SlaveNode, syn, start, []),
+    timer:sleep(100),
+    %% start processes
+    F = fun() ->
+        receive
+            {syn_multi_call, RequestorPid, get_pid_name} ->
+                syn:multi_call_reply(RequestorPid, {pong, self()})
+        end
+    end,
+    Pid1 = syn_test_suite_helper:start_process(F),
+    Pid2 = syn_test_suite_helper:start_process(SlaveNode, F),
+    PidUnresponsive = syn_test_suite_helper:start_process(),
+    %% register
+    ok = syn:join(GroupName, Pid1),
+    ok = syn:join(GroupName, Pid2),
+    ok = syn:join(GroupName, PidUnresponsive),
+    %% call
+    {Replies, BadPids} = syn:multi_call(GroupName, get_pid_name),
+    %% check responses
+    true = lists:sort([
+        {Pid1, {pong, Pid1}},
+        {Pid2, {pong, Pid2}}
+    ]) =:= lists:sort(Replies),
+    [PidUnresponsive] = BadPids,
+    %% kill processes
+    syn_test_suite_helper:kill_process(Pid1),
+    syn_test_suite_helper:kill_process(Pid2),
+    syn_test_suite_helper:kill_process(PidUnresponsive).
 
 three_nodes_partial_netsplit_consistency(Config) ->
     GroupName = "my group",

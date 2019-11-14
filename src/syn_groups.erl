@@ -36,6 +36,7 @@
 -export([local_member/2]).
 -export([publish/2]).
 -export([publish_to_local/2]).
+-export([multi_call/2, multi_call/3, multi_call_reply/2]).
 
 %% sync API
 -export([sync_join/3, sync_leave/2]).
@@ -44,8 +45,14 @@
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
+%% internal
+-export([multi_call_and_receive/4]).
+
 %% records
 -record(state, {}).
+
+%% macros
+-define(DEFAULT_MULTI_CALL_TIMEOUT_MS, 5000).
 
 %% includes
 -include("syn.hrl").
@@ -143,14 +150,33 @@ publish(GroupName, Message) ->
     lists:foreach(FSend, MemberPids),
     {ok, length(MemberPids)}.
 
--spec publish_to_local(Name :: any(), Message :: any()) -> {ok, RecipientCount :: non_neg_integer()}.
-publish_to_local(Name, Message) ->
-    MemberPids = get_local_members(Name),
+-spec publish_to_local(GroupName :: any(), Message :: any()) -> {ok, RecipientCount :: non_neg_integer()}.
+publish_to_local(GroupName, Message) ->
+    MemberPids = get_local_members(GroupName),
     FSend = fun(Pid) ->
         Pid ! Message
     end,
     lists:foreach(FSend, MemberPids),
     {ok, length(MemberPids)}.
+
+-spec multi_call(GroupName :: any(), Message :: any()) -> {[{pid(), Reply :: any()}], [BadPid :: pid()]}.
+multi_call(GroupName, Message) ->
+    multi_call(GroupName, Message, ?DEFAULT_MULTI_CALL_TIMEOUT_MS).
+
+-spec multi_call(GroupName :: any(), Message :: any(), Timeout :: non_neg_integer()) ->
+    {[{pid(), Reply :: any()}], [BadPid :: pid()]}.
+multi_call(GroupName, Message, Timeout) ->
+    Self = self(),
+    MemberPids = get_members(GroupName),
+    FSend = fun(Pid) ->
+        spawn_link(?MODULE, multi_call_and_receive, [Self, Pid, Message, Timeout])
+    end,
+    lists:foreach(FSend, MemberPids),
+    collect_replies(MemberPids).
+
+-spec multi_call_reply(CallerPid :: pid(), Reply :: any()) -> {syn_multi_call_reply, pid(), Reply :: any()}.
+multi_call_reply(CallerPid, Reply) ->
+    CallerPid ! {syn_multi_call_reply, self(), Reply}.
 
 -spec sync_join(GroupName :: any(), Pid :: pid(), Meta :: any()) -> ok.
 sync_join(GroupName, Pid, Meta) ->
@@ -449,3 +475,39 @@ purge_group_entries_for_remote_node(Node) when Node =/= node() ->
     %% delete
     DelF = fun(Record) -> mnesia:dirty_delete_object(syn_groups_table, Record) end,
     lists:foreach(DelF, ObjectsToDelete).
+
+-spec multi_call_and_receive(
+    CollectorPid :: pid(),
+    Pid :: pid(),
+    Message :: any(),
+    Timeout :: non_neg_integer()
+) -> any().
+multi_call_and_receive(CollectorPid, Pid, Message, Timeout) ->
+    MonitorRef = monitor(process, Pid),
+    Pid ! {syn_multi_call, self(), Message},
+
+    receive
+        {syn_multi_call_reply, Pid, Reply} ->
+            CollectorPid ! {reply, Pid, Reply};
+        {'DOWN', MonitorRef, _, _, _} ->
+            CollectorPid ! {bad_pid, Pid}
+    after Timeout ->
+        CollectorPid ! {bad_pid, Pid}
+    end.
+
+-spec collect_replies(MemberPids :: [pid()]) -> {[{pid(), Reply :: any()}], [BadPid :: pid()]}.
+collect_replies(MemberPids) ->
+    collect_replies(MemberPids, [], []).
+
+-spec collect_replies(MemberPids :: [pid()], [{pid(), Reply :: any()}], [pid()]) ->
+    {[{pid(), Reply :: any()}], [BadPid :: pid()]}.
+collect_replies([], Replies, BadPids) -> {Replies, BadPids};
+collect_replies(MemberPids, Replies, BadPids) ->
+    receive
+        {reply, Pid, Reply} ->
+            MemberPids1 = lists:delete(Pid, MemberPids),
+            collect_replies(MemberPids1, [{Pid, Reply} | Replies], BadPids);
+        {bad_pid, Pid} ->
+            MemberPids1 = lists:delete(Pid, MemberPids),
+            collect_replies(MemberPids1, Replies, [Pid | BadPids])
+    end.

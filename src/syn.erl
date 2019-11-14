@@ -39,6 +39,7 @@
 -export([local_member/2]).
 -export([publish/2]).
 -export([publish_to_local/2]).
+-export([multi_call/2, multi_call/3, multi_call_reply/2]).
 
 %% gen_server via interface
 -export([register_name/2, unregister_name/1, whereis_name/1, send/2]).
@@ -150,10 +151,24 @@ get_local_members(GroupName, with_meta) ->
 local_member(GroupName, Pid) ->
     syn_groups:local_member(GroupName, Pid).
 
--spec publish(Name :: any(), Message :: any()) -> {ok, RecipientCount :: non_neg_integer()}.
-publish(Name, Message) ->
-    syn_groups:publish(Name, Message).
+-spec publish(GroupName :: any(), Message :: any()) -> {ok, RecipientCount :: non_neg_integer()}.
+publish(GroupName, Message) ->
+    syn_groups:publish(GroupName, Message).
 
--spec publish_to_local(Name :: any(), Message :: any()) -> {ok, RecipientCount :: non_neg_integer()}.
-publish_to_local(Name, Message) ->
-    syn_groups:publish_to_local(Name, Message).
+-spec publish_to_local(GroupName :: any(), Message :: any()) -> {ok, RecipientCount :: non_neg_integer()}.
+publish_to_local(GroupName, Message) ->
+    syn_groups:publish_to_local(GroupName, Message).
+
+-spec multi_call(GroupName :: any(), Message :: any()) ->
+    {[{pid(), Reply :: any()}], [BadPid :: pid()]}.
+multi_call(GroupName, Message) ->
+    syn_groups:multi_call(GroupName, Message).
+
+-spec multi_call(GroupName :: any(), Message :: any(), Timeout :: non_neg_integer()) ->
+    {[{pid(), Reply :: any()}], [BadPid :: pid()]}.
+multi_call(GroupName, Message, Timeout) ->
+    syn_groups:multi_call(GroupName, Message, Timeout).
+
+-spec multi_call_reply(CallerPid :: pid(), Reply :: any()) -> {syn_multi_call_reply, pid(), Reply :: any()}.
+multi_call_reply(CallerPid, Reply) ->
+    syn_groups:multi_call_reply(CallerPid, Reply).
