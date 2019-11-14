@@ -402,8 +402,8 @@ purge_registry_entries_for_remote_node(Node) when Node =/= node() ->
     %% build match specs
     MatchHead = #syn_registry_table{name = '$1', node = '$2', _ = '_'},
     Guard = {'=:=', '$2', Node},
-    IdFormat = '$1',
+    NameFormat = '$1',
     %% delete
-    NodePids = mnesia:dirty_select(syn_registry_table, [{MatchHead, [Guard], [IdFormat]}]),
+    NodePids = mnesia:dirty_select(syn_registry_table, [{MatchHead, [Guard], [NameFormat]}]),
     DelF = fun(Id) -> mnesia:dirty_delete({syn_registry_table, Id}) end,
     lists:foreach(DelF, NodePids).
