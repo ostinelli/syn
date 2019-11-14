@@ -29,13 +29,14 @@
     pid = undefined :: atom() | pid(),
     node = undefined :: atom(),
     meta = undefined :: any(),
-    monitor_ref = undefined :: undefined | '_' | reference()
+    monitor_ref = undefined :: atom() | reference()
 }).
 -record(syn_groups_table, {
     name = undefined :: any(),
     pid = undefined :: undefined | pid(),
     node = undefined :: atom(),
-    meta = undefined :: any()
+    meta = undefined :: any(),
+    monitor_ref = undefined :: atom() | reference()
 }).
 
 %% types

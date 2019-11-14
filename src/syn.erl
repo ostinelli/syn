@@ -31,6 +31,10 @@
 -export([unregister/1]).
 -export([whereis/1, whereis/2]).
 -export([registry_count/0, registry_count/1]).
+-export([join/2, join/3]).
+-export([leave/2]).
+-export([get_members/1, get_members/2]).
+-export([member/2]).
 
 %% gen_server via interface
 -export([register_name/2, unregister_name/1, whereis_name/1, send/2]).
@@ -47,6 +51,7 @@ start() ->
 stop() ->
     ok = application:stop(syn).
 
+%% ----- \/ registry -------------------------------------------------
 -spec register(Name :: term(), Pid :: pid()) -> ok | {error, Reason :: term()}.
 register(Name, Pid) ->
     syn_registry:register(Name, Pid).
@@ -75,7 +80,7 @@ registry_count() ->
 registry_count(Node) ->
     syn_registry:count(Node).
 
-%% gen_server via interface
+%% ----- \/ gen_server via module interface --------------------------
 -spec register_name(Name :: term(), Pid :: pid()) -> yes | no.
 register_name(Name, Pid) ->
     case syn_registry:register(Name, Pid) of
@@ -103,3 +108,28 @@ send(Name, Message) ->
             Pid ! Message,
             Pid
     end.
+
+%% ----- \/ groups ---------------------------------------------------
+-spec join(GroupName :: term(), Pid :: pid()) -> ok.
+join(GroupName, Pid) ->
+    syn_groups:join(GroupName, Pid).
+
+-spec join(GroupName :: term(), Pid :: pid(), Meta :: term()) -> ok.
+join(GroupName, Pid, Meta) ->
+    syn_groups:join(GroupName, Pid, Meta).
+
+-spec leave(GroupName :: term(), Pid :: pid()) -> ok | {error, Reason :: term()}.
+leave(GroupName, Pid) ->
+    syn_groups:leave(GroupName, Pid).
+
+-spec get_members(GroupName :: term()) -> [pid()].
+get_members(GroupName) ->
+    syn_groups:get_members(GroupName).
+
+-spec get_members(GroupName :: term(), with_meta) -> [{pid(), Meta :: term()}].
+get_members(GroupName, with_meta) ->
+    syn_groups:get_members(GroupName, with_meta).
+
+-spec member(GroupName :: term(), Pid :: pid()) -> boolean().
+member(GroupName, Pid) ->
+    syn_groups:member(GroupName, Pid).
