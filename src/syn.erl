@@ -35,6 +35,8 @@
 -export([leave/2]).
 -export([get_members/1, get_members/2]).
 -export([member/2]).
+-export([get_local_members/1, get_local_members/2]).
+-export([local_member/2]).
 
 %% gen_server via interface
 -export([register_name/2, unregister_name/1, whereis_name/1, send/2]).
@@ -133,3 +135,15 @@ get_members(GroupName, with_meta) ->
 -spec member(GroupName :: any(), Pid :: pid()) -> boolean().
 member(GroupName, Pid) ->
     syn_groups:member(GroupName, Pid).
+
+-spec get_local_members(GroupName :: any()) -> [pid()].
+get_local_members(GroupName) ->
+    syn_groups:get_local_members(GroupName).
+
+-spec get_local_members(GroupName :: any(), with_meta) -> [{pid(), Meta :: any()}].
+get_local_members(GroupName, with_meta) ->
+    syn_groups:get_local_members(GroupName, with_meta).
+
+-spec local_member(GroupName :: any(), Pid :: pid()) -> boolean().
+local_member(GroupName, Pid) ->
+    syn_groups:local_member(GroupName, Pid).

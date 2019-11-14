@@ -70,6 +70,6 @@ create_groups_table() ->
     mnesia:create_table(syn_groups_table, [
         {type, bag},
         {attributes, record_info(fields, syn_groups_table)},
-        {index, [#syn_groups_table.pid]},
-        {storage_properties, [{ets, [{read_concurrency, true}]}]}
+        {index, [#syn_groups_table.pid, #syn_groups_table.node]},
+        {storage_properties, [{ets, [{read_concurrency, true}, {write_concurrency, true}]}]}
     ]).

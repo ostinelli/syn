@@ -32,6 +32,8 @@
 -export([leave/2]).
 -export([get_members/1, get_members/2]).
 -export([member/2]).
+-export([get_local_members/1, get_local_members/2]).
+-export([local_member/2]).
 
 %% sync API
 -export([sync_join/3, sync_leave/2]).
@@ -89,6 +91,44 @@ member(Pid, GroupName) ->
     case find_process_entry_by_name_and_pid(GroupName, Pid) of
         undefined -> false;
         _ -> true
+    end.
+
+-spec get_local_members(Name :: any()) -> [pid()].
+get_local_members(GroupName) ->
+    %% build name guard
+    NameGuard = case is_tuple(GroupName) of
+        true -> {'==', '$1', {GroupName}};
+        _ -> {'=:=', '$1', GroupName}
+    end,
+    %% build match specs
+    MatchHead = #syn_groups_table{name = '$1', node = '$2', pid = '$3', _ = '_'},
+    Guards = [NameGuard, {'=:=', '$2', node()}],
+    Result = '$3',
+    %% select
+    Pids = mnesia:dirty_select(syn_groups_table, [{MatchHead, Guards, [Result]}]),
+    lists:sort(Pids).
+
+-spec get_local_members(GroupName :: any(), with_meta) -> [{pid(), Meta :: any()}].
+get_local_members(GroupName, with_meta) ->
+    %% build name guard
+    NameGuard = case is_tuple(GroupName) of
+        true -> {'==', '$1', {GroupName}};
+        _ -> {'=:=', '$1', GroupName}
+    end,
+    %% build match specs
+    MatchHead = #syn_groups_table{name = '$1', node = '$2', pid = '$3', meta = '$4', _ = '_'},
+    Guards = [NameGuard, {'=:=', '$2', node()}],
+    Result = {{'$3', '$4'}},
+    %% select
+    PidsWithMeta = mnesia:dirty_select(syn_groups_table, [{MatchHead, Guards, [Result]}]),
+    lists:keysort(1, PidsWithMeta).
+
+-spec local_member(Pid :: pid(), GroupName :: any()) -> boolean().
+local_member(Pid, GroupName) ->
+    case find_process_entry_by_name_and_pid(GroupName, Pid) of
+        undefined -> false;
+        Entry when Entry#syn_groups_table.node =:= node() -> true;
+        _ -> false
     end.
 
 -spec sync_join(GroupName :: any(), Pid :: pid(), Meta :: any()) -> ok.
