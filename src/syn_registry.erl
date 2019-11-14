@@ -184,11 +184,16 @@ handle_call({register_on_node, Name, Pid, Meta}, _From, State) ->
     end;
 
 handle_call({unregister_on_node, Name}, _From, State) ->
-    unregister_on_node(Name),
-    %% multicast
-    rpc:eval_everywhere(nodes(), ?MODULE, sync_unregister, [Name]),
-    %% return
-    {reply, ok, State};
+    case unregister_on_node(Name) of
+        ok ->
+            %% multicast
+            rpc:eval_everywhere(nodes(), ?MODULE, sync_unregister, [Name]),
+            %% return
+            {reply, ok, State};
+        {error, Reason} ->
+            %% return
+            {reply, {error, Reason}, State}
+    end;
 
 handle_call(Request, From, State) ->
     error_logger:warning_msg("Syn(~p): Received from ~p an unknown call message: ~p~n", [node(), Request, From]),
