@@ -28,7 +28,7 @@
 %% ==========================================================================================================
 -module(syn_event_handler).
 
--export([resolve_registry_conflict/4]).
+-export([do_resolve_registry_conflict/4]).
 
 -callback on_process_exit(
     Name :: any(),
@@ -52,11 +52,28 @@
 
 -optional_callbacks([on_process_exit/4, on_group_process_exit/4, resolve_registry_conflict/3]).
 
--spec resolve_registry_conflict(
+-spec do_resolve_registry_conflict(
     Name :: any(),
     {Pid1 :: pid(), Meta1 :: any()},
     {Pid2 :: pid(), Meta2 :: any()},
     CustomEventHandler :: module()
-) -> ok.
-resolve_registry_conflict(_Name, {LocalPid, _LocalMeta}, {_RemotePid, _RemoteMeta}, _CustomEventHandler) ->
-    LocalPid.
+) -> PidToKeep :: pid() | undefined.
+do_resolve_registry_conflict(Name, {LocalPid, LocalMeta}, {RemotePid, RemoteMeta}, CustomEventHandler) ->
+    case erlang:function_exported(CustomEventHandler, resolve_registry_conflict, 3) of
+        true ->
+            try CustomEventHandler:resolve_registry_conflict(Name, {LocalPid, LocalMeta}, {RemotePid, RemoteMeta}) of
+                PidToKeep when is_pid(PidToKeep) ->
+                    PidToKeep;
+                _ ->
+                    undefined
+            catch Class:Reason:Stacktrace ->
+                error_logger:error_msg(
+                    "Syn(~p): Error in custom handler while selecting process to keep: ~p:~p:~p",
+                    [node(), Class, Reason, Stacktrace]
+                ),
+                undefined
+            end;
+        _ ->
+            %% by default, keep local pid
+            LocalPid
+    end.

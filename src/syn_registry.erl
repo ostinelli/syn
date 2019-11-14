@@ -36,7 +36,7 @@
 %% sync API
 -export([sync_register/4, sync_unregister/2]).
 -export([sync_get_local_registry_tuples/1]).
--export([unregister_on_node/1]).
+-export([remove_from_local_table/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
@@ -146,6 +146,8 @@ init([]) ->
             ok = net_kernel:monitor_nodes(true),
             %% get handler
             CustomEventHandler = application:get_env(syn, event_handler, ?DEFAULT_EVENT_HANDLER_MODULE),
+            %% ensure that is it loaded (not using code:ensure_loaded/1 to support embedded mode)
+            catch CustomEventHandler:module_info(exports),
             %% init
             {ok, #state{
                 custom_event_handler = CustomEventHandler
@@ -409,13 +411,9 @@ sync_registry_tuples(RemoteNode, RegistryTuples, #state{
                     "Syn(~p): Conflicting name process found for: ~p, processes are ~p, ~p~n",
                     [node(), Name, LocalPid, RemotePid]
                 ),
-                %% unregister local
-                unregister_on_node(Name),
-                %% unregister remote
-                ok = rpc:call(RemoteNode, syn_registry, unregister_on_node, [Name]),
 
                 %% call conflict resolution
-                PidToKeep = syn_event_handler:resolve_registry_conflict(
+                PidToKeep = syn_event_handler:do_resolve_registry_conflict(
                     Name,
                     {LocalPid, LocalMeta},
                     {RemotePid, RemoteMeta},
@@ -426,17 +424,20 @@ sync_registry_tuples(RemoteNode, RegistryTuples, #state{
                 case PidToKeep of
                     LocalPid ->
                         %% keep local
-                        exit(RemotePid, kill),
-                        register_on_node(Name, LocalPid, LocalMeta);
+                        ok = rpc:call(RemoteNode, syn_registry, remove_from_local_table, [Name]),
+                        exit(RemotePid, kill);
 
                     RemotePid ->
                         %% keep remote
-                        exit(LocalPid, kill),
-                        register_on_node(Name, RemotePid, RemoteMeta);
+                        remove_from_local_table(Name),
+                        add_to_local_table(Name, RemotePid, RemoteMeta, undefined),
+                        exit(LocalPid, kill);
 
-                    _ ->
-                        % don't keep any of the two
-                        ok
+                    Other ->
+                        error_logger:error_msg(
+                            "Syn(~p): Custom handler returned ~p, valid options were ~p and ~p",
+                            [node(), Other, LocalPid, RemotePid]
+                        )
                 end
         end
     end,

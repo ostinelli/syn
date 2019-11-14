@@ -31,6 +31,8 @@
 -export([clean_after_test/0]).
 -export([start_process/0, start_process/1, start_process/2]).
 -export([kill_process/1]).
+-export([use_custom_handler/0]).
+-export([start_collecting_debug_data/0, send_debug_data/1, print_debug_data/0]).
 
 %% internal
 -export([process_main/0]).
@@ -40,7 +42,10 @@
 %% ===================================================================
 start_slave(NodeShortName) ->
     CodePath = code:get_path(),
-    {ok, Node} = ct_slave:start(NodeShortName, [{boot_timeout, 10}]),
+    {ok, Node} = ct_slave:start(NodeShortName, [
+        {boot_timeout, 10}
+%%        {erl_flags, ErlangFlags}
+    ]),
     true = rpc:call(Node, code, set_path, [CodePath]),
     {ok, Node}.
 
@@ -78,6 +83,24 @@ start_process(Node, Loop) ->
 
 kill_process(Pid) ->
     exit(Pid, kill).
+
+use_custom_handler() ->
+    application:set_env(syn, event_handler, syn_test_event_handler).
+
+start_collecting_debug_data() ->
+    global:register_name(syn_debug_process, self()).
+
+send_debug_data(Message) ->
+    global:send(syn_debug_process, Message).
+
+print_debug_data() ->
+    receive
+        Any ->
+            ct:pal("~p", [Any]),
+            print_debug_data()
+    after 1000 ->
+        ok
+    end.
 
 %% ===================================================================
 %% Internal
