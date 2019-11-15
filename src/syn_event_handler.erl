@@ -28,6 +28,7 @@
 %% ==========================================================================================================
 -module(syn_event_handler).
 
+-export([do_on_process_exit/5]).
 -export([do_resolve_registry_conflict/4]).
 
 -callback on_process_exit(
@@ -52,6 +53,23 @@
 
 -optional_callbacks([on_process_exit/4, on_group_process_exit/4, resolve_registry_conflict/3]).
 
+-spec do_on_process_exit(
+    Name :: any(),
+    Pid :: pid(),
+    Meta :: any(),
+    Reason :: any(),
+    CustomEventHandler :: module()
+) -> any().
+do_on_process_exit(Name, Pid, Meta, Reason, CustomEventHandler) ->
+    spawn(fun() ->
+        case erlang:function_exported(CustomEventHandler, on_process_exit, 4) of
+            true ->
+                CustomEventHandler:on_process_exit(Name, Pid, Meta, Reason);
+            _ ->
+                ok
+        end
+    end).
+
 -spec do_resolve_registry_conflict(
     Name :: any(),
     {Pid1 :: pid(), Meta1 :: any()},
@@ -68,7 +86,7 @@ do_resolve_registry_conflict(Name, {LocalPid, LocalMeta}, {RemotePid, RemoteMeta
                     undefined
             catch Class:Reason:Stacktrace ->
                 error_logger:error_msg(
-                    "Syn(~p): Error in custom handler while selecting process to keep: ~p:~p:~p",
+                    "Syn(~p): Error in custom handler resolve_registry_conflict: ~p:~p:~p",
                     [node(), Class, Reason, Stacktrace]
                 ),
                 undefined

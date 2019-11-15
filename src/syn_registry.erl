@@ -252,14 +252,16 @@ handle_info({'DOWN', _MonitorRef, process, Pid, Reason}, State) ->
     case find_processes_entry_by_pid(Pid) of
         [] ->
             %% log
-            log_process_exit(undefined, Pid, Reason);
+            handle_process_exit(undefined, Pid, undefined, Reason, State);
 
         Entries ->
             lists:foreach(fun(Entry) ->
                 %% get process info
                 Name = Entry#syn_registry_table.name,
+                Pid = Entry#syn_registry_table.pid,
+                Meta = Entry#syn_registry_table.meta,
                 %% log
-                log_process_exit(Name, Pid, Reason),
+                handle_process_exit(Name, Pid, Meta, Reason, State),
                 %% remove from table
                 remove_from_local_table(Name),
                 %% multicast
@@ -327,6 +329,7 @@ register_on_node(Name, Pid, Meta) ->
             Entry#syn_registry_table.monitor_ref
     end,
     %% add to table
+
     add_to_local_table(Name, Pid, Meta, MonitorRef).
 
 -spec unregister_on_node(Name :: any()) -> ok | {error, Reason :: any()}.
@@ -367,26 +370,22 @@ find_process_entry_by_name(Name) ->
         _ -> undefined
     end.
 
--spec log_process_exit(Name :: any(), Pid :: pid(), Reason :: any()) -> ok.
-log_process_exit(Name, Pid, Reason) ->
-    case Reason of
-        normal -> ok;
-        shutdown -> ok;
-        {shutdown, _} -> ok;
-        killed -> ok;
+-spec handle_process_exit(Name :: any(), Pid :: pid(), Meta :: any(), Reason :: any(), #state{}) -> ok.
+handle_process_exit(Name, Pid, Meta, Reason, #state{
+    custom_event_handler = CustomEventHandler
+}) ->
+    case Name of
+        undefined ->
+            error_logger:error_msg(
+                "Syn(~p): Received a DOWN message from an unmonitored process ~p with reason: ~p~n",
+                [node(), Pid, Reason]
+            );
         _ ->
-            case Name of
-                undefined ->
-                    error_logger:error_msg(
-                        "Syn(~p): Received a DOWN message from an unmonitored process ~p with reason: ~p~n",
-                        [node(), Pid, Reason]
-                    );
-                _ ->
-                    error_logger:error_msg(
-                        "Syn(~p): Process with name ~p and pid ~p exited with reason: ~p~n",
-                        [node(), Name, Pid, Reason]
-                    )
-            end
+            error_logger:error_msg(
+                "Syn(~p): Process with name ~p and pid ~p exited with reason: ~p~n",
+                [node(), Name, Pid, Reason]
+            ),
+            syn_event_handler:do_on_process_exit(Name, Pid, Meta, Reason, CustomEventHandler)
     end.
 
 -spec sync_registry_tuples(RemoteNode :: node(), RegistryTuples :: [syn_registry_tuple()], #state{}) -> ok.

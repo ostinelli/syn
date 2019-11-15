@@ -27,7 +27,19 @@
 -behaviour(syn_event_handler).
 
 %% API
+-export([on_process_exit/4]).
 -export([resolve_registry_conflict/3]).
+
+-spec on_process_exit(
+    Name :: any(),
+    Pid :: pid(),
+    Meta :: any(),
+    Reason :: any()
+) -> any().
+on_process_exit(_Name, _Pid, {PidId, TestPid}, _Reason) ->
+    TestPid ! {received_event_on, PidId};
+on_process_exit(_Name, _Pid, _Meta, _Reason) ->
+    ok.
 
 -spec resolve_registry_conflict(
     Name :: any(),

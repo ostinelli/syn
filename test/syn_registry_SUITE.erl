@@ -37,7 +37,8 @@
     single_node_register_and_unregister/1,
     single_node_registration_errors/1,
     single_node_registry_count/1,
-    single_node_register_gen_server/1
+    single_node_register_gen_server/1,
+    single_node_callback_on_process_exit/1
 ]).
 -export([
     two_nodes_register_monitor_and_unregister/1,
@@ -97,7 +98,8 @@ groups() ->
             single_node_register_and_unregister,
             single_node_registration_errors,
             single_node_registry_count,
-            single_node_register_gen_server
+            single_node_register_gen_server,
+            single_node_callback_on_process_exit
         ]},
         {two_nodes_process_registration, [shuffle], [
             two_nodes_register_monitor_and_unregister,
@@ -311,6 +313,38 @@ single_node_register_gen_server(_Config) ->
     undefined = syn:whereis(syn_test_gen_server),
     %% send via syn
     {badarg, {syn_test_gen_server, anything}} = (catch syn:send(syn_test_gen_server, anything)).
+
+single_node_callback_on_process_exit(_Config) ->
+    %% use custom handler
+    syn_test_suite_helper:use_custom_handler(),
+    %% start
+    ok = syn:start(),
+    %% start process
+    Pid = syn_test_suite_helper:start_process(),
+    Pid2 = syn_test_suite_helper:start_process(),
+    %% register
+    TestPid = self(),
+    ok = syn:register(<<"my proc">>, Pid, {pid, TestPid}),
+    ok = syn:register(<<"my proc 2">>, Pid2, {pid2, TestPid}),
+    %% kill 1
+    syn_test_suite_helper:kill_process(Pid),
+    receive
+        {received_event_on, pid} ->
+            ok;
+        {received_event_on, pid2} ->
+            ok = callback_on_process_exit_was_received_by_pid2
+    after 1000 ->
+        ok = callback_on_process_exit_was_not_received_by_pid
+    end,
+    %% unregister & kill 2
+    ok = syn:unregister(<<"my proc 2">>),
+    syn_test_suite_helper:kill_process(Pid2),
+    receive
+        {received_event_on, pid2} ->
+            ok = callback_on_process_exit_was_received_by_pid2
+    after 1000 ->
+        ok
+    end.
 
 two_nodes_register_monitor_and_unregister(Config) ->
     %% get slave
