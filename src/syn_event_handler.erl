@@ -38,21 +38,17 @@
     Reason :: any()
 ) -> any().
 
--callback on_group_process_exit(
-    GroupName :: any(),
-    Pid :: pid(),
-    Meta :: any(),
-    Reason :: any()
-) -> any().
-
 -callback resolve_registry_conflict(
     Name :: any(),
     {Pid1 :: pid(), Meta1 :: any()},
     {Pid2 :: pid(), Meta2 :: any()}
 ) -> PidToKeep :: pid() | undefined.
 
--optional_callbacks([on_process_exit/4, on_group_process_exit/4, resolve_registry_conflict/3]).
+-optional_callbacks([on_process_exit/4, resolve_registry_conflict/3]).
 
+%% ===================================================================
+%% API
+%% ===================================================================
 -spec do_on_process_exit(
     Name :: any(),
     Pid :: pid(),
@@ -62,12 +58,7 @@
 ) -> any().
 do_on_process_exit(Name, Pid, Meta, Reason, CustomEventHandler) ->
     spawn(fun() ->
-        case erlang:function_exported(CustomEventHandler, on_process_exit, 4) of
-            true ->
-                CustomEventHandler:on_process_exit(Name, Pid, Meta, Reason);
-            _ ->
-                ok
-        end
+        CustomEventHandler:on_process_exit(Name, Pid, Meta, Reason)
     end).
 
 -spec do_resolve_registry_conflict(

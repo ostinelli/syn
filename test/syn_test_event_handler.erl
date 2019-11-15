@@ -30,6 +30,9 @@
 -export([on_process_exit/4]).
 -export([resolve_registry_conflict/3]).
 
+%% ===================================================================
+%% Syn Callbacks
+%% ===================================================================
 -spec on_process_exit(
     Name :: any(),
     Pid :: pid(),

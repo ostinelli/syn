@@ -376,16 +376,27 @@ handle_process_exit(Name, Pid, Meta, Reason, #state{
 }) ->
     case Name of
         undefined ->
-            error_logger:error_msg(
+            error_logger:warning_msg(
                 "Syn(~p): Received a DOWN message from an unmonitored process ~p with reason: ~p~n",
                 [node(), Pid, Reason]
             );
         _ ->
-            error_logger:error_msg(
-                "Syn(~p): Process with name ~p and pid ~p exited with reason: ~p~n",
-                [node(), Name, Pid, Reason]
-            ),
-            syn_event_handler:do_on_process_exit(Name, Pid, Meta, Reason, CustomEventHandler)
+            case erlang:function_exported(CustomEventHandler, on_process_exit, 4) of
+                true ->
+                    syn_event_handler:do_on_process_exit(Name, Pid, Meta, Reason, CustomEventHandler);
+                _ ->
+                    case Reason of
+                        normal -> ok;
+                        shutdown -> ok;
+                        {shutdown, _} -> ok;
+                        killed -> ok;
+                        _ ->
+                            error_logger:error_msg(
+                                "Syn(~p): Process with name ~p and pid ~p exited with reason: ~p~n",
+                                [node(), Name, Pid, Reason]
+                            )
+                    end
+            end
     end.
 
 -spec sync_registry_tuples(RemoteNode :: node(), RegistryTuples :: [syn_registry_tuple()], #state{}) -> ok.
