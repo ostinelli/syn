@@ -176,18 +176,14 @@ handle_call({register_on_node, Name, Pid, Meta}, _From, State) ->
                 undefined ->
                     register_on_node(Name, Pid, Meta),
                     %% multicast
-                    lists:foreach(fun(RemoteNode) ->
-                        sync_register(RemoteNode, Name, Pid, Meta)
-                    end, nodes()),
+                    multicast_register(Name, Pid, Meta),
                     %% return
                     {reply, ok, State};
 
                 Entry when Entry#syn_registry_table.pid == Pid ->
                     register_on_node(Name, Pid, Meta),
                     %% multicast
-                    lists:foreach(fun(RemoteNode) ->
-                        sync_register(RemoteNode, Name, Pid, Meta)
-                    end, nodes()),
+                    multicast_register(Name, Pid, Meta),
                     %% return
                     {reply, ok, State};
 
@@ -201,10 +197,7 @@ handle_call({register_on_node, Name, Pid, Meta}, _From, State) ->
 handle_call({unregister_on_node, Name}, _From, State) ->
     case unregister_on_node(Name) of
         ok ->
-            %% multicast
-            lists:foreach(fun(RemoteNode) ->
-                sync_unregister(RemoteNode, Name)
-            end, nodes()),
+            multicast_unregister(Name),
             %% return
             {reply, ok, State};
         {error, Reason} ->
@@ -265,9 +258,7 @@ handle_info({'DOWN', _MonitorRef, process, Pid, Reason}, State) ->
                 %% remove from table
                 remove_from_local_table(Name),
                 %% multicast
-                lists:foreach(fun(RemoteNode) ->
-                    sync_unregister(RemoteNode, Name)
-                end, nodes())
+                multicast_unregister(Name)
             end, Entries)
     end,
     %% return
@@ -319,6 +310,22 @@ code_change(_OldVsn, State, _Extra) ->
 %% ===================================================================
 %% Internal
 %% ===================================================================
+-spec multicast_register(Name :: any(), Pid :: pid(), Meta :: any()) -> ok.
+multicast_register(Name, Pid, Meta) ->
+    spawn_link(fun() ->
+        lists:foreach(fun(RemoteNode) ->
+            sync_register(RemoteNode, Name, Pid, Meta)
+        end, nodes())
+    end).
+
+-spec multicast_unregister(Name :: any()) -> ok.
+multicast_unregister(Name) ->
+    spawn_link(fun() ->
+        lists:foreach(fun(RemoteNode) ->
+            sync_unregister(RemoteNode, Name)
+        end, nodes())
+    end).
+
 -spec register_on_node(Name :: any(), Pid :: pid(), Meta :: any()) -> ok.
 register_on_node(Name, Pid, Meta) ->
     MonitorRef = case find_processes_entry_by_pid(Pid) of

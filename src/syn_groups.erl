@@ -237,9 +237,7 @@ handle_call({join_on_node, GroupName, Pid, Meta}, _From, State) ->
         true ->
             join_on_node(GroupName, Pid, Meta),
             %% multicast
-            lists:foreach(fun(RemoteNode) ->
-                sync_join(RemoteNode, GroupName, Pid, Meta)
-            end, nodes()),
+            multicast_join(GroupName, Pid, Meta),
             %% return
             {reply, ok, State};
         _ ->
@@ -250,9 +248,7 @@ handle_call({leave_on_node, GroupName, Pid}, _From, State) ->
     case leave_on_node(GroupName, Pid) of
         ok ->
             %% multicast
-            lists:foreach(fun(RemoteNode) ->
-                sync_leave(RemoteNode, GroupName, Pid)
-            end, nodes()),
+            multicast_leave(GroupName, Pid),
             %% return
             {reply, ok, State};
         {error, Reason} ->
@@ -311,9 +307,7 @@ handle_info({'DOWN', _MonitorRef, process, Pid, Reason}, State) ->
                 %% remove from table
                 remove_from_local_table(Entry),
                 %% multicast
-                lists:foreach(fun(RemoteNode) ->
-                    sync_leave(RemoteNode, GroupName, Pid)
-                end, nodes())
+                multicast_leave(GroupName, Pid)
             end, Entries)
     end,
     %% return
@@ -365,6 +359,22 @@ code_change(_OldVsn, State, _Extra) ->
 %% ===================================================================
 %% Internal
 %% ===================================================================
+-spec multicast_join(GroupName :: any(), Pid :: pid(), Meta :: any()) -> ok.
+multicast_join(GroupName, Pid, Meta) ->
+    spawn_link(fun() ->
+        lists:foreach(fun(RemoteNode) ->
+            sync_join(RemoteNode, GroupName, Pid, Meta)
+        end, nodes())
+    end).
+
+-spec multicast_leave(GroupName :: any(), Pid :: pid()) -> ok.
+multicast_leave(GroupName, Pid) ->
+    spawn_link(fun() ->
+        lists:foreach(fun(RemoteNode) ->
+            sync_leave(RemoteNode, GroupName, Pid)
+        end, nodes())
+    end).
+
 -spec join_on_node(GroupName :: any(), Pid :: pid(), Meta :: any()) -> ok.
 join_on_node(GroupName, Pid, Meta) ->
     MonitorRef = case find_processes_entry_by_pid(Pid) of
