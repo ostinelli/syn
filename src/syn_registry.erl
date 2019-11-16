@@ -34,8 +34,8 @@
 -export([count/0, count/1]).
 
 %% sync API
--export([sync_register/4, sync_unregister/2]).
 -export([sync_get_local_registry_tuples/1]).
+-export([add_to_local_table/4]).
 -export([remove_from_local_table/1]).
 
 %% gen_server callbacks
@@ -104,14 +104,6 @@ count(Node) ->
     %% select
     Processes = mnesia:dirty_select(syn_registry_table, [{MatchHead, [Guard], [Result]}]),
     length(Processes).
-
--spec sync_register(RemoteNode :: node(), Name :: any(), Pid :: pid(), Meta :: any()) -> ok.
-sync_register(RemoteNode, Name, Pid, Meta) ->
-    gen_server:cast({?MODULE, RemoteNode}, {sync_register, Name, Pid, Meta}).
-
--spec sync_unregister(RemoteNode :: node(), Name :: any()) -> ok.
-sync_unregister(RemoteNode, Name) ->
-    gen_server:cast({?MODULE, RemoteNode}, {sync_unregister, Name}).
 
 -spec sync_get_local_registry_tuples(FromNode :: node()) -> list(syn_registry_tuple()).
 sync_get_local_registry_tuples(FromNode) ->
@@ -212,18 +204,6 @@ handle_call(Request, From, State) ->
     {noreply, #state{}, Timeout :: non_neg_integer()} |
     {stop, Reason :: any(), #state{}}.
 
-handle_cast({sync_register, Name, Pid, Meta}, State) ->
-    %% add to table
-    add_to_local_table(Name, Pid, Meta, undefined),
-    %% return
-    {noreply, State};
-
-handle_cast({sync_unregister, Name}, State) ->
-    %% remove from table
-    remove_from_local_table(Name),
-    %% return
-    {noreply, State};
-
 handle_cast(Msg, State) ->
     error_logger:warning_msg("Syn(~p): Received an unknown cast message: ~p~n", [node(), Msg]),
     {noreply, State}.
@@ -308,17 +288,13 @@ code_change(_OldVsn, State, _Extra) ->
 -spec multicast_register(Name :: any(), Pid :: pid(), Meta :: any()) -> pid().
 multicast_register(Name, Pid, Meta) ->
     spawn_link(fun() ->
-        lists:foreach(fun(RemoteNode) ->
-            sync_register(RemoteNode, Name, Pid, Meta)
-        end, nodes())
+        rpc:eval_everywhere(nodes(), ?MODULE, add_to_local_table, [Name, Pid, Meta, undefined])
     end).
 
 -spec multicast_unregister(Name :: any()) -> pid().
 multicast_unregister(Name) ->
     spawn_link(fun() ->
-        lists:foreach(fun(RemoteNode) ->
-            sync_unregister(RemoteNode, Name)
-        end, nodes())
+        rpc:eval_everywhere(nodes(), ?MODULE, remove_from_local_table, [Name])
     end).
 
 -spec register_on_node(Name :: any(), Pid :: pid(), Meta :: any()) -> ok.
@@ -331,7 +307,6 @@ register_on_node(Name, Pid, Meta) ->
             Entry#syn_registry_table.monitor_ref
     end,
     %% add to table
-
     add_to_local_table(Name, Pid, Meta, MonitorRef).
 
 -spec unregister_on_node(Name :: any()) -> ok | {error, Reason :: any()}.
