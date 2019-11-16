@@ -96,23 +96,23 @@ do_on_group_process_exit(GroupName, Pid, Meta, Reason, CustomEventHandler) ->
     {Pid1 :: pid(), Meta1 :: any()},
     {Pid2 :: pid(), Meta2 :: any()},
     CustomEventHandler :: module()
-) -> PidToKeep :: pid() | undefined.
+) -> {PidToKeep :: pid() | undefined, KillOther :: boolean()}.
 do_resolve_registry_conflict(Name, {LocalPid, LocalMeta}, {RemotePid, RemoteMeta}, CustomEventHandler) ->
     case erlang:function_exported(CustomEventHandler, resolve_registry_conflict, 3) of
         true ->
             try CustomEventHandler:resolve_registry_conflict(Name, {LocalPid, LocalMeta}, {RemotePid, RemoteMeta}) of
                 PidToKeep when is_pid(PidToKeep) ->
-                    PidToKeep;
+                    {PidToKeep, false};
                 _ ->
-                    undefined
+                    {undefined, false}
             catch Class:Reason:Stacktrace ->
                 error_logger:error_msg(
                     "Syn(~p): Error in custom handler resolve_registry_conflict: ~p:~p:~p",
                     [node(), Class, Reason, Stacktrace]
                 ),
-                undefined
+                {undefined, false}
             end;
         _ ->
             %% by default, keep local pid
-            LocalPid
+            {LocalPid, true}
     end.

@@ -415,7 +415,7 @@ sync_registry_tuples(RemoteNode, RegistryTuples, #state{
                 ),
 
                 %% call conflict resolution
-                PidToKeep = syn_event_handler:do_resolve_registry_conflict(
+                {PidToKeep, KillOther} = syn_event_handler:do_resolve_registry_conflict(
                     Name,
                     {LocalPid, LocalMeta},
                     {RemotePid, RemoteMeta},
@@ -427,13 +427,19 @@ sync_registry_tuples(RemoteNode, RegistryTuples, #state{
                     LocalPid ->
                         %% keep local
                         ok = rpc:call(RemoteNode, syn_registry, remove_from_local_table, [Name]),
-                        exit(RemotePid, kill);
+                        case KillOther of
+                            true -> exit(RemotePid, kill);
+                            _ -> ok
+                        end;
 
                     RemotePid ->
                         %% keep remote
                         remove_from_local_table(Name),
                         add_to_local_table(Name, RemotePid, RemoteMeta, undefined),
-                        exit(LocalPid, kill);
+                        case KillOther of
+                            true -> exit(LocalPid, kill);
+                            _ -> ok
+                        end;
 
                     Other ->
                         error_logger:error_msg(

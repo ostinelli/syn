@@ -667,11 +667,32 @@ three_nodes_start_syn_before_connecting_cluster_with_conflict(Config) ->
     case syn:whereis(ConflictingName, with_meta) of
         {Pid0, Meta} ->
             CurrentNode = node(),
-            CurrentNode = Meta;
+            CurrentNode = Meta,
+            %% check that other nodes' data corresponds
+            {Pid0, Meta} = rpc:call(SlaveNode1, syn, whereis, [ConflictingName, with_meta]),
+            {Pid0, Meta} = rpc:call(SlaveNode2, syn, whereis, [ConflictingName, with_meta]),
+            %% check that other processes are not alive because syn killed them
+            true = is_process_alive(Pid0),
+            false = rpc:call(SlaveNode1, erlang, is_process_alive, [Pid1]),
+            false = rpc:call(SlaveNode2, erlang, is_process_alive, [Pid2]);
         {Pid1, Meta} ->
-            SlaveNode1 = Meta;
+            SlaveNode1 = Meta,
+            %% check that other nodes' data corresponds
+            {Pid1, Meta} = rpc:call(SlaveNode1, syn, whereis, [ConflictingName, with_meta]),
+            {Pid1, Meta} = rpc:call(SlaveNode2, syn, whereis, [ConflictingName, with_meta]),
+            %% check that other processes are not alive because syn killed them
+            false = is_process_alive(Pid0),
+            true = rpc:call(SlaveNode1, erlang, is_process_alive, [Pid1]),
+            false = rpc:call(SlaveNode2, erlang, is_process_alive, [Pid2]);
         {Pid2, Meta} ->
-            SlaveNode2 = Meta
+            SlaveNode2 = Meta,
+            %% check that other nodes' data corresponds
+            {Pid2, Meta} = rpc:call(SlaveNode1, syn, whereis, [ConflictingName, with_meta]),
+            {Pid2, Meta} = rpc:call(SlaveNode2, syn, whereis, [ConflictingName, with_meta]),
+            %% check that other processes are not alive because syn killed them
+            false = is_process_alive(Pid0),
+            false = rpc:call(SlaveNode1, erlang, is_process_alive, [Pid1]),
+            true = rpc:call(SlaveNode2, erlang, is_process_alive, [Pid2])
     end,
     %% kill processes
     syn_test_suite_helper:kill_process(Pid0),
@@ -721,8 +742,14 @@ three_nodes_start_syn_before_connecting_cluster_with_custom_conflict_resolution(
     true = lists:member(syn:whereis(ConflictingName), [Pid0, Pid1, Pid2]),
     true = lists:member(rpc:call(SlaveNode1, syn, whereis, [ConflictingName]), [Pid0, Pid1, Pid2]),
     true = lists:member(rpc:call(SlaveNode2, syn, whereis, [ConflictingName]), [Pid0, Pid1, Pid2]),
-    %% check metadata that we kept the correct process
+    %% check metadata that we kept the correct process on all nodes
     {Pid1, keep_this_one} = syn:whereis(ConflictingName, with_meta),
+    {Pid1, keep_this_one} = rpc:call(SlaveNode1, syn, whereis, [ConflictingName, with_meta]),
+    {Pid1, keep_this_one} = rpc:call(SlaveNode1, syn, whereis, [ConflictingName, with_meta]),
+    %% check that other processes are still alive because we didn't kill them
+    true = is_process_alive(Pid0),
+    true = rpc:call(SlaveNode1, erlang, is_process_alive, [Pid1]),
+    true = rpc:call(SlaveNode2, erlang, is_process_alive, [Pid2]),
     %% kill processes
     syn_test_suite_helper:kill_process(Pid0),
     syn_test_suite_helper:kill_process(Pid1),
