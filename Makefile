@@ -1,9 +1,9 @@
 PROJECT_DIR:=$(strip $(shell dirname $(realpath $(lastword $(MAKEFILE_LIST)))))
 
-all: clean
+all:
 	@rebar3 compile
 
-compile_test: clean
+compile_test:
 	@rebar3 as test compile
 
 clean:
