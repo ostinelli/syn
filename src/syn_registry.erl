@@ -245,7 +245,7 @@ handle_info({'DOWN', _MonitorRef, process, Pid, Reason}, State) ->
     case find_processes_entry_by_pid(Pid) of
         [] ->
             %% log
-            handle_process_exit(undefined, Pid, undefined, Reason, State);
+            handle_process_down(undefined, Pid, undefined, Reason, State);
 
         Entries ->
             lists:foreach(fun(Entry) ->
@@ -254,7 +254,7 @@ handle_info({'DOWN', _MonitorRef, process, Pid, Reason}, State) ->
                 Pid = Entry#syn_registry_table.pid,
                 Meta = Entry#syn_registry_table.meta,
                 %% log
-                handle_process_exit(Name, Pid, Meta, Reason, State),
+                handle_process_down(Name, Pid, Meta, Reason, State),
                 %% remove from table
                 remove_from_local_table(Name),
                 %% multicast
@@ -377,8 +377,8 @@ find_process_entry_by_name(Name) ->
         _ -> undefined
     end.
 
--spec handle_process_exit(Name :: any(), Pid :: pid(), Meta :: any(), Reason :: any(), #state{}) -> ok.
-handle_process_exit(Name, Pid, Meta, Reason, #state{
+-spec handle_process_down(Name :: any(), Pid :: pid(), Meta :: any(), Reason :: any(), #state{}) -> ok.
+handle_process_down(Name, Pid, Meta, Reason, #state{
     custom_event_handler = CustomEventHandler
 }) ->
     case Name of
@@ -392,17 +392,7 @@ handle_process_exit(Name, Pid, Meta, Reason, #state{
                 true ->
                     syn_event_handler:do_on_process_exit(Name, Pid, Meta, Reason, CustomEventHandler);
                 _ ->
-                    case Reason of
-                        normal -> ok;
-                        shutdown -> ok;
-                        {shutdown, _} -> ok;
-                        killed -> ok;
-                        _ ->
-                            error_logger:error_msg(
-                                "Syn(~p): Process with name ~p and pid ~p exited with reason: ~p~n",
-                                [node(), Name, Pid, Reason]
-                            )
-                    end
+                    ok
             end
     end.
 
