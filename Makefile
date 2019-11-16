@@ -1,9 +1,9 @@
 PROJECT_DIR:=$(strip $(shell dirname $(realpath $(lastword $(MAKEFILE_LIST)))))
 
-all:
+all: clean
 	@rebar3 compile
 
-compile_test:
+compile_test: clean
 	@rebar3 as test compile
 
 clean:
@@ -39,6 +39,15 @@ else
 	ct_run -dir $(PROJECT_DIR)/test -logdir $(PROJECT_DIR)/test/results \
 	-pa `rebar3 as test path`
 endif
+
+bench: compile_test
+	@erl -pa `rebar3 as test path` \
+	-pa `rebar3 as test path`/../test \
+	-name syn_bench@127.0.0.1 \
+	+K true \
+	-mnesia schema_location ram \
+	-noshell \
+	-eval 'syn_benchmark:start().'
 
 travis:
 	@$(PROJECT_DIR)/rebar3 as test compile
