@@ -54,7 +54,6 @@
 }).
 
 %% macros
--define(DEFAULT_EVENT_HANDLER_MODULE, syn_event_handler).
 -define(DEFAULT_MULTI_CALL_TIMEOUT_MS, 5000).
 
 %% includes
@@ -218,9 +217,7 @@ init([]) ->
             %% monitor nodes
             ok = net_kernel:monitor_nodes(true),
             %% get handler
-            CustomEventHandler = application:get_env(syn, event_handler, ?DEFAULT_EVENT_HANDLER_MODULE),
-            %% ensure that is it loaded (not using code:ensure_loaded/1 to support embedded mode)
-            catch CustomEventHandler:module_info(exports),
+            CustomEventHandler = syn_backbone:get_event_handler_module(),
             %% init
             {ok, #state{
                 custom_event_handler = CustomEventHandler

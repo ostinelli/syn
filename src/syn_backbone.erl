@@ -28,6 +28,10 @@
 %% API
 -export([init/0]).
 -export([deinit/0]).
+-export([get_event_handler_module/0]).
+
+%% macros
+-define(DEFAULT_EVENT_HANDLER_MODULE, syn_event_handler).
 
 %% includes
 -include("syn.hrl").
@@ -52,6 +56,15 @@ deinit() ->
     mnesia:delete_table(syn_registry_table),
     mnesia:delete_table(syn_groups_table),
     ok.
+
+-spec get_event_handler_module() -> module().
+get_event_handler_module() ->
+    %% get handler
+    CustomEventHandler = application:get_env(syn, event_handler, ?DEFAULT_EVENT_HANDLER_MODULE),
+    %% ensure that is it loaded (not using code:ensure_loaded/1 to support embedded mode)
+    catch CustomEventHandler:module_info(exports),
+    %% return
+    CustomEventHandler.
 
 %% ===================================================================
 %% Internal
