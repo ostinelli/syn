@@ -39,7 +39,7 @@
     Meta :: any(),
     Reason :: any()
 ) -> any().
-on_process_exit(_Name, _Pid, {PidId, TestPid}, _Reason) ->
+on_process_exit(_Name, _Pid, {PidId, TestPid}, _Reason) when is_pid(TestPid) ->
     TestPid ! {received_event_on, PidId};
 on_process_exit(_Name, _Pid, _Meta, _Reason) ->
     ok.
