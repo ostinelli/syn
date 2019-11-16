@@ -46,8 +46,8 @@ start() ->
         ShortName = list_to_atom("syn_slave_" ++ integer_to_list(Count)),
         {ok, SlaveNode} = syn_test_suite_helper:start_slave(ShortName),
         [SlaveNode | Acc]
-    end, [], lists:seq(1, NodeCount)),
-    io:format("-----> Started ~p nodes: ~p~n", [NodeCount, SlaveNodes]),
+    end, [], lists:seq(1, NodeCount - 1)),
+    io:format("-----> Started ~p nodes: ~p~n", [NodeCount, [node() | SlaveNodes]]),
 
     %% start syn
     lists:foreach(fun(Node) ->
@@ -118,7 +118,7 @@ start() ->
             ShortName = list_to_atom(lists:nth(1, string:split(atom_to_list(SlaveNode), "@"))),
             syn_test_suite_helper:stop_slave(ShortName)
         end, SlaveNodes),
-        io:format("-----> Stopped ~p nodes: ~p~n", [length(SlaveNodes), SlaveNodes]),
+        io:format("-----> Stopped ~p nodes: ~p~n", [length(SlaveNodes) + 1, [node() | SlaveNodes]]),
 
         %% stop node
         init:stop()
