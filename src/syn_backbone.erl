@@ -62,7 +62,7 @@ create_registry_table() ->
         {type, set},
         {attributes, record_info(fields, syn_registry_table)},
         {index, [#syn_registry_table.pid]},
-        {storage_properties, [{ets, [{read_concurrency, true}, {write_concurrency, true}]}]}
+        {storage_properties, [{ets, [{read_concurrency, true}]}]}
     ]).
 
 -spec create_groups_table() -> {atomic, ok} | {aborted, Reason :: any()}.
@@ -71,5 +71,5 @@ create_groups_table() ->
         {type, bag},
         {attributes, record_info(fields, syn_groups_table)},
         {index, [#syn_groups_table.pid, #syn_groups_table.node]},
-        {storage_properties, [{ets, [{read_concurrency, true}, {write_concurrency, true}]}]}
+        {storage_properties, [{ets, [{read_concurrency, true}]}]}
     ]).
