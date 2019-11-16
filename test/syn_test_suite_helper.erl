@@ -42,10 +42,7 @@
 %% ===================================================================
 start_slave(NodeShortName) ->
     CodePath = code:get_path(),
-    {ok, Node} = ct_slave:start(NodeShortName, [
-        {boot_timeout, 10}
-%%        {erl_flags, ErlangFlags}
-    ]),
+    {ok, Node} = ct_slave:start(NodeShortName, [{boot_timeout, 10}]),
     true = rpc:call(Node, code, set_path, [CodePath]),
     {ok, Node}.
 
