@@ -34,12 +34,10 @@ ifdef suite
 	@# 'make test suite=syn_registry_SUITE'
 	ct_run -dir $(PROJECT_DIR)/test -logdir $(PROJECT_DIR)/test/results \
 	-suite $(suite) \
-	-pa `rebar3 as test path` \
-	-event_handler syn_test_event_manager -pa $(PROJECT_DIR)/test
+	-pa `rebar3 as test path`
 else
 	ct_run -dir $(PROJECT_DIR)/test -logdir $(PROJECT_DIR)/test/results \
-	-pa `rebar3 as test path` \
-	-event_handler syn_test_event_manager -pa $(PROJECT_DIR)/test
+	-pa `rebar3 as test path`
 endif
 
 bench: compile_test

@@ -52,9 +52,9 @@ start() ->
     {ok, _} = application:ensure_all_started(syn),
     ok.
 
--spec stop() -> ok.
+-spec stop() -> ok | {error, Reason :: any()}.
 stop() ->
-    ok = application:stop(syn).
+    application:stop(syn).
 
 %% ----- \/ registry -------------------------------------------------
 -spec register(Name :: any(), Pid :: pid()) -> ok | {error, Reason :: any()}.

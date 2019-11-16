@@ -157,6 +157,7 @@ init_per_group(_GroupName, Config) ->
 end_per_group(two_nodes_groups, Config) ->
     SlaveNode = proplists:get_value(slave_node, Config),
     syn_test_suite_helper:connect_node(SlaveNode),
+    syn_test_suite_helper:clean_after_test(),
     syn_test_suite_helper:stop_slave(syn_slave),
     timer:sleep(1000);
 end_per_group(three_nodes_groups, Config) ->
@@ -164,11 +165,12 @@ end_per_group(three_nodes_groups, Config) ->
     syn_test_suite_helper:connect_node(SlaveNode1),
     SlaveNode2 = proplists:get_value(slave_node_2, Config),
     syn_test_suite_helper:connect_node(SlaveNode2),
+    syn_test_suite_helper:clean_after_test(),
     syn_test_suite_helper:stop_slave(syn_slave_1),
     syn_test_suite_helper:stop_slave(syn_slave_2),
     timer:sleep(1000);
 end_per_group(_GroupName, _Config) ->
-    ok.
+    syn_test_suite_helper:clean_after_test().
 
 %% -------------------------------------------------------------------
 %% Function: init_per_testcase(TestCase, Config0) ->

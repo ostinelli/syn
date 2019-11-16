@@ -32,7 +32,7 @@
 -export([start_process/0, start_process/1, start_process/2]).
 -export([kill_process/1]).
 -export([use_custom_handler/0]).
--export([send_debug_data/1]).
+-export([send_error_logger_to_disk/0]).
 
 %% internal
 -export([process_main/0]).
@@ -59,8 +59,10 @@ clean_after_test() ->
     Nodes = [node() | nodes()],
     %% shutdown
     lists:foreach(fun(Node) ->
-        ok = rpc:call(Node, syn, stop, []),
-        ok = rpc:call(Node, application, stop, [mnesia])
+        rpc:call(Node, syn, stop, []),
+        rpc:call(Node, application, stop, [mnesia]),
+        %% clean env
+        rpc:call(Node, application, unset_env, [syn, event_handler])
     end, Nodes),
     %% clean mnesia
     mnesia:delete_schema(Nodes).
@@ -84,8 +86,8 @@ kill_process(Pid) ->
 use_custom_handler() ->
     application:set_env(syn, event_handler, syn_test_event_handler).
 
-send_debug_data(Message) ->
-    ct:notify(syn_test, Message).
+send_error_logger_to_disk() ->
+    error_logger:logfile({open, atom_to_list(node())}).
 
 %% ===================================================================
 %% Internal
