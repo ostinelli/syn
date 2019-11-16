@@ -359,7 +359,7 @@ code_change(_OldVsn, State, _Extra) ->
 %% ===================================================================
 %% Internal
 %% ===================================================================
--spec multicast_join(GroupName :: any(), Pid :: pid(), Meta :: any()) -> ok.
+-spec multicast_join(GroupName :: any(), Pid :: pid(), Meta :: any()) -> pid().
 multicast_join(GroupName, Pid, Meta) ->
     spawn_link(fun() ->
         lists:foreach(fun(RemoteNode) ->
@@ -367,7 +367,7 @@ multicast_join(GroupName, Pid, Meta) ->
         end, nodes())
     end).
 
--spec multicast_leave(GroupName :: any(), Pid :: pid()) -> ok.
+-spec multicast_leave(GroupName :: any(), Pid :: pid()) -> pid().
 multicast_leave(GroupName, Pid) ->
     spawn_link(fun() ->
         lists:foreach(fun(RemoteNode) ->

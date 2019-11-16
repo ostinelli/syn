@@ -310,7 +310,7 @@ code_change(_OldVsn, State, _Extra) ->
 %% ===================================================================
 %% Internal
 %% ===================================================================
--spec multicast_register(Name :: any(), Pid :: pid(), Meta :: any()) -> ok.
+-spec multicast_register(Name :: any(), Pid :: pid(), Meta :: any()) -> pid().
 multicast_register(Name, Pid, Meta) ->
     spawn_link(fun() ->
         lists:foreach(fun(RemoteNode) ->
@@ -318,7 +318,7 @@ multicast_register(Name, Pid, Meta) ->
         end, nodes())
     end).
 
--spec multicast_unregister(Name :: any()) -> ok.
+-spec multicast_unregister(Name :: any()) -> pid().
 multicast_unregister(Name) ->
     spawn_link(fun() ->
         lists:foreach(fun(RemoteNode) ->

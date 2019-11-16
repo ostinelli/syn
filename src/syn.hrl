@@ -33,7 +33,7 @@
 }).
 -record(syn_groups_table, {
     name = undefined :: any(),
-    pid = undefined :: undefined | pid(),
+    pid = undefined :: atom() | pid(),
     node = undefined :: atom(),
     meta = undefined :: any(),
     monitor_ref = undefined :: atom() | reference()
