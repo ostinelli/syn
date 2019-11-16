@@ -1,41 +1,41 @@
 
-[![Build Status](https://travis-ci.org/ostinelli/syn.svg?branch=master)](https://travis-ci.org/ostinelli/syn)   [![Hex pm](https://img.shields.io/hexpm/v/syn.svg)](https://hex.pm/packages/syn)  
-  
-  
-# Syn (v2)
-**Syn** (short for _synonym_) is a global Process Registry and Process Group manager for Erlang and Elixir. Syn automatically manages addition / removal of nodes from the cluster, and is also able to recover from net splits. 
+[![Build Status](https://travis-ci.org/ostinelli/syn.svg?branch=master)](https://travis-ci.org/ostinelli/syn) [![Hex pm](https://img.shields.io/hexpm/v/syn.svg)](https://hex.pm/packages/syn)
 
-## Introduction  
-  
-##### What is a Process Registry?  
-A global Process Registry allows registering a process on all the nodes of a cluster with a single Key. Consider this the process equivalent of a DNS server: in the same way you can retrieve an IP address from a domain name, you can retrieve a process from its Key.  
-  
-Typical Use Case: registering on a system a process that handles a physical device (using its serial number).  
-  
-##### What is a Process Group?  
-A global Process Group is a named group which contains many processes, possibly running on different nodes. With the group Name, you can retrieve on any cluster node the list of these processes, or publish a message to all of them. This mechanism allows for Publish / Subscribe patterns.  
-  
-Typical Use Case: a chatroom.  
-  
-##### What is Syn?  
-Syn is a Process Registry and Process Group manager that has the following features:  
-  
- * Global Process Registry (i.e. a process is uniquely identified with a Key across all the nodes of a cluster).  
- * Global Process Group manager (i.e. a group is uniquely identified with a Name across all the nodes of a cluster).  
- * Any term can be used as Key and Name.  
- * A message can be published to all members of a Process Group (PubSub mechanism).  
- * Fast writes.  
- * Automatically handles conflict resolution (such as net splits).  
- * Configurable callbacks.  
- * Processes are automatically monitored and removed from the Process Registry and Process Groups if they die.  
-    
-## Notes  
-In any distributed system you are faced with a consistency challenge, which is often resolved by having one master arbiter performing all write operations (chosen with a mechanism of [leader election](http://en.wikipedia.org/wiki/Leader_election)), or through [atomic transactions](http://en.wikipedia.org/wiki/Atomicity_(database_systems)).  
-  
-Syn was born for applications of the [IoT](http://en.wikipedia.org/wiki/Internet_of_Things) field. In this context, Keys used to identify a process are often the physical object's unique identifier (for instance, its serial or MAC address), and are therefore already defined and unique _before_ hitting the system.  The consistency challenge is less of a problem in this case, since the likelihood of concurrent incoming requests that would register processes with the same Key is extremely low and, in most cases, acceptable.  
-  
-In addition, write speeds were a determining factor in the architecture of Syn.  
-  
+
+# Syn (v2)
+**Syn** (short for _synonym_) is a global Process Registry and Process Group manager for Erlang and Elixir. Syn automatically manages addition / removal of nodes from the cluster, and is also able to recover from net splits.
+
+## Introduction
+
+##### What is a Process Registry?
+A global Process Registry allows registering a process on all the nodes of a cluster with a single Key. Consider this the process equivalent of a DNS server: in the same way you can retrieve an IP address from a domain name, you can retrieve a process from its Key.
+
+Typical Use Case: registering on a system a process that handles a physical device (using its serial number).
+
+##### What is a Process Group?
+A global Process Group is a named group which contains many processes, possibly running on different nodes. With the group Name, you can retrieve on any cluster node the list of these processes, or publish a message to all of them. This mechanism allows for Publish / Subscribe patterns.
+
+Typical Use Case: a chatroom.
+
+##### What is Syn?
+Syn is a Process Registry and Process Group manager that has the following features:
+
+ * Global Process Registry (i.e. a process is uniquely identified with a Key across all the nodes of a cluster).
+ * Global Process Group manager (i.e. a group is uniquely identified with a Name across all the nodes of a cluster).
+ * Any term can be used as Key and Name.
+ * A message can be published to all members of a Process Group (PubSub mechanism).
+ * Fast writes.
+ * Automatically handles conflict resolution (such as net splits).
+ * Configurable callbacks.
+ * Processes are automatically monitored and removed from the Process Registry and Process Groups if they die.
+
+## Notes
+In any distributed system you are faced with a consistency challenge, which is often resolved by having one master arbiter performing all write operations (chosen with a mechanism of [leader election](http://en.wikipedia.org/wiki/Leader_election)), or through [atomic transactions](http://en.wikipedia.org/wiki/Atomicity_(database_systems)).
+
+Syn was born for applications of the [IoT](http://en.wikipedia.org/wiki/Internet_of_Things) field. In this context, Keys used to identify a process are often the physical object's unique identifier (for instance, its serial or MAC address), and are therefore already defined and unique _before_ hitting the system.  The consistency challenge is less of a problem in this case, since the likelihood of concurrent incoming requests that would register processes with the same Key is extremely low and, in most cases, acceptable.
+
+In addition, write speeds were a determining factor in the architecture of Syn.
+
 Therefore, Availability has been chosen over Consistency and Syn is [eventually consistent](http://en.wikipedia.org/wiki/Eventual_consistency).
 
 ## Setup
@@ -89,7 +89,7 @@ Ensure that `syn` is started with your application, for example by adding it in 
     ]},
     %% ...
 ]}.
-``` 
+```
 
 ## API
 
@@ -353,12 +353,12 @@ config :syn,
   event_handler: MyCustomEventHandler
 ```
 
-In your module you then need to specify the behavior and the callbacks. Both callbacks are _optional_, so you just need to define the ones you need.
+In your module you then need to specify the behavior and the callbacks. All callbacks are _optional_, so you just need to define the ones you need.
 
 ```elixir
 defmodule MyCustomEventHandler do
   @behaviour :syn_event_handler
-  
+
   @impl true
   @spec on_process_exit(
     name :: any(),
@@ -368,7 +368,17 @@ defmodule MyCustomEventHandler do
   ) :: any()
   def on_process_exit(name, pid, meta, reason) do
   end
-  
+
+  @impl true
+  @spec on_group_process_exit(
+    group_name :: any(),
+    pid :: pid(),
+    meta :: any(),
+    reason :: any()
+  ) :: any()
+  def on_group_process_exit(group_name, pid, meta, reason) do
+  end
+
   @impl true
   @spec resolve_registry_conflict(
     name :: any(),
@@ -391,30 +401,40 @@ In `sys.config` you can specify your callback module:
 ]}
 ```
 
-In your module you then need to specify the behavior and the callbacks. Both callbacks are _optional_, so you just need to define the ones you need.
+In your module you then need to specify the behavior and the callbacks. All callbacks are _optional_, so you just need to define the ones you need.
 
 ```erlang
--module(my_custom_event_handler).  
--behaviour(syn_event_handler).  
+-module(my_custom_event_handler).
+-behaviour(syn_event_handler).
 
--export([on_process_exit/4]).  
--export([resolve_registry_conflict/3]).  
-  
--spec on_process_exit(  
-    Name :: any(),  
-    Pid :: pid(),  
-    Meta :: any(),  
-    Reason :: any()  
-) -> any().  
-on_process_exit(Name, Pid, Meta, Reason) ->  
-    ok.  
-  
--spec resolve_registry_conflict(  
-    Name :: any(),  
-    {Pid1 :: pid(), Meta1 :: any()},  
-    {Pid2 :: pid(), Meta2 :: any()}  
-) -> PidToKeep :: pid().  
-resolve_registry_conflict(Name, {Pid1, Meta1}, {Pid2, Meta2}) ->  
+-export([on_process_exit/4]).
+-export([on_group_process_exit/4]).
+-export([resolve_registry_conflict/3]).
+
+-spec on_process_exit(
+    Name :: any(),
+    Pid :: pid(),
+    Meta :: any(),
+    Reason :: any()
+) -> any().
+on_process_exit(Name, Pid, Meta, Reason) ->
+    ok.
+
+-spec on_group_process_exit(
+    GroupName :: any(),
+    Pid :: pid(),
+    Meta :: any(),
+    Reason :: any()
+) -> any().
+on_group_process_exit(GroupName, Pid, Meta, Reason) ->
+    ok.
+
+-spec resolve_registry_conflict(
+    Name :: any(),
+    {Pid1 :: pid(), Meta1 :: any()},
+    {Pid2 :: pid(), Meta2 :: any()}
+) -> PidToKeep :: pid().
+resolve_registry_conflict(Name, {Pid1, Meta1}, {Pid2, Meta2}) ->
     Pid1.
 ```
 
@@ -423,7 +443,10 @@ See details about the callback methods here below.
 ### Callback methods
 
 #### `on_process_exit/4`
-Called when a registered process exits. It will be called only on the node where the process was running. If a process was registered under multiple names, this callback will be called multiple times.
+Called when a registered process exits. It will be called only on the node where the process was running. If a process was registered under _n_ names, this callback will be called _n_ times (1 per registered name).
+
+#### `on_group_process_exit/4`
+Called when a process in a group exits. It will be called only on the node where the process was running. If a process was part of _n_ groups, this callback will be called _n_ times (1 per joined group).
 
 #### `resolve_registry_conflict/3`
 In case of net splits, a specific Name might get registered simultaneously on two different nodes. In this case, the cluster experiences a registry naming conflict.

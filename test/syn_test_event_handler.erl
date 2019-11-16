@@ -28,6 +28,7 @@
 
 %% API
 -export([on_process_exit/4]).
+-export([on_group_process_exit/4]).
 -export([resolve_registry_conflict/3]).
 
 %% ===================================================================
@@ -42,6 +43,17 @@
 on_process_exit(_Name, _Pid, {PidId, TestPid}, _Reason) when is_pid(TestPid) ->
     TestPid ! {received_event_on, PidId};
 on_process_exit(_Name, _Pid, _Meta, _Reason) ->
+    ok.
+
+-spec on_group_process_exit(
+    GroupName :: any(),
+    Pid :: pid(),
+    Meta :: any(),
+    Reason :: any()
+) -> any().
+on_group_process_exit(_GroupName, _Pid, {PidId, TestPid}, _Reason) when is_pid(TestPid) ->
+    TestPid ! {received_event_on, PidId};
+on_group_process_exit(_GroupName, _Pid, _Meta, _Reason) ->
     ok.
 
 -spec resolve_registry_conflict(

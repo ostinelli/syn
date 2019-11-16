@@ -244,7 +244,7 @@ handle_cast(Msg, State) ->
 handle_info({'DOWN', _MonitorRef, process, Pid, Reason}, State) ->
     case find_processes_entry_by_pid(Pid) of
         [] ->
-            %% log
+            %% handle
             handle_process_down(undefined, Pid, undefined, Reason, State);
 
         Entries ->
@@ -253,7 +253,7 @@ handle_info({'DOWN', _MonitorRef, process, Pid, Reason}, State) ->
                 Name = Entry#syn_registry_table.name,
                 Pid = Entry#syn_registry_table.pid,
                 Meta = Entry#syn_registry_table.meta,
-                %% log
+                %% handle
                 handle_process_down(Name, Pid, Meta, Reason, State),
                 %% remove from table
                 remove_from_local_table(Name),
@@ -388,12 +388,7 @@ handle_process_down(Name, Pid, Meta, Reason, #state{
                 [node(), Pid, Reason]
             );
         _ ->
-            case erlang:function_exported(CustomEventHandler, on_process_exit, 4) of
-                true ->
-                    syn_event_handler:do_on_process_exit(Name, Pid, Meta, Reason, CustomEventHandler);
-                _ ->
-                    ok
-            end
+            syn_event_handler:do_on_process_exit(Name, Pid, Meta, Reason, CustomEventHandler)
     end.
 
 -spec sync_registry_tuples(RemoteNode :: node(), RegistryTuples :: [syn_registry_tuple()], #state{}) -> ok.

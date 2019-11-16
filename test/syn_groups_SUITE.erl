@@ -38,7 +38,8 @@
     single_node_join_errors/1,
     single_node_publish/1,
     single_node_multicall/1,
-    single_node_multicall_with_custom_timeout/1
+    single_node_multicall_with_custom_timeout/1,
+    single_node_callback_on_process_exit/1
 ]).
 -export([
     two_nodes_join_monitor_and_unregister/1,
@@ -93,7 +94,8 @@ groups() ->
             single_node_join_errors,
             single_node_publish,
             single_node_multicall,
-            single_node_multicall_with_custom_timeout
+            single_node_multicall_with_custom_timeout,
+            single_node_callback_on_process_exit
         ]},
         {two_nodes_groups, [shuffle], [
             two_nodes_join_monitor_and_unregister,
@@ -390,6 +392,47 @@ single_node_multicall_with_custom_timeout(_Config) ->
     syn_test_suite_helper:kill_process(Pid1),
     syn_test_suite_helper:kill_process(PidTakesLong),
     syn_test_suite_helper:kill_process(PidUnresponsive).
+
+single_node_callback_on_process_exit(_Config) ->
+    %% use custom handler
+    syn_test_suite_helper:use_custom_handler(),
+    %% start
+    ok = syn:start(),
+    %% start processes
+    Pid = syn_test_suite_helper:start_process(),
+    Pid2 = syn_test_suite_helper:start_process(),
+    %% join
+    TestPid = self(),
+    ok = syn:join(group_1, Pid, {pid_group_1, TestPid}),
+    ok = syn:join(group_2, Pid, {pid_group_2, TestPid}),
+    ok = syn:join(group_1, Pid2, {pid2, TestPid}),
+    %% kill 1
+    syn_test_suite_helper:kill_process(Pid),
+    receive
+        {received_event_on, pid_group_1} ->
+            ok;
+        {received_event_on, pid2} ->
+            ok = callback_on_process_exit_was_received_by_pid2
+    after 1000 ->
+        ok = callback_on_process_exit_was_not_received_by_pid
+    end,
+    receive
+        {received_event_on, pid_group_2} ->
+            ok;
+        {received_event_on, pid2} ->
+            ok = callback_on_process_exit_was_received_by_pid2
+    after 1000 ->
+        ok = callback_on_process_exit_was_not_received_by_pid
+    end,
+    %% unregister & kill 2
+    ok = syn:leave(group_1, Pid2),
+    syn_test_suite_helper:kill_process(Pid2),
+    receive
+        {received_event_on, pid2} ->
+            ok = callback_on_process_exit_was_received_by_pid2
+    after 1000 ->
+        ok
+    end.
 
 two_nodes_join_monitor_and_unregister(Config) ->
     GroupName = "my group",

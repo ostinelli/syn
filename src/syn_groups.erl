@@ -49,9 +49,12 @@
 -export([multi_call_and_receive/4]).
 
 %% records
--record(state, {}).
+-record(state, {
+    custom_event_handler = undefined :: module()
+}).
 
 %% macros
+-define(DEFAULT_EVENT_HANDLER_MODULE, syn_event_handler).
 -define(DEFAULT_MULTI_CALL_TIMEOUT_MS, 5000).
 
 %% includes
@@ -214,8 +217,14 @@ init([]) ->
         ok ->
             %% monitor nodes
             ok = net_kernel:monitor_nodes(true),
+            %% get handler
+            CustomEventHandler = application:get_env(syn, event_handler, ?DEFAULT_EVENT_HANDLER_MODULE),
+            %% ensure that is it loaded (not using code:ensure_loaded/1 to support embedded mode)
+            catch CustomEventHandler:module_info(exports),
             %% init
-            {ok, #state{}};
+            {ok, #state{
+                custom_event_handler = CustomEventHandler
+            }};
         Reason ->
             {stop, {error_waiting_for_groups_table, Reason}}
     end.
@@ -295,15 +304,16 @@ handle_cast(Msg, State) ->
 handle_info({'DOWN', _MonitorRef, process, Pid, Reason}, State) ->
     case find_processes_entry_by_pid(Pid) of
         [] ->
-            %% log
-            log_process_exit(undefined, Pid, Reason);
+            %% handle
+            handle_process_down(undefined, Pid, undefined, Reason, State);
 
         Entries ->
             lists:foreach(fun(Entry) ->
                 %% get process info
                 GroupName = Entry#syn_groups_table.name,
-                %% log
-                log_process_exit(GroupName, Pid, Reason),
+                Meta = Entry#syn_groups_table.meta,
+                %% handle
+                handle_process_down(GroupName, Pid, Meta, Reason, State),
                 %% remove from table
                 remove_from_local_table(Entry),
                 %% multicast
@@ -449,26 +459,18 @@ find_process_entry_by_name_and_pid(GroupName, Pid) ->
         [] -> undefined
     end.
 
--spec log_process_exit(Name :: any(), Pid :: pid(), Reason :: any()) -> ok.
-log_process_exit(GroupName, Pid, Reason) ->
-    case Reason of
-        normal -> ok;
-        shutdown -> ok;
-        {shutdown, _} -> ok;
-        killed -> ok;
+-spec handle_process_down(GroupName :: any(), Pid :: pid(), Meta :: any(), Reason :: any(), #state{}) -> ok.
+handle_process_down(GroupName, Pid, Meta, Reason, #state{
+    custom_event_handler = CustomEventHandler
+}) ->
+    case GroupName of
+        undefined ->
+            error_logger:warning_msg(
+                "Syn(~p): Received a DOWN message from an unmonitored group process ~p with reason: ~p~n",
+                [node(), Pid, Reason]
+            );
         _ ->
-            case GroupName of
-                undefined ->
-                    error_logger:error_msg(
-                        "Syn(~p): Received a DOWN message from an unmonitored process ~p with reason: ~p~n",
-                        [node(), Pid, Reason]
-                    );
-                _ ->
-                    error_logger:error_msg(
-                        "Syn(~p): Process in group ~p and pid ~p exited with reason: ~p~n",
-                        [node(), GroupName, Pid, Reason]
-                    )
-            end
+            syn_event_handler:do_on_group_process_exit(GroupName, Pid, Meta, Reason, CustomEventHandler)
     end.
 
 -spec sync_group_tuples(RemoteNode :: node(), GroupTuples :: [syn_registry_tuple()]) -> ok.
