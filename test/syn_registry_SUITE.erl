@@ -324,11 +324,20 @@ single_node_callback_on_process_exit(_Config) ->
     %% register
     TestPid = self(),
     ok = syn:register(<<"my proc">>, Pid, {pid, TestPid}),
+    ok = syn:register(<<"my proc - alternate">>, Pid, {pid_alternate, TestPid}),
     ok = syn:register(<<"my proc 2">>, Pid2, {pid2, TestPid}),
     %% kill 1
     syn_test_suite_helper:kill_process(Pid),
     receive
         {received_event_on, pid} ->
+            ok;
+        {received_event_on, pid2} ->
+            ok = callback_on_process_exit_was_received_by_pid2
+    after 1000 ->
+        ok = callback_on_process_exit_was_not_received_by_pid
+    end,
+    receive
+        {received_event_on, pid_alternate} ->
             ok;
         {received_event_on, pid2} ->
             ok = callback_on_process_exit_was_received_by_pid2
