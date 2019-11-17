@@ -41,7 +41,7 @@ endif
 bench: compile_test
 	@erl -pa `rebar3 as test path` \
 	-pa `rebar3 as test path`/../test \
-	-name syn_bench@127.0.0.1 \
+	-name syn_bench_master@127.0.0.1 \
 	+K true \
 	-mnesia schema_location ram \
 	-noshell \
