@@ -19,15 +19,13 @@ run: all
 	@erl -pa `rebar3 path` \
 	-name syn@127.0.0.1 \
 	+K true \
-	-mnesia schema_location ram \
 	-eval 'syn:start().'
 
 console: all
 	@# 'make console sname=syn1'
 	@erl -pa `rebar3 path` \
 	-name $(sname)@127.0.0.1 \
-	+K true \
-	-mnesia schema_location ram
+	+K true
 
 test: compile_test
 ifdef suite
