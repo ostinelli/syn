@@ -105,10 +105,10 @@ do_resolve_registry_conflict(Name, {LocalPid, LocalMeta}, {RemotePid, RemoteMeta
                     {PidToKeep, false};
                 _ ->
                     {undefined, false}
-            catch Class:Reason:Stacktrace ->
+            catch Exception:Reason ->
                 error_logger:error_msg(
-                    "Syn(~p): Error in custom handler resolve_registry_conflict: ~p:~p:~p",
-                    [node(), Class, Reason, Stacktrace]
+                    "Syn(~p): Error ~p in custom handler resolve_registry_conflict: ~p",
+                    [node(), Exception, Reason]
                 ),
                 {undefined, false}
             end;
