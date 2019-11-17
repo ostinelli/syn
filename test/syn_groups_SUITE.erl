@@ -69,9 +69,9 @@
 %% -------------------------------------------------------------------
 all() ->
     [
-%%        {group, single_node_groups},
-        {group, two_nodes_groups}
-%%        {group, three_nodes_groups}
+        {group, single_node_groups},
+        {group, two_nodes_groups},
+        {group, three_nodes_groups}
     ].
 
 %% -------------------------------------------------------------------
@@ -98,10 +98,10 @@ groups() ->
             single_node_callback_on_process_exit
         ]},
         {two_nodes_groups, [shuffle], [
-%%            two_nodes_join_monitor_and_unregister,
-%%            two_nodes_local_members,
-%%            two_nodes_publish,
-%%            two_nodes_local_publish,
+            two_nodes_join_monitor_and_unregister,
+            two_nodes_local_members,
+            two_nodes_publish,
+            two_nodes_local_publish,
             two_nodes_multicall
         ]},
         {three_nodes_groups, [shuffle], [
