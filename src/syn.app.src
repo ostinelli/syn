@@ -15,8 +15,10 @@
         {mod, {syn_app, []}},
         {env, []},
 
-        {maintainers, ["Roberto Ostinelli"]},
         {licenses, ["MIT"]},
-        {links, [{"Github", "https://github.com/ostinelli/syn"}]}
+        {links, [
+            {"Github", "https://github.com/ostinelli/syn"},
+            {"ostinelli|net", "http://www.ostinelli.net/a-journey-to-syn-v2/"}
+        ]}
     ]
 }.
