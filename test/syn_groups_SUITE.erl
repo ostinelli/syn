@@ -39,7 +39,8 @@
     single_node_publish/1,
     single_node_multicall/1,
     single_node_multicall_with_custom_timeout/1,
-    single_node_callback_on_process_exit/1
+    single_node_callback_on_process_exit/1,
+    single_node_monitor_after_group_crash/1
 ]).
 -export([
     two_nodes_join_monitor_and_unregister/1,
@@ -95,7 +96,8 @@ groups() ->
             single_node_publish,
             single_node_multicall,
             single_node_multicall_with_custom_timeout,
-            single_node_callback_on_process_exit
+            single_node_callback_on_process_exit,
+            single_node_monitor_after_group_crash
         ]},
         {two_nodes_groups, [shuffle], [
             two_nodes_join_monitor_and_unregister,
@@ -435,6 +437,27 @@ single_node_callback_on_process_exit(_Config) ->
     after 1000 ->
         ok
     end.
+
+single_node_monitor_after_group_crash(_Config) ->
+    GroupName = "my group",
+    %% start
+    ok = syn:start(),
+    %% start processes
+    Pid = syn_test_suite_helper:start_process(),
+    %% join
+    ok = syn:join(GroupName, Pid),
+    %% kill groups
+    exit(whereis(syn_groups), kill),
+    timer:sleep(200),
+    %% retrieve
+    true = syn:member(Pid, GroupName),
+    [Pid] = syn:get_members(GroupName),
+    %% kill process
+    syn_test_suite_helper:kill_process(Pid),
+    timer:sleep(200),
+    %% retrieve
+    false = syn:member(Pid, GroupName),
+    [] = syn:get_members(GroupName).
 
 two_nodes_join_monitor_and_unregister(Config) ->
     GroupName = "my group",

@@ -97,23 +97,13 @@ count() ->
 
 -spec count(Node :: node()) -> non_neg_integer().
 count(Node) ->
-    %% build match specs
-    MatchHead = #syn_registry_table{node = '$2', _ = '_'},
-    Guard = {'=:=', '$2', Node},
-    Result = '$2',
-    %% select
-    Processes = mnesia:dirty_select(syn_registry_table, [{MatchHead, [Guard], [Result]}]),
-    length(Processes).
+    RegistryTuples = get_registry_tuples_for_node(Node),
+    length(RegistryTuples).
 
--spec sync_get_local_registry_tuples(FromNode :: node()) -> list(syn_registry_tuple()).
+-spec sync_get_local_registry_tuples(FromNode :: node()) -> [syn_registry_tuple()].
 sync_get_local_registry_tuples(FromNode) ->
     error_logger:info_msg("Syn(~p): Received request of local registry tuples from remote node: ~p~n", [node(), FromNode]),
-    %% build match specs
-    MatchHead = #syn_registry_table{name = '$1', pid = '$2', node = '$3', meta = '$4', _ = '_'},
-    Guard = {'=:=', '$3', node()},
-    RegistryTupleFormat = {{'$1', '$2', '$4'}},
-    %% select
-    mnesia:dirty_select(syn_registry_table, [{MatchHead, [Guard], [RegistryTupleFormat]}]).
+    get_registry_tuples_for_node(node()).
 
 %% ===================================================================
 %% Callbacks
@@ -128,6 +118,8 @@ sync_get_local_registry_tuples(FromNode) ->
     ignore |
     {stop, Reason :: any()}.
 init([]) ->
+    %% rebuild monitors (if coming after a crash)
+    rebuild_monitors(),
     %% monitor nodes
     ok = net_kernel:monitor_nodes(true),
     %% get handler
@@ -330,7 +322,7 @@ add_to_local_table(Name, Pid, Meta, MonitorRef) ->
 remove_from_local_table(Name) ->
     mnesia:dirty_delete(syn_registry_table, Name).
 
--spec find_processes_entry_by_pid(Pid :: pid()) -> Entries :: list(#syn_registry_table{}).
+-spec find_processes_entry_by_pid(Pid :: pid()) -> Entries :: [#syn_registry_table{}].
 find_processes_entry_by_pid(Pid) when is_pid(Pid) ->
     mnesia:dirty_index_read(syn_registry_table, Pid, #syn_registry_table.pid).
 
@@ -340,6 +332,15 @@ find_process_entry_by_name(Name) ->
         [Entry] -> Entry;
         _ -> undefined
     end.
+
+-spec get_registry_tuples_for_node(Node :: node()) -> [syn_registry_tuple()].
+get_registry_tuples_for_node(Node) ->
+    %% build match specs
+    MatchHead = #syn_registry_table{name = '$1', pid = '$2', node = '$3', meta = '$4', _ = '_'},
+    Guard = {'=:=', '$3', Node},
+    RegistryTupleFormat = {{'$1', '$2', '$4'}},
+    %% select
+    mnesia:dirty_select(syn_registry_table, [{MatchHead, [Guard], [RegistryTupleFormat]}]).
 
 -spec handle_process_down(Name :: any(), Pid :: pid(), Meta :: any(), Reason :: any(), #state{}) -> ok.
 handle_process_down(Name, Pid, Meta, Reason, #state{
@@ -427,3 +428,16 @@ purge_registry_entries_for_remote_node(Node) when Node =/= node() ->
     NodePids = mnesia:dirty_select(syn_registry_table, [{MatchHead, [Guard], [IdFormat]}]),
     DelF = fun(Id) -> mnesia:dirty_delete({syn_registry_table, Id}) end,
     lists:foreach(DelF, NodePids).
+
+-spec rebuild_monitors() -> ok.
+rebuild_monitors() ->
+    RegistryTuples = get_registry_tuples_for_node(node()),
+    lists:foreach(fun({Name, Pid, Meta}) ->
+        case is_process_alive(Pid) of
+            true ->
+                MonitorRef = erlang:monitor(process, Pid),
+                add_to_local_table(Name, Pid, Meta, MonitorRef);
+            _ ->
+                remove_from_local_table(Name)
+        end
+    end, RegistryTuples).

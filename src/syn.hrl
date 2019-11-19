@@ -46,7 +46,7 @@
     Meta :: any()
 }.
 -type syn_group_tuple() :: {
-    Name :: any(),
+    GroupName :: any(),
     Pid :: pid(),
     Meta :: any()
 }.

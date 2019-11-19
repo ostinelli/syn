@@ -184,12 +184,7 @@ multi_call_reply(CallerPid, Reply) ->
 -spec sync_get_local_group_tuples(FromNode :: node()) -> list(syn_group_tuple()).
 sync_get_local_group_tuples(FromNode) ->
     error_logger:info_msg("Syn(~p): Received request of local group tuples from remote node: ~p~n", [node(), FromNode]),
-    %% build match specs
-    MatchHead = #syn_groups_table{name = '$1', pid = '$2', node = '$3', meta = '$4', _ = '_'},
-    Guard = {'=:=', '$3', node()},
-    GroupTupleFormat = {{'$1', '$2', '$4'}},
-    %% select
-    mnesia:dirty_select(syn_groups_table, [{MatchHead, [Guard], [GroupTupleFormat]}]).
+    get_group_tuples_for_node(node()).
 
 %% ===================================================================
 %% Callbacks
@@ -204,6 +199,8 @@ sync_get_local_group_tuples(FromNode) ->
     ignore |
     {stop, Reason :: any()}.
 init([]) ->
+    %% rebuild
+    rebuild_monitors(),
     %% monitor nodes
     ok = net_kernel:monitor_nodes(true),
     %% get handler
@@ -306,7 +303,7 @@ handle_info({nodeup, RemoteNode}, State) ->
                 "Syn(~p): Received ~p group entrie(s) from remote node ~p, writing to local~n",
                 [node(), length(GroupTuples), RemoteNode]
             ),
-            sync_group_tuples(RemoteNode, GroupTuples),
+            write_group_tuples_for_node(GroupTuples, RemoteNode),
             %% exit
             error_logger:warning_msg("Syn(~p): GROUPS AUTOMERGE <---- Done for remote node ~p~n", [node(), RemoteNode])
         end
@@ -316,7 +313,7 @@ handle_info({nodeup, RemoteNode}, State) ->
 
 handle_info({nodedown, RemoteNode}, State) ->
     error_logger:warning_msg("Syn(~p): Node ~p has left the cluster, removing group entries on local~n", [node(), RemoteNode]),
-    purge_group_entries_for_remote_node(RemoteNode),
+    raw_purge_group_entries_for_node(RemoteNode),
     {noreply, State};
 
 handle_info(Info, State) ->
@@ -427,6 +424,15 @@ find_process_entry_by_name_and_pid(GroupName, Pid) ->
         [] -> undefined
     end.
 
+-spec get_group_tuples_for_node(Node :: node()) -> [syn_group_tuple()].
+get_group_tuples_for_node(Node) ->
+    %% build match specs
+    MatchHead = #syn_groups_table{name = '$1', pid = '$2', node = '$3', meta = '$4', _ = '_'},
+    Guard = {'=:=', '$3', Node},
+    GroupTupleFormat = {{'$1', '$2', '$4'}},
+    %% select
+    mnesia:dirty_select(syn_groups_table, [{MatchHead, [Guard], [GroupTupleFormat]}]).
+
 -spec handle_process_down(GroupName :: any(), Pid :: pid(), Meta :: any(), Reason :: any(), #state{}) -> ok.
 handle_process_down(GroupName, Pid, Meta, Reason, #state{
     custom_event_handler = CustomEventHandler
@@ -441,19 +447,17 @@ handle_process_down(GroupName, Pid, Meta, Reason, #state{
             syn_event_handler:do_on_group_process_exit(GroupName, Pid, Meta, Reason, CustomEventHandler)
     end.
 
--spec sync_group_tuples(RemoteNode :: node(), GroupTuples :: [syn_registry_tuple()]) -> ok.
-sync_group_tuples(RemoteNode, GroupTuples) ->
-    %% ensure that groups doesn't have any joining node's entries (here again for race conditions)
-    purge_group_entries_for_remote_node(RemoteNode),
-    %% loop
-    F = fun({Name, RemotePid, RemoteMeta}) ->
+-spec write_group_tuples_for_node(GroupTuples :: [syn_registry_tuple()], RemoteNode :: node()) -> ok.
+write_group_tuples_for_node(GroupTuples, RemoteNode) ->
+    %% ensure that groups doesn't have any joining node's entries
+    raw_purge_group_entries_for_node(RemoteNode),
+    %% add
+    lists:foreach(fun({Name, RemotePid, RemoteMeta}) ->
         join_on_node(Name, RemotePid, RemoteMeta)
-    end,
-    %% add to table
-    lists:foreach(F, GroupTuples).
+    end, GroupTuples).
 
--spec purge_group_entries_for_remote_node(Node :: atom()) -> ok.
-purge_group_entries_for_remote_node(Node) when Node =/= node() ->
+-spec raw_purge_group_entries_for_node(Node :: atom()) -> ok.
+raw_purge_group_entries_for_node(Node) ->
     %% NB: no demonitoring is done, hence why this needs to run for a remote node
     %% build match specs
     Pattern = #syn_groups_table{node = Node, _ = '_'},
@@ -497,3 +501,9 @@ collect_replies(MemberPids, Replies, BadPids) ->
             MemberPids1 = lists:delete(Pid, MemberPids),
             collect_replies(MemberPids1, Replies, [Pid | BadPids])
     end.
+
+-spec rebuild_monitors() -> ok.
+rebuild_monitors() ->
+    GroupTuples = get_group_tuples_for_node(node()),
+    %% remove all
+    write_group_tuples_for_node(GroupTuples, node()).

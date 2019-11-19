@@ -38,7 +38,8 @@
     single_node_registration_errors/1,
     single_node_registry_count/1,
     single_node_register_gen_server/1,
-    single_node_callback_on_process_exit/1
+    single_node_callback_on_process_exit/1,
+    single_node_monitor_after_registry_crash/1
 ]).
 -export([
     two_nodes_register_monitor_and_unregister/1,
@@ -98,7 +99,8 @@ groups() ->
             single_node_registration_errors,
             single_node_registry_count,
             single_node_register_gen_server,
-            single_node_callback_on_process_exit
+            single_node_callback_on_process_exit,
+            single_node_monitor_after_registry_crash
         ]},
         {two_nodes_process_registration, [shuffle], [
             two_nodes_register_monitor_and_unregister,
@@ -356,6 +358,24 @@ single_node_callback_on_process_exit(_Config) ->
     after 1000 ->
         ok
     end.
+
+single_node_monitor_after_registry_crash(_Config) ->
+    %% start
+    ok = syn:start(),
+    %% start processes
+    Pid = syn_test_suite_helper:start_process(),
+    %% register
+    ok = syn:register(<<"my proc">>, Pid),
+    %% kill registry
+    exit(whereis(syn_registry), kill),
+    timer:sleep(200),
+    %% retrieve
+    Pid = syn:whereis(<<"my proc">>),
+    %% kill process
+    syn_test_suite_helper:kill_process(Pid),
+    timer:sleep(200),
+    %% retrieve
+    undefined = syn:whereis(<<"my proc 2">>).
 
 two_nodes_register_monitor_and_unregister(Config) ->
     %% get slave
