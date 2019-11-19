@@ -43,7 +43,6 @@ bench: compile_test
 	-pa `rebar3 as test path`/../test \
 	-name syn_bench_master@127.0.0.1 \
 	+K true \
-	-mnesia schema_location ram \
 	-noshell \
 	-eval 'syn_benchmark:start().'
 
