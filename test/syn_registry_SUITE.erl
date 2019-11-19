@@ -736,7 +736,7 @@ three_nodes_start_syn_before_connecting_cluster_with_custom_conflict_resolution(
     syn_test_suite_helper:connect_node(SlaveNode1),
     syn_test_suite_helper:connect_node(SlaveNode2),
     rpc:call(SlaveNode1, syn_test_suite_helper, connect_node, [SlaveNode2]),
-    timer:sleep(2500),
+    timer:sleep(5000),
     %% count
     1 = syn:registry_count(),
     1 = rpc:call(SlaveNode1, syn, registry_count, []),
