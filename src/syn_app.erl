@@ -46,4 +46,4 @@ start(_StartType, _StartArgs) ->
 
 -spec stop(State :: any()) -> ok.
 stop(_State) ->
-    syn_backbone:deinit().
+    ok.

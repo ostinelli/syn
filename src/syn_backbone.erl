@@ -27,7 +27,6 @@
 
 %% API
 -export([init/0]).
--export([deinit/0]).
 -export([get_event_handler_module/0]).
 
 %% macros
@@ -41,6 +40,7 @@
 %% ===================================================================
 -spec init() -> ok | {error, Reason :: any()}.
 init() ->
+    drop_tables(),
     case create_registry_table() of
         {atomic, ok} ->
             case create_groups_table() of
@@ -50,12 +50,6 @@ init() ->
         {aborted, Reason} ->
             {error, {could_not_create_syn_registry_table, Reason}}
     end.
-
--spec deinit() -> ok.
-deinit() ->
-    mnesia:delete_table(syn_registry_table),
-    mnesia:delete_table(syn_groups_table),
-    ok.
 
 -spec get_event_handler_module() -> module().
 get_event_handler_module() ->
@@ -69,6 +63,11 @@ get_event_handler_module() ->
 %% ===================================================================
 %% Internal
 %% ===================================================================
+-spec drop_tables() -> ok.
+drop_tables() ->
+    mnesia:delete_table(syn_registry_table),
+    mnesia:delete_table(syn_groups_table).
+
 -spec create_registry_table() -> {atomic, ok} | {aborted, Reason :: any()}.
 create_registry_table() ->
     mnesia:create_table(syn_registry_table, [
