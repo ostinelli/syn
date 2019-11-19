@@ -204,20 +204,14 @@ sync_get_local_group_tuples(FromNode) ->
     ignore |
     {stop, Reason :: any()}.
 init([]) ->
-    %% wait for table
-    case mnesia:wait_for_tables([syn_groups_table], 10000) of
-        ok ->
-            %% monitor nodes
-            ok = net_kernel:monitor_nodes(true),
-            %% get handler
-            CustomEventHandler = syn_backbone:get_event_handler_module(),
-            %% init
-            {ok, #state{
-                custom_event_handler = CustomEventHandler
-            }};
-        Reason ->
-            {stop, {error_waiting_for_groups_table, Reason}}
-    end.
+    %% monitor nodes
+    ok = net_kernel:monitor_nodes(true),
+    %% get handler
+    CustomEventHandler = syn_backbone:get_event_handler_module(),
+    %% init
+    {ok, #state{
+        custom_event_handler = CustomEventHandler
+    }}.
 
 %% ----------------------------------------------------------------------------------------------------------
 %% Call messages
