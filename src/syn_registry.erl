@@ -433,9 +433,9 @@ purge_registry_entries_for_remote_node(Node, CustomEventHandler) when Node =/= n
     NodePids = mnesia:dirty_select(syn_registry_table, [{MatchHead, [Guard], [IdFormat]}]),
     DelF = fun(Id) -> mnesia:dirty_delete({syn_registry_table, Id}) end,
     lists:foreach(DelF, NodePids),
-    syn_event_handler:do_notify_remote_node_entries_deleted(Node,
-                                                            NodePids,
-                                                            CustomEventHandler).
+    syn_event_handler:do_on_remote_node_entries_deleted(Node,
+                                                        NodePids,
+                                                        CustomEventHandler).
 
 -spec rebuild_monitors() -> ok.
 rebuild_monitors() ->
