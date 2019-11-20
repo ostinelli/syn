@@ -26,7 +26,8 @@
 -module(syn_test_suite_helper).
 
 %% API
--export([start_slave/1, stop_slave/1]).
+-export([start_slave/1, start_slave/4]).
+-export([stop_slave/1, stop_slave/2]).
 -export([connect_node/1, disconnect_node/1]).
 -export([clean_after_test/0]).
 -export([start_process/0, start_process/1, start_process/2]).
@@ -41,13 +42,24 @@
 %% API
 %% ===================================================================
 start_slave(NodeShortName) ->
-    CodePath = code:get_path(),
     {ok, Node} = ct_slave:start(NodeShortName, [{boot_timeout, 10}]),
+    CodePath = code:get_path(),
+    true = rpc:call(Node, code, set_path, [CodePath]),
+    {ok, Node}.
+start_slave(NodeShortName, Host, Username, Password) ->
+    {ok, Node} = ct_slave:start(Host, NodeShortName, [
+        {boot_timeout, 10},
+        {username, Username},
+        {password, Password}
+    ]),
+    CodePath = code:get_path(),
     true = rpc:call(Node, code, set_path, [CodePath]),
     {ok, Node}.
 
 stop_slave(NodeShortName) ->
     {ok, _} = ct_slave:stop(NodeShortName).
+stop_slave(Host, NodeShortName) ->
+    {ok, _} = ct_slave:stop(Host, NodeShortName).
 
 connect_node(Node) ->
     net_kernel:connect_node(Node).

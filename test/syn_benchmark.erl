@@ -41,14 +41,22 @@
 %% API
 %% ===================================================================
 start() ->
+    io:format("-----> Starting benchmark on node ~s~n", [node()]),
     %% init
-    NodeCount = list_to_integer(os:getenv("SYN_BENCH_NODE_COUNT", "2")),
+    ConfigFilePath = filename:join([filename:dirname(code:which(?MODULE)), "syn_benchmark.config"]),
+    {ok, BenchConfig} = file:consult(ConfigFilePath),
+    RemoteHosts = proplists:get_value(remote_nodes, BenchConfig, []),
     ProcessCount = list_to_integer(os:getenv("SYN_PROCESS_COUNT", "100000")),
     %% start nodes
-    lists:foreach(fun(Count) ->
-        ShortName = list_to_atom("syn_bench_slave_" ++ integer_to_list(Count)),
-        {ok, _} = syn_test_suite_helper:start_slave(ShortName)
-    end, lists:seq(1, NodeCount - 1)),
+    lists:foreach(fun(RemoteHost) ->
+        io:format("-----> Starting slave node ~s@~s~n", [maps:get(node, RemoteHost), maps:get(host, RemoteHost)]),
+        {ok, _} = syn_test_suite_helper:start_slave(
+            maps:get(node, RemoteHost),
+            maps:get(host, RemoteHost),
+            maps:get(user, RemoteHost),
+            maps:get(pass, RemoteHost)
+        )
+    end, RemoteHosts),
 
     Nodes = [node() | nodes()],
     io:format("-----> Started ~p nodes: ~p~n", [length(Nodes), Nodes]),
