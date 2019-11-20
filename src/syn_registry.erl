@@ -244,9 +244,11 @@ handle_info({nodeup, RemoteNode}, State) ->
     %% resume
     {noreply, State};
 
-handle_info({nodedown, RemoteNode}, State) ->
+handle_info({nodedown, RemoteNode}, #state{
+    custom_event_handler = CustomEventHandler
+}=State) ->
     error_logger:warning_msg("Syn(~p): Node ~p has left the cluster, removing registry entries on local~n", [node(), RemoteNode]),
-    purge_registry_entries_for_remote_node(RemoteNode),
+    purge_registry_entries_for_remote_node(RemoteNode, CustomEventHandler),
     {noreply, State};
 
 handle_info(Info, State) ->
@@ -361,7 +363,8 @@ sync_registry_tuples(RemoteNode, RegistryTuples, #state{
     custom_event_handler = CustomEventHandler
 }) ->
     %% ensure that registry doesn't have any joining node's entries (here again for race conditions)
-    purge_registry_entries_for_remote_node(RemoteNode),
+    purge_registry_entries_for_remote_node(RemoteNode,
+                                           CustomEventHandler),
     %% loop
     F = fun({Name, RemotePid, RemoteMeta}) ->
         %% check if same name is registered
@@ -417,8 +420,10 @@ sync_registry_tuples(RemoteNode, RegistryTuples, #state{
     %% add to table
     lists:foreach(F, RegistryTuples).
 
--spec purge_registry_entries_for_remote_node(Node :: atom()) -> ok.
-purge_registry_entries_for_remote_node(Node) when Node =/= node() ->
+-spec purge_registry_entries_for_remote_node(Node :: atom(),
+                                             CustomEventHandler ::
+                                             module()) -> ok.
+purge_registry_entries_for_remote_node(Node, CustomEventHandler) when Node =/= node() ->
     %% NB: no demonitoring is done, hence why this needs to run for a remote node
     %% build match specs
     MatchHead = #syn_registry_table{name = '$1', node = '$2', _ = '_'},
@@ -427,7 +432,10 @@ purge_registry_entries_for_remote_node(Node) when Node =/= node() ->
     %% delete
     NodePids = mnesia:dirty_select(syn_registry_table, [{MatchHead, [Guard], [IdFormat]}]),
     DelF = fun(Id) -> mnesia:dirty_delete({syn_registry_table, Id}) end,
-    lists:foreach(DelF, NodePids).
+    lists:foreach(DelF, NodePids),
+    syn_event_handler:do_notify_remote_node_entries_deleted(Node,
+                                                            NodePids,
+                                                            CustomEventHandler).
 
 -spec rebuild_monitors() -> ok.
 rebuild_monitors() ->

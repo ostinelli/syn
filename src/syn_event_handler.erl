@@ -31,6 +31,7 @@
 -export([do_on_process_exit/5]).
 -export([do_on_group_process_exit/5]).
 -export([do_resolve_registry_conflict/4]).
+-export([do_notify_remote_node_entries_deleted/3]).
 
 -callback on_process_exit(
     Name :: any(),
@@ -52,7 +53,14 @@
     {Pid2 :: pid(), Meta2 :: any()}
 ) -> PidToKeep :: pid() | undefined.
 
--optional_callbacks([on_process_exit/4, on_group_process_exit/4, resolve_registry_conflict/3]).
+-callback on_remote_node_entries_deleted(
+    Node :: node(),
+    Keys :: list()
+) -> any().
+
+-optional_callbacks([on_process_exit/4, on_group_process_exit/4,
+                     resolve_registry_conflict/3,
+                     on_remote_node_entries_deleted/2]).
 
 %% ===================================================================
 %% API
@@ -116,3 +124,21 @@ do_resolve_registry_conflict(Name, {LocalPid, LocalMeta}, {RemotePid, RemoteMeta
             %% by default, keep local pid
             {LocalPid, true}
     end.
+
+-spec do_notify_remote_node_entries_deleted(
+        Node :: node(),
+        Keys :: list(),
+        CustomEventHandler :: module()
+) -> any().
+do_notify_remote_node_entries_deleted(Node, Keys, CustomEventHandler) ->
+    spawn(fun() ->
+        case erlang:function_exported(CustomEventHandler,
+                                      on_remote_node_entries_deleted, 2) of
+
+            true ->
+                CustomEventHandler:on_remote_node_entries_deleted(Node,
+                                                                 Keys);
+            _ ->
+                ok
+        end
+    end).

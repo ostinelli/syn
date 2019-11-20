@@ -30,6 +30,7 @@
 -export([on_process_exit/4]).
 -export([on_group_process_exit/4]).
 -export([resolve_registry_conflict/3]).
+-export([on_remote_node_entries_deleted/2]).
 
 %% ===================================================================
 %% Syn Callbacks
@@ -67,3 +68,12 @@ resolve_registry_conflict(_Name, {_LocalPid, _LocalMeta}, {RemotePid, keep_this_
     RemotePid;
 resolve_registry_conflict(_Name, {LocalPid, _LocalMeta}, {_RemotePid, _RemoteMeta}) ->
     LocalPid.
+
+
+-spec on_remote_node_entries_deleted(
+        Node :: node(),
+        Keys :: list()
+) -> any().
+on_remote_node_entries_deleted(Node, Keys) ->
+    io:format("~p entries from remote node ~p deleted from registry:
+    ~p and more...~n", [length(Keys), Node, lists:sublist(Keys, 5)]).
