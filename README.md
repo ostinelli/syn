@@ -1,4 +1,5 @@
 
+
 [![Build Status](https://travis-ci.org/ostinelli/syn.svg?branch=master)](https://travis-ci.org/ostinelli/syn) [![Hex pm](https://img.shields.io/hexpm/v/syn.svg)](https://hex.pm/packages/syn)
 
 
@@ -321,6 +322,16 @@ Types:
 ```
 
 > The order of member pids in the returned array is guaranteed to be the same on every node, however it is not guaranteed to match the order of joins.
+
+To know if a process is a local member of a group:
+
+```erlang
+syn:local_member(Pid, GroupName) -> boolean().
+
+Types:
+    Pid = pid()
+    GroupName = any()
+```
 
 To publish a message to all local group members:
 
