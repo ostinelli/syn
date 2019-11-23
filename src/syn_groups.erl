@@ -440,7 +440,7 @@ handle_process_down(GroupName, Pid, Meta, Reason, #state{
     case GroupName of
         undefined ->
             error_logger:warning_msg(
-                "Syn(~p): Received a DOWN message from an unmonitored group process ~p with reason: ~p~n",
+                "Syn(~p): Received a DOWN message from an unjoined group process ~p with reason: ~p~n",
                 [node(), Pid, Reason]
             );
         _ ->

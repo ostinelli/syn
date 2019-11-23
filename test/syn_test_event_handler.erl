@@ -58,8 +58,8 @@ on_group_process_exit(_GroupName, _Pid, _Meta, _Reason) ->
 
 -spec resolve_registry_conflict(
     Name :: any(),
-    {Pid1 :: pid(), Meta1 :: any()},
-    {Pid2 :: pid(), Meta2 :: any()}
+    {LocalPid :: pid(), LocalMeta :: any()},
+    {RemotePid :: pid(), RemoteMeta :: any()}
 ) -> PidToKeep :: pid().
 resolve_registry_conflict(_Name, {LocalPid, keep_this_one}, {_RemotePid, _RemoteMeta}) ->
     LocalPid;

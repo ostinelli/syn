@@ -369,7 +369,7 @@ add_remote_to_local_table(Name, RemotePid, RemoteMeta, State) ->
 
                             error_logger:warning_msg(
                                 "Syn(~p): Conflicting name from multicast found for: ~p, processes are ~p, ~p~n",
-                                [node(), Name, LocalPid, RemotePid]
+                                [node(), Name, {LocalPid, LocalMeta}, {RemotePid, RemoteMeta}]
                             ),
 
                             resolve_conflict(Name, {LocalPid, LocalMeta}, {RemotePid, RemoteMeta},
@@ -469,17 +469,10 @@ handle_process_down(Name, Pid, Meta, Reason, #state{
 }) ->
     case Name of
         undefined ->
-            case Reason of
-                normal -> ok;
-                shutdown -> ok;
-                {shutdown, _} -> ok;
-                killed -> ok;
-                _ ->
-                    error_logger:warning_msg(
-                        "Syn(~p): Received a DOWN message from an unmonitored process ~p with reason: ~p~n",
-                        [node(), Pid, Reason]
-                    )
-            end;
+            error_logger:warning_msg(
+                "Syn(~p): Received a DOWN message from an unregistered process ~p with reason: ~p~n",
+                [node(), Pid, Reason]
+            );
         _ ->
             syn_event_handler:do_on_process_exit(Name, Pid, Meta, Reason, CustomEventHandler)
     end.
@@ -502,7 +495,7 @@ sync_registry_tuples(RemoteNode, RegistryTuples, State) ->
 
                 error_logger:warning_msg(
                     "Syn(~p): Conflicting name in auto merge for: ~p, processes are ~p, ~p~n",
-                    [node(), Name, LocalPid, RemotePid]
+                    [node(), Name, {LocalPid, LocalMeta}, {RemotePid, RemoteMeta}]
                 ),
 
                 resolve_conflict(Name, {LocalPid, LocalMeta}, {RemotePid, RemoteMeta},
