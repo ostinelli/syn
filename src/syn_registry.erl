@@ -288,7 +288,7 @@ handle_info({nodeup, RemoteNode}, State) ->
                 [node(), length(RegistryTuples), RemoteNode]
             ),
             %% ensure that registry doesn't have any joining node's entries (here again for race conditions)
-            purge_registry_entries_for_remote_node(RemoteNode),
+            raw_purge_registry_entries_for_remote_node(RemoteNode),
             %% loop
             F = fun({Name, RemotePid, RemoteMeta}) ->
                 %% check if same name is registered
@@ -335,7 +335,7 @@ handle_info({nodeup, RemoteNode}, State) ->
 
 handle_info({nodedown, RemoteNode}, State) ->
     error_logger:warning_msg("Syn(~p): Node ~p has left the cluster, removing registry entries on local", [node(), RemoteNode]),
-    purge_registry_entries_for_remote_node(RemoteNode),
+    raw_purge_registry_entries_for_remote_node(RemoteNode),
     {noreply, State};
 
 handle_info(Info, State) ->
@@ -552,9 +552,9 @@ resolve_conflict(
             )
     end.
 
--spec purge_registry_entries_for_remote_node(Node :: atom()) -> ok.
-purge_registry_entries_for_remote_node(Node) when Node =/= node() ->
-    %% NB: no demonitoring is done, hence why this needs to run for a remote node
+-spec raw_purge_registry_entries_for_remote_node(Node :: atom()) -> ok.
+raw_purge_registry_entries_for_remote_node(Node) when Node =/= node() ->
+    %% NB: no demonitoring is done, this is why it's raw
     %% build match specs
     MatchHead = #syn_registry_table{name = '$1', node = '$2', _ = '_'},
     Guard = {'=:=', '$2', Node},
