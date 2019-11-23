@@ -39,6 +39,7 @@
     single_node_registry_count/1,
     single_node_register_gen_server/1,
     single_node_callback_on_process_exit/1,
+    single_node_ensure_callback_process_exit_is_called_if_process_killed/1,
     single_node_monitor_after_registry_crash/1
 ]).
 -export([
@@ -57,8 +58,7 @@
 %% support
 -export([
     start_syn_delayed_and_register_local_process/3,
-    start_syn_delayed_with_custom_handler_register_local_process/4,
-    inject_add_to_local_node/3
+    start_syn_delayed_with_custom_handler_register_local_process/4
 ]).
 
 %% include
@@ -104,6 +104,7 @@ groups() ->
             single_node_registry_count,
             single_node_register_gen_server,
             single_node_callback_on_process_exit,
+            single_node_ensure_callback_process_exit_is_called_if_process_killed,
             single_node_monitor_after_registry_crash
         ]},
         {two_nodes_process_registration, [shuffle], [
@@ -363,6 +364,28 @@ single_node_callback_on_process_exit(_Config) ->
         ok
     end.
 
+single_node_ensure_callback_process_exit_is_called_if_process_killed(_Config) ->
+    Name = <<"my proc">>,
+    %% use custom handler
+    syn_test_suite_helper:use_custom_handler(),
+    %% start
+    ok = syn:start(),
+    %% start process
+    Pid = syn_test_suite_helper:start_process(),
+    %% register
+    TestPid = self(),
+    ok = syn:register(Name, Pid, {some_meta, TestPid}),
+    %% remove from table to simulate conflict resolution
+    syn_registry:remove_from_local_table(Name),
+    %% kill
+    exit(Pid, {kill, Name, {some_meta, TestPid}}),
+    receive
+        {received_event_on, some_meta} ->
+            ok
+    after 1000 ->
+        ok = callback_on_process_exit_was_not_received_by_pid
+    end.
+
 single_node_monitor_after_registry_crash(_Config) ->
     %% start
     ok = syn:start(),
@@ -467,7 +490,7 @@ two_nodes_registration_race_condition_conflict_resolution(Config) ->
     Pid0 = syn_test_suite_helper:start_process(),
     Pid1 = syn_test_suite_helper:start_process(SlaveNode),
     %% inject into syn to simulate concurrent registration
-    ok = rpc:call(SlaveNode, ?MODULE, inject_add_to_local_node, [ConflictingName, Pid1, SlaveNode]),
+    ok = rpc:call(SlaveNode, syn_registry, add_to_local_table, [ConflictingName, Pid1, SlaveNode, undefined]),
     %% register on master node to trigger conflict resolution
     ok = syn:register(ConflictingName, Pid0, node()),
     timer:sleep(1000),
@@ -816,8 +839,8 @@ three_nodes_registration_race_condition_custom_conflict_resolution(Config) ->
     Pid1 = syn_test_suite_helper:start_process(SlaveNode1),
     Pid2 = syn_test_suite_helper:start_process(SlaveNode2),
     %% inject into syn to simulate concurrent registration
-    ok = rpc:call(SlaveNode1, ?MODULE, inject_add_to_local_node, [ConflictingName, Pid1, keep_this_one]),
-    ok = rpc:call(SlaveNode2, ?MODULE, inject_add_to_local_node, [ConflictingName, Pid2, SlaveNode2]),
+    ok = rpc:call(SlaveNode1, syn_registry, add_to_local_table, [ConflictingName, Pid1, keep_this_one, undefined]),
+    ok = rpc:call(SlaveNode2, syn_registry, add_to_local_table, [ConflictingName, Pid2, SlaveNode2, undefined]),
     %% register on master node to trigger conflict resolution
     ok = syn:register(ConflictingName, Pid0, node()),
     timer:sleep(1000),
@@ -862,12 +885,3 @@ start_syn_delayed_with_custom_handler_register_local_process(Name, Pid, Meta, Ms
         syn:start(),
         ok = syn:register(Name, Pid, Meta)
     end).
-
-inject_add_to_local_node(Name, Pid, Meta) ->
-    mnesia:dirty_write(#syn_registry_table{
-        name = Name,
-        pid = Pid,
-        node = node(Pid),
-        meta = Meta,
-        monitor_ref = undefined
-    }).

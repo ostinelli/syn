@@ -212,12 +212,12 @@ handle_cast({inconsistent_name_data, OriginatingNode, Name, RemotePid, RemoteMet
                         "Syn(~p): REGISTRY NAME MERGE ----> Initiating for originating node ~p~n",
                         [node(), OriginatingNode]
                     ),
-                    PidInTable = Entry#syn_registry_table.pid,
-                    MetaInTable = Entry#syn_registry_table.meta,
-                    resolve_conflict(Name, {PidInTable, MetaInTable}, {RemotePid, RemoteMeta},
+                    TablePid = Entry#syn_registry_table.pid,
+                    TableMeta = Entry#syn_registry_table.meta,
+                    resolve_conflict(Name, {TablePid, TableMeta}, {RemotePid, RemoteMeta},
                         %% keep currently in table
                         fun() ->
-                            ok = rpc:call(OriginatingNode, syn_registry, add_to_local_table, [Name, PidInTable, MetaInTable, undefined])
+                            ok = rpc:call(OriginatingNode, syn_registry, add_to_local_table, [Name, TablePid, TableMeta, undefined])
                         end,
                         %% keep remote
                         fun() ->
@@ -395,16 +395,6 @@ unregister_on_node(Name) ->
             remove_from_local_table(Name)
     end.
 
--spec add_to_local_table(Name :: any(), Pid :: pid(), Meta :: any(), MonitorRef :: undefined | reference()) -> ok.
-add_to_local_table(Name, Pid, Meta, MonitorRef) ->
-    mnesia:dirty_write(#syn_registry_table{
-        name = Name,
-        pid = Pid,
-        node = node(Pid),
-        meta = Meta,
-        monitor_ref = MonitorRef
-    }).
-
 -spec add_remote_to_local_table(Name :: any(), RemotePid :: pid(), RemoteMeta :: any()) -> ok.
 add_remote_to_local_table(Name, RemotePid, RemoteMeta) ->
     %% check for conflicts
@@ -416,6 +406,16 @@ add_remote_to_local_table(Name, RemotePid, RemoteMeta) ->
             %% conflict found, raise resolution
             multicast_inconsistent_name_data(Name, Entry#syn_registry_table.pid, Entry#syn_registry_table.meta)
     end.
+
+-spec add_to_local_table(Name :: any(), Pid :: pid(), Meta :: any(), MonitorRef :: undefined | reference()) -> ok.
+add_to_local_table(Name, Pid, Meta, MonitorRef) ->
+    mnesia:dirty_write(#syn_registry_table{
+        name = Name,
+        pid = Pid,
+        node = node(Pid),
+        meta = Meta,
+        monitor_ref = MonitorRef
+    }).
 
 -spec remove_from_local_table(Name :: any()) -> ok.
 remove_from_local_table(Name) ->
@@ -447,10 +447,16 @@ handle_process_down(Name, Pid, Meta, Reason, #state{
 }) ->
     case Name of
         undefined ->
-            error_logger:warning_msg(
-                "Syn(~p): Received a DOWN message from an unregistered process ~p with reason: ~p~n",
-                [node(), Pid, Reason]
-            );
+            case Reason of
+                {kill, KillName, KillMeta} ->
+                    syn_event_handler:do_on_process_exit(KillName, Pid, KillMeta, killed, CustomEventHandler);
+                _ ->
+                    error_logger:warning_msg(
+                        "Syn(~p): Received a DOWN message from an unregistered process ~p with reason: ~p~n",
+                        [node(), Pid, Reason]
+                    )
+            end;
+
         _ ->
             syn_event_handler:do_on_process_exit(Name, Pid, Meta, Reason, CustomEventHandler)
     end.
@@ -463,27 +469,27 @@ handle_process_down(Name, Pid, Meta, Reason, #state{
     KeepRemoteFun :: fun(),
     #state{}
 ) -> ok.
-resolve_conflict(Name, {PidInTable, MetaInTable}, {RemotePid, RemoteMeta}, KeepTableFun, KeepRemoteFun, #state{
+resolve_conflict(Name, {TablePid, TableMeta}, {RemotePid, RemoteMeta}, KeepTableFun, KeepRemoteFun, #state{
     custom_event_handler = CustomEventHandler
 }) ->
     %% call conflict resolution
     {PidToKeep, KillOther} = syn_event_handler:do_resolve_registry_conflict(
         Name,
-        {PidInTable, MetaInTable},
+        {TablePid, TableMeta},
         {RemotePid, RemoteMeta},
         CustomEventHandler
     ),
 
     %% keep chosen one
     case PidToKeep of
-        PidInTable ->
+        TablePid ->
             %% keep local
             error_logger:error_msg(
                 "Syn(~p): Keeping local process ~p, killing remote ~p~n",
-                [node(), PidInTable, RemotePid]
+                [node(), TablePid, RemotePid]
             ),
             case KillOther of
-                true -> exit(RemotePid, kill);
+                true -> exit(RemotePid, {kill, Name, RemoteMeta});
                 _ -> ok
             end,
             KeepTableFun();
@@ -492,10 +498,10 @@ resolve_conflict(Name, {PidInTable, MetaInTable}, {RemotePid, RemoteMeta}, KeepT
             %% keep remote
             error_logger:error_msg(
                 "Syn(~p): Keeping remote process ~p, killing local ~p~n",
-                [node(), RemotePid, PidInTable]
+                [node(), RemotePid, TablePid]
             ),
             case KillOther of
-                true -> exit(PidInTable, kill);
+                true -> exit(TablePid, {kill, Name, TableMeta});
                 _ -> ok
             end,
             KeepRemoteFun();
@@ -503,7 +509,7 @@ resolve_conflict(Name, {PidInTable, MetaInTable}, {RemotePid, RemoteMeta}, KeepT
         Other ->
             error_logger:error_msg(
                 "Syn(~p): Custom handler returned ~p, valid options were ~p and ~p~n",
-                [node(), Other, PidInTable, RemotePid]
+                [node(), Other, TablePid, RemotePid]
             )
     end.
 
