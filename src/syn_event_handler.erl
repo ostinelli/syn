@@ -93,8 +93,8 @@ do_on_group_process_exit(GroupName, Pid, Meta, Reason, CustomEventHandler) ->
 
 -spec do_resolve_registry_conflict(
     Name :: any(),
-    {Pid1 :: pid(), Meta1 :: any()},
-    {Pid2 :: pid(), Meta2 :: any()},
+    {LocalPid :: pid(), LocalMeta :: any()},
+    {RemotePid :: pid(), RemoteMeta :: any()},
     CustomEventHandler :: module()
 ) -> {PidToKeep :: pid() | undefined, KillOther :: boolean()}.
 do_resolve_registry_conflict(Name, {LocalPid, LocalMeta}, {RemotePid, RemoteMeta}, CustomEventHandler) ->

@@ -333,69 +333,85 @@ add_remote_to_local_table(Name, RemotePid, RemoteMeta) ->
                     %% get entry (for first node entering lock it exists, for subsequent nodes too
                     %% because of data written during resolve)
                     Entry = find_process_entry_by_name(Name),
-                    PidInTable = Entry#syn_registry_table.pid,
-                    MetaInTable = Entry#syn_registry_table.meta,
-
-                    case PidInTable =:= RemotePid of
+                    case Entry#syn_registry_table.pid =:= RemotePid of
                         true ->
                             error_logger:info_msg(
                                 "Syn(~p): Conflicting name from multicast ~p already resolved, skipping~n",
                                 [node(), Name]
                             );
                         false ->
+                            LocalPid = Entry#syn_registry_table.pid,
+                            LocalMeta = Entry#syn_registry_table.meta,
                             error_logger:warning_msg(
                                 "Syn(~p): Conflicting name from multicast found for: ~p, processes are ~p, ~p~n",
-                                [node(), Name, PidInTable, RemotePid]
+                                [node(), Name, LocalPid, RemotePid]
                             ),
 
-
+                            %% TODO: get handler
                             CustomEventHandler = undefined,
 
 
-                            %% call conflict resolution
-                            {PidToKeep, KillOther} = syn_event_handler:do_resolve_registry_conflict(
-                                Name,
-                                {PidInTable, MetaInTable},
-                                {RemotePid, RemoteMeta},
-                                CustomEventHandler
-                            ),
-
-                            %% keep chosen one
-                            case PidToKeep of
-                                PidInTable ->
-                                    %% keep local
-                                    error_logger:error_msg(
-                                        "Syn(~p): Keeping local process ~p, killing remote ~p~n",
-                                        [node(), PidInTable, RemotePid]
-                                    ),
+                            resolve_conflict(Name, {LocalPid, LocalMeta}, {RemotePid, RemoteMeta}, CustomEventHandler,
+                                fun() ->
                                     RemoteNode = node(RemotePid),
-                                    ok = rpc:call(RemoteNode, syn_registry, add_to_local_table, [Name, PidInTable, MetaInTable, undefined]),
-                                    case KillOther of
-                                        true -> exit(RemotePid, kill);
-                                        _ -> ok
-                                    end;
-
-                                RemotePid ->
-                                    %% keep remote
-                                    error_logger:error_msg(
-                                        "Syn(~p): Keeping remote process ~p, killing local ~p~n",
-                                        [node(), RemotePid, PidInTable]
-                                    ),
-                                    add_to_local_table(Name, RemotePid, RemoteMeta, undefined),
-                                    case KillOther of
-                                        true -> exit(PidInTable, kill);
-                                        _ -> ok
-                                    end;
-
-                                Other ->
-                                    error_logger:error_msg(
-                                        "Syn(~p): Custom handler returned ~p, valid options were ~p and ~p~n",
-                                        [node(), Other, PidInTable, RemotePid]
-                                    )
-                            end
-
+                                    ok = rpc:call(RemoteNode, syn_registry, add_to_local_table, [Name, LocalPid, LocalMeta, undefined])
+                                end,
+                                fun() ->
+                                    add_to_local_table(Name, RemotePid, RemoteMeta, undefined)
+                                end
+                            )
                     end
                 end
+            )
+    end.
+
+-spec resolve_conflict(
+    Name :: any(),
+    {LocalPid :: pid(), LocalMeta :: any()},
+    {RemotePid :: pid(), RemoteMeta :: any()},
+    CustomEventHandler :: module(),
+    KeepLocalFun :: fun(),
+    KeepRemoteFun :: fun()
+) -> ok.
+resolve_conflict(Name, {LocalPid, LocalMeta}, {RemotePid, RemoteMeta}, CustomEventHandler, KeepLocalFun, KeepRemoteFun) ->
+    %% call conflict resolution
+    {PidToKeep, KillOther} = syn_event_handler:do_resolve_registry_conflict(
+        Name,
+        {LocalPid, LocalMeta},
+        {RemotePid, RemoteMeta},
+        CustomEventHandler
+    ),
+
+    %% keep chosen one
+    case PidToKeep of
+        LocalPid ->
+            %% keep local
+            error_logger:error_msg(
+                "Syn(~p): Keeping local process ~p, killing remote ~p~n",
+                [node(), LocalPid, RemotePid]
+            ),
+            KeepLocalFun(),
+            case KillOther of
+                true -> exit(RemotePid, kill);
+                _ -> ok
+            end;
+
+        RemotePid ->
+            %% keep remote
+            error_logger:error_msg(
+                "Syn(~p): Keeping remote process ~p, killing local ~p~n",
+                [node(), RemotePid, LocalPid]
+            ),
+            KeepRemoteFun(),
+            case KillOther of
+                true -> exit(LocalPid, kill);
+                _ -> ok
+            end;
+
+        Other ->
+            error_logger:error_msg(
+                "Syn(~p): Custom handler returned ~p, valid options were ~p and ~p~n",
+                [node(), Other, LocalPid, RemotePid]
             )
     end.
 
@@ -467,47 +483,14 @@ sync_registry_tuples(RemoteNode, RegistryTuples, #state{
                     [node(), Name, LocalPid, RemotePid]
                 ),
 
-                %% call conflict resolution
-                {PidToKeep, KillOther} = syn_event_handler:do_resolve_registry_conflict(
-                    Name,
-                    {LocalPid, LocalMeta},
-                    {RemotePid, RemoteMeta},
-                    CustomEventHandler
-                ),
-
-                %% keep chosen one
-                case PidToKeep of
-                    LocalPid ->
-                        %% keep local
-                        error_logger:error_msg(
-                            "Syn(~p): Keeping local process ~p, killing remote ~p~n",
-                            [node(), LocalPid, RemotePid]
-                        ),
-                        ok = rpc:call(RemoteNode, syn_registry, remove_from_local_table, [Name]),
-                        case KillOther of
-                            true -> exit(RemotePid, kill);
-                            _ -> ok
-                        end;
-
-                    RemotePid ->
-                        %% keep remote
-                        error_logger:error_msg(
-                            "Syn(~p): Keeping remote process ~p, killing local ~p~n",
-                            [node(), RemotePid, LocalPid]
-                        ),
-                        remove_from_local_table(Name),
-                        add_to_local_table(Name, RemotePid, RemoteMeta, undefined),
-                        case KillOther of
-                            true -> exit(LocalPid, kill);
-                            _ -> ok
-                        end;
-
-                    Other ->
-                        error_logger:error_msg(
-                            "Syn(~p): Custom handler returned ~p, valid options were ~p and ~p",
-                            [node(), Other, LocalPid, RemotePid]
-                        )
-                end
+                resolve_conflict(Name, {LocalPid, LocalMeta}, {RemotePid, RemoteMeta}, CustomEventHandler,
+                    fun() ->
+                        ok = rpc:call(RemoteNode, syn_registry, remove_from_local_table, [Name])
+                    end,
+                    fun() ->
+                        add_to_local_table(Name, RemotePid, RemoteMeta, undefined)
+                    end
+                )
         end
     end,
     %% add to table
