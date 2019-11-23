@@ -43,7 +43,8 @@
 ]).
 -export([
     two_nodes_register_monitor_and_unregister/1,
-    two_nodes_registry_count/1
+    two_nodes_registry_count/1,
+    two_nodes_registration_race_condition_conflict_resolution/1
 ]).
 -export([
     three_nodes_partial_netsplit_consistency/1,
@@ -55,11 +56,13 @@
 %% support
 -export([
     start_syn_delayed_and_register_local_process/3,
-    start_syn_delayed_with_custom_handler_register_local_process/4
+    start_syn_delayed_with_custom_handler_register_local_process/4,
+    inject_add_to_local_node/3
 ]).
 
 %% include
 -include_lib("common_test/include/ct.hrl").
+-include_lib("../src/syn.hrl").
 
 %% ===================================================================
 %% Callbacks
@@ -104,7 +107,8 @@ groups() ->
         ]},
         {two_nodes_process_registration, [shuffle], [
             two_nodes_register_monitor_and_unregister,
-            two_nodes_registry_count
+            two_nodes_registry_count,
+            two_nodes_registration_race_condition_conflict_resolution
         ]},
         {three_nodes_process_registration, [shuffle], [
             three_nodes_partial_netsplit_consistency,
@@ -456,6 +460,45 @@ two_nodes_registry_count(Config) ->
     syn_test_suite_helper:kill_process(RemotePid),
     syn_test_suite_helper:kill_process(PidUnregistered).
 
+two_nodes_registration_race_condition_conflict_resolution(Config) ->
+    ConflictingName = "COMMON",
+    %% get slaves
+    SlaveNode = proplists:get_value(slave_node, Config),
+    %% start syn on nodes
+    ok = syn:start(),
+    ok = rpc:call(SlaveNode, syn, start, []),
+    timer:sleep(100),
+    %% start processes
+    Pid0 = syn_test_suite_helper:start_process(),
+    Pid1 = syn_test_suite_helper:start_process(SlaveNode),
+    %% inject into syn to simulate concurrent registration
+    ok = rpc:call(SlaveNode, ?MODULE, inject_add_to_local_node, [ConflictingName, Pid1, SlaveNode]),
+    %% register on master node to trigger conflict resolution
+    ok = syn:register(ConflictingName, Pid0, node()),
+    timer:sleep(1000),
+    %% check metadata
+    case syn:whereis(ConflictingName, with_meta) of
+        {Pid0, Meta} ->
+            Meta = node(),
+            %% check that other nodes' data corresponds
+            {Pid0, Meta} = rpc:call(SlaveNode, syn, whereis, [ConflictingName, with_meta]),
+            %% check that other processes are not alive because syn killed them
+            true = is_process_alive(Pid0),
+            false = rpc:call(SlaveNode, erlang, is_process_alive, [Pid1]);
+        {Pid1, Meta} ->
+            SlaveNode = Meta,
+            %% check that other nodes' data corresponds
+            {Pid1, Meta} = rpc:call(SlaveNode, syn, whereis, [ConflictingName, with_meta]),
+            %% check that other processes are not alive because syn killed them
+            false = is_process_alive(Pid0),
+            true = rpc:call(SlaveNode, erlang, is_process_alive, [Pid1]);
+        _ ->
+            ok = no_process_is_registered_with_conflicting_name
+    end,
+    %% kill processes
+    syn_test_suite_helper:kill_process(Pid0),
+    syn_test_suite_helper:kill_process(Pid1).
+
 three_nodes_partial_netsplit_consistency(Config) ->
     %% get slaves
     SlaveNode1 = proplists:get_value(slave_node_1, Config),
@@ -690,10 +733,9 @@ three_nodes_start_syn_before_connecting_cluster_with_conflict(Config) ->
     case syn:whereis(ConflictingName, with_meta) of
         {Pid0, Meta} ->
             CurrentNode = node(),
-            CurrentNode = Meta,
             %% check that other nodes' data corresponds
-            {Pid0, Meta} = rpc:call(SlaveNode1, syn, whereis, [ConflictingName, with_meta]),
-            {Pid0, Meta} = rpc:call(SlaveNode2, syn, whereis, [ConflictingName, with_meta]),
+            {Pid0, CurrentNode} = rpc:call(SlaveNode1, syn, whereis, [ConflictingName, with_meta]),
+            {Pid0, CurrentNode} = rpc:call(SlaveNode2, syn, whereis, [ConflictingName, with_meta]),
             %% check that other processes are not alive because syn killed them
             true = is_process_alive(Pid0),
             false = rpc:call(SlaveNode1, erlang, is_process_alive, [Pid1]),
@@ -715,7 +757,9 @@ three_nodes_start_syn_before_connecting_cluster_with_conflict(Config) ->
             %% check that other processes are not alive because syn killed them
             false = is_process_alive(Pid0),
             false = rpc:call(SlaveNode1, erlang, is_process_alive, [Pid1]),
-            true = rpc:call(SlaveNode2, erlang, is_process_alive, [Pid2])
+            true = rpc:call(SlaveNode2, erlang, is_process_alive, [Pid2]);
+        _ ->
+            ok = no_process_is_registered_with_conflicting_name
     end,
     %% kill processes
     syn_test_suite_helper:kill_process(Pid0),
@@ -806,3 +850,12 @@ start_syn_delayed_with_custom_handler_register_local_process(Name, Pid, Meta, Ms
         syn:start(),
         ok = syn:register(Name, Pid, Meta)
     end).
+
+inject_add_to_local_node(Name, Pid, Meta) ->
+    mnesia:dirty_write(#syn_registry_table{
+        name = Name,
+        pid = Pid,
+        node = node(Pid),
+        meta = Meta,
+        monitor_ref = undefined
+    }).

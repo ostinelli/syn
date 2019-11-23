@@ -35,6 +35,7 @@
 
 %% sync API
 -export([sync_get_local_registry_tuples/1]).
+-export([add_remote_to_local_table/3]).
 -export([add_to_local_table/4]).
 -export([remove_from_local_table/1]).
 
@@ -274,7 +275,7 @@ code_change(_OldVsn, State, _Extra) ->
 -spec multicast_register(Name :: any(), Pid :: pid(), Meta :: any()) -> pid().
 multicast_register(Name, Pid, Meta) ->
     spawn_link(fun() ->
-        rpc:eval_everywhere(nodes(), ?MODULE, add_to_local_table, [Name, Pid, Meta, undefined])
+        rpc:eval_everywhere(nodes(), ?MODULE, add_remote_to_local_table, [Name, Pid, Meta])
     end).
 
 -spec multicast_unregister(Name :: any()) -> pid().
@@ -318,6 +319,86 @@ add_to_local_table(Name, Pid, Meta, MonitorRef) ->
         monitor_ref = MonitorRef
     }).
 
+-spec add_remote_to_local_table(Name :: any(), RemotePid :: pid(), RemoteMeta :: any()) -> ok.
+add_remote_to_local_table(Name, RemotePid, RemoteMeta) ->
+    %% check for conflicts
+    case find_process_entry_by_name(Name) of
+        undefined ->
+            %% no conflict
+            add_to_local_table(Name, RemotePid, RemoteMeta, undefined);
+        _Entry ->
+            %% conflict found, enter resolution
+            global:trans({{?MODULE, race_condition_registry}, self()},
+                fun() ->
+                    %% get entry (for first node entering lock it exists, for subsequent nodes too
+                    %% because of data written during resolve)
+                    Entry = find_process_entry_by_name(Name),
+                    PidInTable = Entry#syn_registry_table.pid,
+                    MetaInTable = Entry#syn_registry_table.meta,
+
+                    case PidInTable =:= RemotePid of
+                        true ->
+                            error_logger:info_msg(
+                                "Syn(~p): Conflicting name from multicast ~p already resolved, skipping~n",
+                                [node(), Name]
+                            );
+                        false ->
+                            error_logger:warning_msg(
+                                "Syn(~p): Conflicting name from multicast found for: ~p, processes are ~p, ~p~n",
+                                [node(), Name, PidInTable, RemotePid]
+                            ),
+
+
+                            CustomEventHandler = undefined,
+
+
+                            %% call conflict resolution
+                            {PidToKeep, KillOther} = syn_event_handler:do_resolve_registry_conflict(
+                                Name,
+                                {PidInTable, MetaInTable},
+                                {RemotePid, RemoteMeta},
+                                CustomEventHandler
+                            ),
+
+                            %% keep chosen one
+                            case PidToKeep of
+                                PidInTable ->
+                                    %% keep local
+                                    error_logger:error_msg(
+                                        "Syn(~p): Keeping local process ~p, killing remote ~p~n",
+                                        [node(), PidInTable, RemotePid]
+                                    ),
+                                    RemoteNode = node(RemotePid),
+                                    ok = rpc:call(RemoteNode, syn_registry, add_to_local_table, [Name, PidInTable, MetaInTable, undefined]),
+                                    case KillOther of
+                                        true -> exit(RemotePid, kill);
+                                        _ -> ok
+                                    end;
+
+                                RemotePid ->
+                                    %% keep remote
+                                    error_logger:error_msg(
+                                        "Syn(~p): Keeping remote process ~p, killing local ~p~n",
+                                        [node(), RemotePid, PidInTable]
+                                    ),
+                                    add_to_local_table(Name, RemotePid, RemoteMeta, undefined),
+                                    case KillOther of
+                                        true -> exit(PidInTable, kill);
+                                        _ -> ok
+                                    end;
+
+                                Other ->
+                                    error_logger:error_msg(
+                                        "Syn(~p): Custom handler returned ~p, valid options were ~p and ~p~n",
+                                        [node(), Other, PidInTable, RemotePid]
+                                    )
+                            end
+
+                    end
+                end
+            )
+    end.
+
 -spec remove_from_local_table(Name :: any()) -> ok.
 remove_from_local_table(Name) ->
     mnesia:dirty_delete(syn_registry_table, Name).
@@ -348,10 +429,17 @@ handle_process_down(Name, Pid, Meta, Reason, #state{
 }) ->
     case Name of
         undefined ->
-            error_logger:warning_msg(
-                "Syn(~p): Received a DOWN message from an unmonitored process ~p with reason: ~p~n",
-                [node(), Pid, Reason]
-            );
+            case Reason of
+                normal -> ok;
+                shutdown -> ok;
+                {shutdown, _} -> ok;
+                killed -> ok;
+                _ ->
+                    error_logger:warning_msg(
+                        "Syn(~p): Received a DOWN message from an unmonitored process ~p with reason: ~p~n",
+                        [node(), Pid, Reason]
+                    )
+            end;
         _ ->
             syn_event_handler:do_on_process_exit(Name, Pid, Meta, Reason, CustomEventHandler)
     end.
@@ -375,7 +463,7 @@ sync_registry_tuples(RemoteNode, RegistryTuples, #state{
                 LocalMeta = Entry#syn_registry_table.meta,
 
                 error_logger:warning_msg(
-                    "Syn(~p): Conflicting name process found for: ~p, processes are ~p, ~p~n",
+                    "Syn(~p): Conflicting name in auto merge for: ~p, processes are ~p, ~p~n",
                     [node(), Name, LocalPid, RemotePid]
                 ),
 
@@ -391,6 +479,10 @@ sync_registry_tuples(RemoteNode, RegistryTuples, #state{
                 case PidToKeep of
                     LocalPid ->
                         %% keep local
+                        error_logger:error_msg(
+                            "Syn(~p): Keeping local process ~p, killing remote ~p~n",
+                            [node(), LocalPid, RemotePid]
+                        ),
                         ok = rpc:call(RemoteNode, syn_registry, remove_from_local_table, [Name]),
                         case KillOther of
                             true -> exit(RemotePid, kill);
@@ -399,6 +491,10 @@ sync_registry_tuples(RemoteNode, RegistryTuples, #state{
 
                     RemotePid ->
                         %% keep remote
+                        error_logger:error_msg(
+                            "Syn(~p): Keeping remote process ~p, killing local ~p~n",
+                            [node(), RemotePid, LocalPid]
+                        ),
                         remove_from_local_table(Name),
                         add_to_local_table(Name, RemotePid, RemoteMeta, undefined),
                         case KillOther of
