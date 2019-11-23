@@ -34,8 +34,8 @@
 -export([count/0, count/1]).
 
 %% sync API
+-export([sync_register/4, sync_unregister/2]).
 -export([sync_get_local_registry_tuples/1]).
--export([add_remote_to_local_table/3]).
 -export([add_to_local_table/4]).
 -export([remove_from_local_table/1]).
 
@@ -100,6 +100,14 @@ count() ->
 count(Node) ->
     RegistryTuples = get_registry_tuples_for_node(Node),
     length(RegistryTuples).
+
+-spec sync_register(RemoteNode :: node(), Name :: any(), Pid :: pid(), Meta :: any()) -> ok.
+sync_register(RemoteNode, Name, Pid, Meta) ->
+    gen_server:cast({?MODULE, RemoteNode}, {sync_register, Name, Pid, Meta}).
+
+-spec sync_unregister(RemoteNode :: node(), Name :: any()) -> ok.
+sync_unregister(RemoteNode, Name) ->
+    gen_server:cast({?MODULE, RemoteNode}, {sync_unregister, Name}).
 
 -spec sync_get_local_registry_tuples(FromNode :: node()) -> [syn_registry_tuple()].
 sync_get_local_registry_tuples(FromNode) ->
@@ -191,6 +199,18 @@ handle_call(Request, From, State) ->
     {noreply, #state{}, Timeout :: non_neg_integer()} |
     {stop, Reason :: any(), #state{}}.
 
+handle_cast({sync_register, Name, Pid, Meta}, State) ->
+    %% add to table
+    add_remote_to_local_table(Name, Pid, Meta, State),
+    %% return
+    {noreply, State};
+
+handle_cast({sync_unregister, Name}, State) ->
+    %% remove from table
+    remove_from_local_table(Name),
+    %% return
+    {noreply, State};
+
 handle_cast(Msg, State) ->
     error_logger:warning_msg("Syn(~p): Received an unknown cast message: ~p~n", [node(), Msg]),
     {noreply, State}.
@@ -275,13 +295,17 @@ code_change(_OldVsn, State, _Extra) ->
 -spec multicast_register(Name :: any(), Pid :: pid(), Meta :: any()) -> pid().
 multicast_register(Name, Pid, Meta) ->
     spawn_link(fun() ->
-        rpc:eval_everywhere(nodes(), ?MODULE, add_remote_to_local_table, [Name, Pid, Meta])
+        lists:foreach(fun(RemoteNode) ->
+            sync_register(RemoteNode, Name, Pid, Meta)
+        end, nodes())
     end).
 
 -spec multicast_unregister(Name :: any()) -> pid().
 multicast_unregister(Name) ->
     spawn_link(fun() ->
-        rpc:eval_everywhere(nodes(), ?MODULE, remove_from_local_table, [Name])
+        lists:foreach(fun(RemoteNode) ->
+            sync_unregister(RemoteNode, Name)
+        end, nodes())
     end).
 
 -spec register_on_node(Name :: any(), Pid :: pid(), Meta :: any()) -> ok.
@@ -319,8 +343,8 @@ add_to_local_table(Name, Pid, Meta, MonitorRef) ->
         monitor_ref = MonitorRef
     }).
 
--spec add_remote_to_local_table(Name :: any(), RemotePid :: pid(), RemoteMeta :: any()) -> ok.
-add_remote_to_local_table(Name, RemotePid, RemoteMeta) ->
+-spec add_remote_to_local_table(Name :: any(), RemotePid :: pid(), RemoteMeta :: any(), State :: #state{}) -> ok.
+add_remote_to_local_table(Name, RemotePid, RemoteMeta, State) ->
     %% check for conflicts
     case find_process_entry_by_name(Name) of
         undefined ->
@@ -342,23 +366,21 @@ add_remote_to_local_table(Name, RemotePid, RemoteMeta) ->
                         false ->
                             LocalPid = Entry#syn_registry_table.pid,
                             LocalMeta = Entry#syn_registry_table.meta,
+
                             error_logger:warning_msg(
                                 "Syn(~p): Conflicting name from multicast found for: ~p, processes are ~p, ~p~n",
                                 [node(), Name, LocalPid, RemotePid]
                             ),
 
-                            %% TODO: get handler
-                            CustomEventHandler = undefined,
-
-
-                            resolve_conflict(Name, {LocalPid, LocalMeta}, {RemotePid, RemoteMeta}, CustomEventHandler,
+                            resolve_conflict(Name, {LocalPid, LocalMeta}, {RemotePid, RemoteMeta},
                                 fun() ->
                                     RemoteNode = node(RemotePid),
                                     ok = rpc:call(RemoteNode, syn_registry, add_to_local_table, [Name, LocalPid, LocalMeta, undefined])
                                 end,
                                 fun() ->
                                     add_to_local_table(Name, RemotePid, RemoteMeta, undefined)
-                                end
+                                end,
+                                State
                             )
                     end
                 end
@@ -369,11 +391,13 @@ add_remote_to_local_table(Name, RemotePid, RemoteMeta) ->
     Name :: any(),
     {LocalPid :: pid(), LocalMeta :: any()},
     {RemotePid :: pid(), RemoteMeta :: any()},
-    CustomEventHandler :: module(),
     KeepLocalFun :: fun(),
-    KeepRemoteFun :: fun()
+    KeepRemoteFun :: fun(),
+    #state{}
 ) -> ok.
-resolve_conflict(Name, {LocalPid, LocalMeta}, {RemotePid, RemoteMeta}, CustomEventHandler, KeepLocalFun, KeepRemoteFun) ->
+resolve_conflict(Name, {LocalPid, LocalMeta}, {RemotePid, RemoteMeta}, KeepLocalFun, KeepRemoteFun, #state{
+    custom_event_handler = CustomEventHandler
+}) ->
     %% call conflict resolution
     {PidToKeep, KillOther} = syn_event_handler:do_resolve_registry_conflict(
         Name,
@@ -461,9 +485,7 @@ handle_process_down(Name, Pid, Meta, Reason, #state{
     end.
 
 -spec sync_registry_tuples(RemoteNode :: node(), RegistryTuples :: [syn_registry_tuple()], #state{}) -> ok.
-sync_registry_tuples(RemoteNode, RegistryTuples, #state{
-    custom_event_handler = CustomEventHandler
-}) ->
+sync_registry_tuples(RemoteNode, RegistryTuples, State) ->
     %% ensure that registry doesn't have any joining node's entries (here again for race conditions)
     purge_registry_entries_for_remote_node(RemoteNode),
     %% loop
@@ -483,13 +505,14 @@ sync_registry_tuples(RemoteNode, RegistryTuples, #state{
                     [node(), Name, LocalPid, RemotePid]
                 ),
 
-                resolve_conflict(Name, {LocalPid, LocalMeta}, {RemotePid, RemoteMeta}, CustomEventHandler,
+                resolve_conflict(Name, {LocalPid, LocalMeta}, {RemotePid, RemoteMeta},
                     fun() ->
                         ok = rpc:call(RemoteNode, syn_registry, remove_from_local_table, [Name])
                     end,
                     fun() ->
                         add_to_local_table(Name, RemotePid, RemoteMeta, undefined)
-                    end
+                    end,
+                    State
                 )
         end
     end,
