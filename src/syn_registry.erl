@@ -214,12 +214,12 @@ handle_cast({inconsistent_name_data, OriginatingNode, Name, RemotePid, RemoteMet
                         "Syn(~p): REGISTRY NAME MERGE ----> Initiating for originating node ~p~n",
                         [node(), OriginatingNode]
                     ),
-                    LocalPid = Entry#syn_registry_table.pid,
-                    LocalMeta = Entry#syn_registry_table.meta,
-                    resolve_conflict(Name, {LocalPid, LocalMeta}, {RemotePid, RemoteMeta},
-                        %% keep local
+                    PidInTable = Entry#syn_registry_table.pid,
+                    MetaInTable = Entry#syn_registry_table.meta,
+                    resolve_conflict(Name, {PidInTable, MetaInTable}, {RemotePid, RemoteMeta},
+                        %% keep currently in table
                         fun() ->
-                            ok = rpc:call(OriginatingNode, syn_registry, add_to_local_table, [Name, LocalPid, LocalMeta, undefined])
+                            ok = rpc:call(OriginatingNode, syn_registry, add_to_local_table, [Name, PidInTable, MetaInTable, undefined])
                         end,
                         %% keep remote
                         fun() ->
@@ -281,7 +281,7 @@ handle_info({nodeup, RemoteNode}, State) ->
             %% get registry tuples from remote node
             RegistryTuples = rpc:call(RemoteNode, ?MODULE, sync_get_local_registry_tuples, [node()]),
             error_logger:info_msg(
-                "Syn(~p): Received ~p registry tuple(s) from remote node ~p, writing to local~n",
+                "Syn(~p): Received ~p registry tuple(s) from remote node ~p~n",
                 [node(), length(RegistryTuples), RemoteNode]
             ),
             %% ensure that registry doesn't have any joining node's entries (here again for race conditions)
@@ -465,47 +465,47 @@ handle_process_down(Name, Pid, Meta, Reason, #state{
     KeepRemoteFun :: fun(),
     #state{}
 ) -> ok.
-resolve_conflict(Name, {LocalPid, LocalMeta}, {RemotePid, RemoteMeta}, KeepLocalFun, KeepRemoteFun, #state{
+resolve_conflict(Name, {PidInTable, MetaInTable}, {RemotePid, RemoteMeta}, KeepTableFun, KeepRemoteFun, #state{
     custom_event_handler = CustomEventHandler
 }) ->
     %% call conflict resolution
     {PidToKeep, KillOther} = syn_event_handler:do_resolve_registry_conflict(
         Name,
-        {LocalPid, LocalMeta},
+        {PidInTable, MetaInTable},
         {RemotePid, RemoteMeta},
         CustomEventHandler
     ),
 
     %% keep chosen one
     case PidToKeep of
-        LocalPid ->
+        PidInTable ->
             %% keep local
             error_logger:error_msg(
                 "Syn(~p): Keeping local process ~p, killing remote ~p~n",
-                [node(), LocalPid, RemotePid]
+                [node(), PidInTable, RemotePid]
             ),
-            KeepLocalFun(),
             case KillOther of
                 true -> exit(RemotePid, kill);
                 _ -> ok
-            end;
+            end,
+            KeepTableFun();
 
         RemotePid ->
             %% keep remote
             error_logger:error_msg(
                 "Syn(~p): Keeping remote process ~p, killing local ~p~n",
-                [node(), RemotePid, LocalPid]
+                [node(), RemotePid, PidInTable]
             ),
-            KeepRemoteFun(),
             case KillOther of
-                true -> exit(LocalPid, kill);
+                true -> exit(PidInTable, kill);
                 _ -> ok
-            end;
+            end,
+            KeepRemoteFun();
 
         Other ->
             error_logger:error_msg(
                 "Syn(~p): Custom handler returned ~p, valid options were ~p and ~p~n",
-                [node(), Other, LocalPid, RemotePid]
+                [node(), Other, PidInTable, RemotePid]
             )
     end.
 

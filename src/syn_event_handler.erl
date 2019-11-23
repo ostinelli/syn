@@ -93,14 +93,14 @@ do_on_group_process_exit(GroupName, Pid, Meta, Reason, CustomEventHandler) ->
 
 -spec do_resolve_registry_conflict(
     Name :: any(),
-    {LocalPid :: pid(), LocalMeta :: any()},
-    {RemotePid :: pid(), RemoteMeta :: any()},
+    {Pid1 :: pid(), Meta1 :: any()},
+    {Pid2 :: pid(), Meta2 :: any()},
     CustomEventHandler :: module()
 ) -> {PidToKeep :: pid() | undefined, KillOther :: boolean()}.
-do_resolve_registry_conflict(Name, {LocalPid, LocalMeta}, {RemotePid, RemoteMeta}, CustomEventHandler) ->
+do_resolve_registry_conflict(Name, {Pid1, Meta1}, {Pid2, Meta2}, CustomEventHandler) ->
     case erlang:function_exported(CustomEventHandler, resolve_registry_conflict, 3) of
         true ->
-            try CustomEventHandler:resolve_registry_conflict(Name, {LocalPid, LocalMeta}, {RemotePid, RemoteMeta}) of
+            try CustomEventHandler:resolve_registry_conflict(Name, {Pid1, Meta1}, {Pid2, Meta2}) of
                 PidToKeep when is_pid(PidToKeep) ->
                     {PidToKeep, false};
                 _ ->
@@ -113,6 +113,6 @@ do_resolve_registry_conflict(Name, {LocalPid, LocalMeta}, {RemotePid, RemoteMeta
                 {undefined, false}
             end;
         _ ->
-            %% by default, keep local pid
-            {LocalPid, true}
+            %% by default, keep pid in table
+            {Pid1, true}
     end.

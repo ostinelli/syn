@@ -300,7 +300,7 @@ handle_info({nodeup, RemoteNode}, State) ->
             %% get group tuples from remote node
             GroupTuples = rpc:call(RemoteNode, ?MODULE, sync_get_local_group_tuples, [node()]),
             error_logger:warning_msg(
-                "Syn(~p): Received ~p group entrie(s) from remote node ~p, writing to local~n",
+                "Syn(~p): Received ~p group entrie(s) from remote node ~p~n",
                 [node(), length(GroupTuples), RemoteNode]
             ),
             write_group_tuples_for_node(GroupTuples, RemoteNode),

@@ -442,10 +442,10 @@ on_group_process_exit(GroupName, Pid, Meta, Reason) ->
 
 -spec resolve_registry_conflict(
     Name :: any(),
-    {LocalPid :: pid(), LocalMeta :: any()},
-    {RemotePid :: pid(), RemoteMeta :: any()}
+    {Pid1 :: pid(), Meta1 :: any()},
+    {Pid2 :: pid(), Meta2 :: any()}
 ) -> PidToKeep :: pid().
-resolve_registry_conflict(Name, {LocalPid, LocalMeta}, {RemotePid, RemoteMeta}) ->
+resolve_registry_conflict(Name, {Pid1, Meta1}, {Pid2, Meta2}) ->
     Pid1.
 ```
 
