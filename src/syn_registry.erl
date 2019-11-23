@@ -522,11 +522,11 @@ resolve_conflict(
                 "Syn(~p): Keeping local process ~p, killing remote ~p",
                 [node(), TablePid, RemotePid]
             ),
+            KeepTableFun(),
             case KillOther of
                 true -> exit(RemotePid, {syn_resolve_kill, Name, RemoteMeta});
                 _ -> ok
-            end,
-            KeepTableFun();
+            end;
 
         RemotePid ->
             %% keep remote
@@ -534,11 +534,11 @@ resolve_conflict(
                 "Syn(~p): Keeping remote process ~p, killing local ~p",
                 [node(), RemotePid, TablePid]
             ),
+            KeepRemoteFun(),
             case KillOther of
                 true -> exit(TablePid, {syn_resolve_kill, Name, TableMeta});
                 _ -> ok
-            end,
-            KeepRemoteFun();
+            end;
 
         none ->
             remove_from_local_table(Name),
@@ -571,6 +571,7 @@ rebuild_monitors() ->
         case is_process_alive(Pid) of
             true ->
                 MonitorRef = erlang:monitor(process, Pid),
+                %% overwrite
                 add_to_local_table(Name, Pid, Meta, MonitorRef);
             _ ->
                 remove_from_local_table(Name)
