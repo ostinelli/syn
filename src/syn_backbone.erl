@@ -73,7 +73,7 @@ create_registry_table() ->
     mnesia:create_table(syn_registry_table, [
         {type, set},
         {attributes, record_info(fields, syn_registry_table)},
-        {index, [#syn_registry_table.pid]},
+        {index, [#syn_registry_table.pid, #syn_groups_table.node]},
         {storage_properties, [{ets, [{read_concurrency, true}, {write_concurrency, true}]}]}
     ]).
 
