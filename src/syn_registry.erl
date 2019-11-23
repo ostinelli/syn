@@ -217,10 +217,12 @@ handle_cast({inconsistent_name_data, OriginatingNode, Name, RemotePid, RemoteMet
                     resolve_conflict(Name, {TablePid, TableMeta}, {RemotePid, RemoteMeta},
                         %% keep currently in table
                         fun() ->
+                            %% overwrite
                             ok = rpc:call(OriginatingNode, syn_registry, add_to_local_table, [Name, TablePid, TableMeta, undefined])
                         end,
                         %% keep remote
                         fun() ->
+                            %% overwrite
                             add_to_local_table(Name, RemotePid, RemoteMeta, undefined)
                         end,
                         State
@@ -290,7 +292,12 @@ handle_info({nodeup, RemoteNode}, State) ->
                 case find_process_entry_by_name(Name) of
                     undefined ->
                         %% no conflict
-                        register_on_node(Name, RemotePid, RemoteMeta);
+                        case rpc:call(node(RemotePid), erlang, is_process_alive, [RemotePid]) of
+                            true ->
+                                register_on_node(Name, RemotePid, RemoteMeta);
+                            _ ->
+                                ok
+                        end;
 
                     Entry ->
                         LocalPid = Entry#syn_registry_table.pid,
@@ -469,16 +476,40 @@ handle_process_down(Name, Pid, Meta, Reason, #state{
     KeepRemoteFun :: fun(),
     #state{}
 ) -> ok.
-resolve_conflict(Name, {TablePid, TableMeta}, {RemotePid, RemoteMeta}, KeepTableFun, KeepRemoteFun, #state{
-    custom_event_handler = CustomEventHandler
-}) ->
-    %% call conflict resolution
-    {PidToKeep, KillOther} = syn_event_handler:do_resolve_registry_conflict(
-        Name,
-        {TablePid, TableMeta},
-        {RemotePid, RemoteMeta},
-        CustomEventHandler
-    ),
+resolve_conflict(
+    Name,
+    {TablePid, TableMeta},
+    {RemotePid, RemoteMeta},
+    KeepTableFun,
+    KeepRemoteFun,
+    #state{custom_event_handler = CustomEventHandler}
+) ->
+    TablePidAlive = rpc:call(node(TablePid), erlang, is_process_alive, [TablePid]),
+    RemotePidAlive = rpc:call(node(RemotePid), erlang, is_process_alive, [RemotePid]),
+
+    %% check if pids are alive (race conditions if pid dies during resolution)
+    {PidToKeep, KillOther} = case {TablePidAlive, RemotePidAlive} of
+        {true, true} ->
+            %% call conflict resolution
+            syn_event_handler:do_resolve_registry_conflict(
+                Name,
+                {TablePid, TableMeta},
+                {RemotePid, RemoteMeta},
+                CustomEventHandler
+            );
+
+        {true, false} ->
+            %% keep only alive process
+            {TablePid, false};
+
+        {false, true} ->
+            %% keep only alive process
+            {RemotePidAlive, false};
+
+        {false, false} ->
+            %% remove both
+            {none, false}
+    end,
 
     %% keep chosen one
     case PidToKeep of
@@ -505,6 +536,11 @@ resolve_conflict(Name, {TablePid, TableMeta}, {RemotePid, RemoteMeta}, KeepTable
                 _ -> ok
             end,
             KeepRemoteFun();
+
+        none ->
+            remove_from_local_table(Name),
+            RemoteNode = node(RemotePid),
+            ok = rpc:call(RemoteNode, syn_registry, remove_from_local_table, [Name]);
 
         Other ->
             error_logger:error_msg(
