@@ -452,13 +452,18 @@ write_group_tuples_for_node(GroupTuples, RemoteNode) ->
     %% ensure that groups doesn't have any joining node's entries
     raw_purge_group_entries_for_node(RemoteNode),
     %% add
-    lists:foreach(fun({Name, RemotePid, RemoteMeta}) ->
-        join_on_node(Name, RemotePid, RemoteMeta)
+    lists:foreach(fun({GroupName, RemotePid, RemoteMeta}) ->
+        case rpc:call(node(RemotePid), erlang, is_process_alive, [RemotePid]) of
+            true ->
+                add_to_local_table(GroupName, RemotePid, RemoteMeta, undefined);
+            _ ->
+                ok = rpc:call(RemoteNode, syn_registry, remove_from_local_table, [GroupName, RemotePid])
+        end
     end, GroupTuples).
 
 -spec raw_purge_group_entries_for_node(Node :: atom()) -> ok.
 raw_purge_group_entries_for_node(Node) ->
-    %% NB: no demonitoring is done, hence why this needs to run for a remote node
+    %% NB: no demonitoring is done, this is why it's raw
     %% build match specs
     Pattern = #syn_groups_table{node = Node, _ = '_'},
     ObjectsToDelete = mnesia:dirty_match_object(syn_groups_table, Pattern),
@@ -505,5 +510,14 @@ collect_replies(MemberPids, Replies, BadPids) ->
 -spec rebuild_monitors() -> ok.
 rebuild_monitors() ->
     GroupTuples = get_group_tuples_for_node(node()),
-    %% remove all
-    write_group_tuples_for_node(GroupTuples, node()).
+    %% ensure that groups doesn't have any joining node's entries
+    raw_purge_group_entries_for_node(node()),
+    %% add
+    lists:foreach(fun({GroupName, Pid, Meta}) ->
+        case erlang:is_process_alive(Pid) of
+            true ->
+                join_on_node(GroupName, Pid, Meta);
+            _ ->
+                multicast_leave(GroupName, Pid)
+        end
+    end, GroupTuples).
