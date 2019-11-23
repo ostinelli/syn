@@ -460,7 +460,7 @@ two_nodes_registry_count(Config) ->
     LocalPid = syn_test_suite_helper:start_process(),
     RemotePid = syn_test_suite_helper:start_process(SlaveNode),
     RemotePidRegRemote = syn_test_suite_helper:start_process(SlaveNode),
-    PidUnregistered = syn_test_suite_helper:start_process(),
+    _PidUnregistered = syn_test_suite_helper:start_process(),
     %% register
     ok = syn:register(<<"local proc">>, LocalPid),
     ok = syn:register(<<"remote proc">>, RemotePid),
