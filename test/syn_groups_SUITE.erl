@@ -266,10 +266,7 @@ single_node_join_and_leave(_Config) ->
     [] = syn:get_members(GroupName),
     [] = syn:get_members(GroupName, with_meta),
     false = syn:member(Pid, GroupName),
-    false = syn:member(PidWithMeta, GroupName),
-    %% kill processes
-    syn_test_suite_helper:kill_process(Pid),
-    syn_test_suite_helper:kill_process(PidWithMeta).
+    false = syn:member(PidWithMeta, GroupName).
 
 single_node_join_errors(_Config) ->
     GroupName = "my group",
@@ -290,9 +287,7 @@ single_node_join_errors(_Config) ->
     syn_test_suite_helper:kill_process(Pid2),
     timer:sleep(200),
     {error, not_in_group} = syn:leave(GroupName, Pid2),
-    {error, not_alive} = syn:join(GroupName, Pid2),
-    %% kill processes
-    syn_test_suite_helper:kill_process(Pid).
+    {error, not_alive} = syn:join(GroupName, Pid2).
 
 single_node_publish(_Config) ->
     GroupName = "my group",
@@ -326,10 +321,7 @@ single_node_publish(_Config) ->
         {received, Pid2, Message} -> ok
     after 2000 ->
         ok = published_message_was_not_received_by_pid_2
-    end,
-    %% kill processes
-    syn_test_suite_helper:kill_process(Pid),
-    syn_test_suite_helper:kill_process(Pid2).
+    end.
 
 single_node_multicall(_Config) ->
     GroupName = <<"my group">>,
@@ -356,11 +348,7 @@ single_node_multicall(_Config) ->
         {Pid1, {pong, Pid1}},
         {Pid2, {pong, Pid2}}
     ]) =:= lists:sort(Replies),
-    [PidUnresponsive] = BadPids,
-    %% kill processes
-    syn_test_suite_helper:kill_process(Pid1),
-    syn_test_suite_helper:kill_process(Pid2),
-    syn_test_suite_helper:kill_process(PidUnresponsive).
+    [PidUnresponsive] = BadPids.
 
 single_node_multicall_with_custom_timeout(_Config) ->
     GroupName = <<"my group">>,
@@ -391,11 +379,7 @@ single_node_multicall_with_custom_timeout(_Config) ->
     {Replies, BadPids} = syn:multi_call(GroupName, get_pid_name, 2000),
     %% check responses
     [{Pid1, {pong, Pid1}}] = Replies,
-    true = lists:sort([PidTakesLong, PidUnresponsive]) =:= lists:sort(BadPids),
-    %% kill processes
-    syn_test_suite_helper:kill_process(Pid1),
-    syn_test_suite_helper:kill_process(PidTakesLong),
-    syn_test_suite_helper:kill_process(PidUnresponsive).
+    true = lists:sort([PidTakesLong, PidUnresponsive]) =:= lists:sort(BadPids).
 
 single_node_callback_on_process_exit(_Config) ->
     %% use custom handler
@@ -528,10 +512,7 @@ two_nodes_join_monitor_and_unregister(Config) ->
     false = rpc:call(SlaveNode, syn, member, [LocalPid, GroupName]),
     false = rpc:call(SlaveNode, syn, member, [RemotePid, GroupName]),
     false = rpc:call(SlaveNode, syn, member, [RemotePidJoinRemote, GroupName]),
-    false = rpc:call(SlaveNode, syn, member, [OtherPid, GroupName]),
-    %% kill processes
-    syn_test_suite_helper:kill_process(LocalPid),
-    syn_test_suite_helper:kill_process(RemotePid).
+    false = rpc:call(SlaveNode, syn, member, [OtherPid, GroupName]).
 
 two_nodes_local_members(Config) ->
     GroupName = "my group",
@@ -595,10 +576,7 @@ two_nodes_local_members(Config) ->
     [] = syn:get_local_members(GroupName, with_meta),
     %% remote members
     [] = rpc:call(SlaveNode, syn, get_local_members, [GroupName]),
-    [] = rpc:call(SlaveNode, syn, get_local_members, [GroupName, with_meta]),
-    %% kill processes
-    syn_test_suite_helper:kill_process(LocalPid),
-    syn_test_suite_helper:kill_process(RemotePid).
+    [] = rpc:call(SlaveNode, syn, get_local_members, [GroupName, with_meta]).
 
 two_nodes_publish(Config) ->
     GroupName = "my group",
@@ -655,13 +633,7 @@ two_nodes_publish(Config) ->
             ok = published_message_was_received_by_other_pid
     after 250 ->
         ok
-    end,
-    %% kill processes
-    syn_test_suite_helper:kill_process(LocalPid),
-    syn_test_suite_helper:kill_process(LocalPid2),
-    syn_test_suite_helper:kill_process(RemotePid),
-    syn_test_suite_helper:kill_process(RemotePid2),
-    syn_test_suite_helper:kill_process(OtherPid).
+    end.
 
 two_nodes_local_publish(Config) ->
     GroupName = "my group",
@@ -720,13 +692,7 @@ two_nodes_local_publish(Config) ->
             ok = published_message_was_received_by_other_pid
     after 250 ->
         ok
-    end,
-    %% kill processes
-    syn_test_suite_helper:kill_process(LocalPid),
-    syn_test_suite_helper:kill_process(LocalPid2),
-    syn_test_suite_helper:kill_process(RemotePid),
-    syn_test_suite_helper:kill_process(RemotePid2),
-    syn_test_suite_helper:kill_process(OtherPid).
+    end.
 
 two_nodes_multicall(Config) ->
     GroupName = <<"my group">>,
@@ -758,11 +724,7 @@ two_nodes_multicall(Config) ->
         {Pid1, {pong, Pid1}},
         {Pid2, {pong, Pid2}}
     ]) =:= lists:sort(Replies),
-    [PidUnresponsive] = BadPids,
-    %% kill processes
-    syn_test_suite_helper:kill_process(Pid1),
-    syn_test_suite_helper:kill_process(Pid2),
-    syn_test_suite_helper:kill_process(PidUnresponsive).
+    [PidUnresponsive] = BadPids.
 
 three_nodes_partial_netsplit_consistency(Config) ->
     GroupName = "my group",
@@ -936,12 +898,7 @@ three_nodes_partial_netsplit_consistency(Config) ->
     false = rpc:call(SlaveNode2, syn, member, [Pid0Changed, GroupName]),
     true = rpc:call(SlaveNode2, syn, member, [Pid1, GroupName]),
     true = rpc:call(SlaveNode2, syn, member, [Pid2, GroupName]),
-    false = rpc:call(SlaveNode2, syn, member, [OtherPid, GroupName]),
-    %% kill processes
-    syn_test_suite_helper:kill_process(Pid0),
-    syn_test_suite_helper:kill_process(Pid0Changed),
-    syn_test_suite_helper:kill_process(Pid1),
-    syn_test_suite_helper:kill_process(Pid2).
+    false = rpc:call(SlaveNode2, syn, member, [OtherPid, GroupName]).
 
 three_nodes_full_netsplit_consistency(Config) ->
     GroupName = "my group",
@@ -1089,9 +1046,4 @@ three_nodes_full_netsplit_consistency(Config) ->
     false = rpc:call(SlaveNode2, syn, member, [Pid0Changed, GroupName]),
     true = rpc:call(SlaveNode2, syn, member, [Pid1, GroupName]),
     true = rpc:call(SlaveNode2, syn, member, [Pid2, GroupName]),
-    false = rpc:call(SlaveNode2, syn, member, [OtherPid, GroupName]),
-    %% kill processes
-    syn_test_suite_helper:kill_process(Pid0),
-    syn_test_suite_helper:kill_process(Pid0Changed),
-    syn_test_suite_helper:kill_process(Pid1),
-    syn_test_suite_helper:kill_process(Pid2).
+    false = rpc:call(SlaveNode2, syn, member, [OtherPid, GroupName]).

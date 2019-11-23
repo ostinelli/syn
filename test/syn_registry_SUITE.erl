@@ -256,9 +256,7 @@ single_node_register_and_unregister(_Config) ->
     {error, undefined} = syn:unregister(<<"my proc 2">>),
     %% retrieve
     undefined = syn:whereis(<<"my proc">>),
-    undefined = syn:whereis(<<"my proc 2">>),
-    %% kill process
-    syn_test_suite_helper:kill_process(Pid).
+    undefined = syn:whereis(<<"my proc 2">>).
 
 single_node_registration_errors(_Config) ->
     %% start
@@ -424,9 +422,7 @@ two_nodes_register_monitor_and_unregister(Config) ->
     undefined = syn:whereis(<<"remote proc reg_remote">>),
     undefined = rpc:call(SlaveNode, syn, whereis, [<<"local proc">>]),
     undefined = rpc:call(SlaveNode, syn, whereis, [<<"remote proc">>]),
-    undefined = rpc:call(SlaveNode, syn, whereis, [<<"remote proc reg_remote">>]),
-    %% kill proc
-    syn_test_suite_helper:kill_process(RemotePid).
+    undefined = rpc:call(SlaveNode, syn, whereis, [<<"remote proc reg_remote">>]).
 
 two_nodes_registry_count(Config) ->
     %% get slave
@@ -457,10 +453,7 @@ two_nodes_registry_count(Config) ->
     %% count
     0 = syn:registry_count(),
     0 = syn:registry_count(node()),
-    0 = syn:registry_count(SlaveNode),
-    %% kill proc
-    syn_test_suite_helper:kill_process(RemotePid),
-    syn_test_suite_helper:kill_process(PidUnregistered).
+    0 = syn:registry_count(SlaveNode).
 
 two_nodes_registration_race_condition_conflict_resolution(Config) ->
     ConflictingName = "COMMON",
@@ -496,10 +489,7 @@ two_nodes_registration_race_condition_conflict_resolution(Config) ->
             true = rpc:call(SlaveNode, erlang, is_process_alive, [Pid1]);
         _ ->
             ok = no_process_is_registered_with_conflicting_name
-    end,
-    %% kill processes
-    syn_test_suite_helper:kill_process(Pid0),
-    syn_test_suite_helper:kill_process(Pid1).
+    end.
 
 three_nodes_partial_netsplit_consistency(Config) ->
     %% get slaves
@@ -586,11 +576,7 @@ three_nodes_partial_netsplit_consistency(Config) ->
     Pid0 = rpc:call(SlaveNode2, syn, whereis, [<<"proc0">>]),
     undefined = rpc:call(SlaveNode2, syn, whereis, [<<"proc0-changed">>]),
     Pid1 = rpc:call(SlaveNode2, syn, whereis, [<<"proc1">>]),
-    Pid2 = rpc:call(SlaveNode2, syn, whereis, [<<"proc2">>]),
-    %% kill processes
-    syn_test_suite_helper:kill_process(Pid0),
-    syn_test_suite_helper:kill_process(Pid1),
-    syn_test_suite_helper:kill_process(Pid2).
+    Pid2 = rpc:call(SlaveNode2, syn, whereis, [<<"proc2">>]).
 
 three_nodes_full_netsplit_consistency(Config) ->
     %% get slaves
@@ -691,12 +677,7 @@ three_nodes_full_netsplit_consistency(Config) ->
     Pid0 = rpc:call(SlaveNode2, syn, whereis, [<<"proc0">>]),
     undefined = rpc:call(SlaveNode2, syn, whereis, [<<"proc0-changed">>]),
     Pid1 = rpc:call(SlaveNode2, syn, whereis, [<<"proc1">>]),
-    Pid2 = rpc:call(SlaveNode2, syn, whereis, [<<"proc2">>]),
-    %% kill processes
-    syn_test_suite_helper:kill_process(Pid0),
-    syn_test_suite_helper:kill_process(Pid0Changed),
-    syn_test_suite_helper:kill_process(Pid1),
-    syn_test_suite_helper:kill_process(Pid2).
+    Pid2 = rpc:call(SlaveNode2, syn, whereis, [<<"proc2">>]).
 
 three_nodes_start_syn_before_connecting_cluster_with_conflict(Config) ->
     ConflictingName = "COMMON",
@@ -762,11 +743,7 @@ three_nodes_start_syn_before_connecting_cluster_with_conflict(Config) ->
             true = rpc:call(SlaveNode2, erlang, is_process_alive, [Pid2]);
         _ ->
             ok = no_process_is_registered_with_conflicting_name
-    end,
-    %% kill processes
-    syn_test_suite_helper:kill_process(Pid0),
-    syn_test_suite_helper:kill_process(Pid1),
-    syn_test_suite_helper:kill_process(Pid2).
+    end.
 
 three_nodes_start_syn_before_connecting_cluster_with_custom_conflict_resolution(Config) ->
     ConflictingName = "COMMON",
@@ -818,11 +795,7 @@ three_nodes_start_syn_before_connecting_cluster_with_custom_conflict_resolution(
     %% check that other processes are still alive because we didn't kill them
     true = is_process_alive(Pid0),
     true = rpc:call(SlaveNode1, erlang, is_process_alive, [Pid1]),
-    true = rpc:call(SlaveNode2, erlang, is_process_alive, [Pid2]),
-    %% kill processes
-    syn_test_suite_helper:kill_process(Pid0),
-    syn_test_suite_helper:kill_process(Pid1),
-    syn_test_suite_helper:kill_process(Pid2).
+    true = rpc:call(SlaveNode2, erlang, is_process_alive, [Pid2]).
 
 three_nodes_registration_race_condition_custom_conflict_resolution(Config) ->
     ConflictingName = "COMMON",
@@ -859,11 +832,7 @@ three_nodes_registration_race_condition_custom_conflict_resolution(Config) ->
     %% check that other processes are still alive because we didn't kill them
     true = is_process_alive(Pid0),
     true = rpc:call(SlaveNode1, erlang, is_process_alive, [Pid1]),
-    true = rpc:call(SlaveNode2, erlang, is_process_alive, [Pid2]),
-    %% kill processes
-    syn_test_suite_helper:kill_process(Pid0),
-    syn_test_suite_helper:kill_process(Pid1),
-    syn_test_suite_helper:kill_process(Pid2).
+    true = rpc:call(SlaveNode2, erlang, is_process_alive, [Pid2]).
 
 %% ===================================================================
 %% Internal

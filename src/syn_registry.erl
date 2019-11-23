@@ -36,9 +36,7 @@
 %% sync API
 -export([sync_get_local_registry_tuples/1]).
 -export([raise_inconsistent_name_data/5]).
--export([add_remote_to_local_table/3]).
--export([add_to_local_table/4]).
--export([remove_from_local_table/1]).
+-export([add_remote_to_local_table/3, add_to_local_table/4, remove_from_local_table/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
