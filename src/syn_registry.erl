@@ -207,13 +207,16 @@ handle_cast({inconsistent_name_data, OriginatingNode, Name, RemotePid, RemoteMet
             case find_process_entry_by_name(Name) of
                 undefined ->
                     error_logger:info_msg("Syn(~p): No local data for name ~p, skipping~n", [node(), Name]);
+
                 Entry ->
+                    TablePid = Entry#syn_registry_table.pid,
+                    TableMeta = Entry#syn_registry_table.meta,
+
                     error_logger:info_msg(
                         "Syn(~p): REGISTRY NAME MERGE ----> Initiating for originating node ~p~n",
                         [node(), OriginatingNode]
                     ),
-                    TablePid = Entry#syn_registry_table.pid,
-                    TableMeta = Entry#syn_registry_table.meta,
+
                     resolve_conflict(Name, {TablePid, TableMeta}, {RemotePid, RemoteMeta},
                         %% keep currently in table
                         fun() ->
@@ -227,7 +230,7 @@ handle_cast({inconsistent_name_data, OriginatingNode, Name, RemotePid, RemoteMet
                         end,
                         State
                     ),
-                    %% exit
+
                     error_logger:info_msg(
                         "Syn(~p): REGISTRY NAME MERGE ----> Done for originating node ~p~n",
                         [node(), OriginatingNode]
@@ -294,9 +297,9 @@ handle_info({nodeup, RemoteNode}, State) ->
                         %% no conflict
                         case rpc:call(node(RemotePid), erlang, is_process_alive, [RemotePid]) of
                             true ->
-                                register_on_node(Name, RemotePid, RemoteMeta);
+                                add_to_local_table(Name, RemotePid, RemoteMeta, undefined);
                             _ ->
-                                ok
+                                ok = rpc:call(RemoteNode, syn_registry, remove_from_local_table, [Name])
                         end;
 
                     Entry ->
@@ -455,8 +458,8 @@ handle_process_down(Name, Pid, Meta, Reason, #state{
     case Name of
         undefined ->
             case Reason of
-                {kill, KillName, KillMeta} ->
-                    syn_event_handler:do_on_process_exit(KillName, Pid, KillMeta, killed, CustomEventHandler);
+                {syn_resolve_kill, KillName, KillMeta} ->
+                    syn_event_handler:do_on_process_exit(KillName, Pid, KillMeta, syn_resolve_kill, CustomEventHandler);
                 _ ->
                     error_logger:warning_msg(
                         "Syn(~p): Received a DOWN message from an unregistered process ~p with reason: ~p~n",
@@ -520,7 +523,7 @@ resolve_conflict(
                 [node(), TablePid, RemotePid]
             ),
             case KillOther of
-                true -> exit(RemotePid, {kill, Name, RemoteMeta});
+                true -> exit(RemotePid, {syn_resolve_kill, Name, RemoteMeta});
                 _ -> ok
             end,
             KeepTableFun();
@@ -532,7 +535,7 @@ resolve_conflict(
                 [node(), RemotePid, TablePid]
             ),
             case KillOther of
-                true -> exit(TablePid, {kill, Name, TableMeta});
+                true -> exit(TablePid, {syn_resolve_kill, Name, TableMeta});
                 _ -> ok
             end,
             KeepRemoteFun();

@@ -380,7 +380,7 @@ single_node_ensure_callback_process_exit_is_called_if_process_killed(_Config) ->
     %% remove from table to simulate conflict resolution
     syn_registry:remove_from_local_table(Name),
     %% kill
-    exit(Pid, {kill, Name, {some_meta, TestPid}}),
+    exit(Pid, {syn_resolve_kill, Name, {some_meta, TestPid}}),
     receive
         {received_event_on, some_meta} ->
             ok
