@@ -39,8 +39,8 @@
 -export([multi_call/2, multi_call/3, multi_call_reply/2]).
 
 %% sync API
+-export([sync_join/4, sync_leave/3]).
 -export([sync_get_local_group_tuples/1]).
--export([add_to_local_table/4]).
 -export([remove_from_local_table/2]).
 
 %% gen_server callbacks
@@ -181,6 +181,14 @@ multi_call(GroupName, Message, Timeout) ->
 multi_call_reply(CallerPid, Reply) ->
     CallerPid ! {syn_multi_call_reply, self(), Reply}.
 
+-spec sync_join(RemoteNode :: node(), GroupName :: any(), Pid :: pid(), Meta :: any()) -> ok.
+sync_join(RemoteNode, GroupName, Pid, Meta) ->
+    gen_server:cast({?MODULE, RemoteNode}, {sync_join, GroupName, Pid, Meta}).
+
+-spec sync_leave(RemoteNode :: node(), GroupName :: any(), Pid :: pid()) -> ok.
+sync_leave(RemoteNode, GroupName, Pid) ->
+    gen_server:cast({?MODULE, RemoteNode}, {sync_leave, GroupName, Pid}).
+
 -spec sync_get_local_group_tuples(FromNode :: node()) -> list(syn_group_tuple()).
 sync_get_local_group_tuples(FromNode) ->
     error_logger:info_msg("Syn(~p): Received request of local group tuples from remote node: ~p", [node(), FromNode]),
@@ -257,6 +265,18 @@ handle_call(Request, From, State) ->
     {noreply, #state{}} |
     {noreply, #state{}, Timeout :: non_neg_integer()} |
     {stop, Reason :: any(), #state{}}.
+
+handle_cast({sync_join, GroupName, Pid, Meta}, State) ->
+    %% add to table
+    add_to_local_table(GroupName, Pid, Meta, undefined),
+    %% return
+    {noreply, State};
+
+handle_cast({sync_leave, GroupName, Pid}, State) ->
+    %% remove entry
+    remove_from_local_table(GroupName, Pid),
+    %% return
+    {noreply, State};
 
 handle_cast(Msg, State) ->
     error_logger:warning_msg("Syn(~p): Received an unknown cast message: ~p", [node(), Msg]),
@@ -351,13 +371,17 @@ code_change(_OldVsn, State, _Extra) ->
 -spec multicast_join(GroupName :: any(), Pid :: pid(), Meta :: any()) -> pid().
 multicast_join(GroupName, Pid, Meta) ->
     spawn_link(fun() ->
-        rpc:eval_everywhere(nodes(), ?MODULE, add_to_local_table, [GroupName, Pid, Meta, undefined])
+        lists:foreach(fun(RemoteNode) ->
+            sync_join(RemoteNode, GroupName, Pid, Meta)
+        end, nodes())
     end).
 
 -spec multicast_leave(GroupName :: any(), Pid :: pid()) -> pid().
 multicast_leave(GroupName, Pid) ->
     spawn_link(fun() ->
-        rpc:eval_everywhere(nodes(), ?MODULE, remove_from_local_table, [GroupName, Pid])
+        lists:foreach(fun(RemoteNode) ->
+            sync_leave(RemoteNode, GroupName, Pid)
+        end, nodes())
     end).
 
 -spec join_on_node(GroupName :: any(), Pid :: pid(), Meta :: any()) -> ok.
