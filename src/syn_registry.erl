@@ -34,7 +34,7 @@
 -export([count/0, count/1]).
 
 %% sync API
--export([sync_add/4, sync_remove/2]).
+-export([sync_register/4, sync_unregister/2]).
 -export([sync_get_local_registry_tuples/1]).
 -export([add_to_local_table/4, remove_from_local_table/1]).
 
@@ -100,13 +100,13 @@ count(Node) ->
     RegistryTuples = get_registry_tuples_for_node(Node),
     length(RegistryTuples).
 
--spec sync_add(RemoteNode :: node(), Name :: any(), RemotePid :: pid(), RemoteMeta :: any()) -> ok.
-sync_add(RemoteNode, Name, RemotePid, RemoteMeta) ->
-    gen_server:cast({?MODULE, RemoteNode}, {sync_add, Name, RemotePid, RemoteMeta}).
+-spec sync_register(RemoteNode :: node(), Name :: any(), RemotePid :: pid(), RemoteMeta :: any()) -> ok.
+sync_register(RemoteNode, Name, RemotePid, RemoteMeta) ->
+    gen_server:cast({?MODULE, RemoteNode}, {sync_register, Name, RemotePid, RemoteMeta}).
 
--spec sync_remove(RemoteNode :: node(), Name :: any()) -> ok.
-sync_remove(RemoteNode, Name) ->
-    gen_server:cast({?MODULE, RemoteNode}, {sync_remove, Name}).
+-spec sync_unregister(RemoteNode :: node(), Name :: any()) -> ok.
+sync_unregister(RemoteNode, Name) ->
+    gen_server:cast({?MODULE, RemoteNode}, {sync_unregister, Name}).
 
 -spec sync_get_local_registry_tuples(FromNode :: node()) -> [syn_registry_tuple()].
 sync_get_local_registry_tuples(FromNode) ->
@@ -198,7 +198,7 @@ handle_call(Request, From, State) ->
     {noreply, #state{}, Timeout :: non_neg_integer()} |
     {stop, Reason :: any(), #state{}}.
 
-handle_cast({sync_add, Name, RemotePid, RemoteMeta}, State) ->
+handle_cast({sync_register, Name, RemotePid, RemoteMeta}, State) ->
     %% get remote node
     RemoteNode = node(RemotePid),
     %% check for conflicts
@@ -247,7 +247,7 @@ handle_cast({sync_add, Name, RemotePid, RemoteMeta}, State) ->
     %% return
     {noreply, State};
 
-handle_cast({sync_remove, Name}, State) ->
+handle_cast({sync_unregister, Name}, State) ->
     %% remove
     remove_from_local_table(Name),
     %% return
@@ -377,7 +377,7 @@ code_change(_OldVsn, State, _Extra) ->
 multicast_register(Name, Pid, Meta) ->
     spawn_link(fun() ->
         lists:foreach(fun(RemoteNode) ->
-            sync_add(RemoteNode, Name, Pid, Meta)
+            sync_register(RemoteNode, Name, Pid, Meta)
         end, nodes())
     end).
 
@@ -385,7 +385,7 @@ multicast_register(Name, Pid, Meta) ->
 multicast_unregister(Name) ->
     spawn_link(fun() ->
         lists:foreach(fun(RemoteNode) ->
-            sync_remove(RemoteNode, Name)
+            sync_unregister(RemoteNode, Name)
         end, nodes())
     end).
 
