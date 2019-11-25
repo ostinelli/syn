@@ -35,7 +35,7 @@
 
 %% sync API
 -export([sync_get_local_registry_tuples/1]).
--export([add_remote_to_local_table/4]).
+-export([add_remote_to_local_table/4, remove_remote_from_local_table/2]).
 -export([add_to_local_table/4, remove_from_local_table/1]).
 
 %% gen_server callbacks
@@ -103,6 +103,10 @@ count(Node) ->
 -spec add_remote_to_local_table(RemoteNode :: node(), Name :: any(), RemotePid :: pid(), RemoteMeta :: any()) -> ok.
 add_remote_to_local_table(RemoteNode, Name, RemotePid, RemoteMeta) ->
     gen_server:cast({?MODULE, RemoteNode}, {add_remote_to_local_table, Name, RemotePid, RemoteMeta}).
+
+-spec remove_remote_from_local_table(RemoteNode :: node(), Name :: any()) -> ok.
+remove_remote_from_local_table(RemoteNode, Name) ->
+    gen_server:cast({?MODULE, RemoteNode}, {remove_remote_from_local_table, Name}).
 
 -spec sync_get_local_registry_tuples(FromNode :: node()) -> [syn_registry_tuple()].
 sync_get_local_registry_tuples(FromNode) ->
@@ -232,6 +236,12 @@ handle_cast({add_remote_to_local_table, Name, RemotePid, RemoteMeta}, State) ->
                 end
             )
     end,
+    %% return
+    {noreply, State};
+
+handle_cast({remove_remote_from_local_table, Name}, State) ->
+    %% remove
+    remove_from_local_table(Name),
     %% return
     {noreply, State};
 
@@ -365,7 +375,9 @@ multicast_register(Name, Pid, Meta) ->
 -spec multicast_unregister(Name :: any()) -> pid().
 multicast_unregister(Name) ->
     spawn_link(fun() ->
-        rpc:eval_everywhere(nodes(), ?MODULE, remove_from_local_table, [Name])
+        lists:foreach(fun(RemoteNode) ->
+            remove_remote_from_local_table(RemoteNode, Name)
+        end, nodes())
     end).
 
 -spec register_on_node(Name :: any(), Pid :: pid(), Meta :: any()) -> ok.
