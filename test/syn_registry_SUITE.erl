@@ -496,25 +496,12 @@ two_nodes_registration_race_condition_conflict_resolution(Config) ->
     %% register on master node to trigger conflict resolution
     ok = syn:register(ConflictingName, Pid0, node()),
     timer:sleep(1000),
-    %% check metadata
-    case syn:whereis(ConflictingName, with_meta) of
-        {Pid0, Meta} ->
-            Meta = node(),
-            %% check that other nodes' data corresponds
-            {Pid0, Meta} = rpc:call(SlaveNode, syn, whereis, [ConflictingName, with_meta]),
-            %% check that other processes are not alive because syn killed them
-            true = is_process_alive(Pid0),
-            false = rpc:call(SlaveNode, erlang, is_process_alive, [Pid1]);
-        {Pid1, Meta} ->
-            SlaveNode = Meta,
-            %% check that other nodes' data corresponds
-            {Pid1, Meta} = rpc:call(SlaveNode, syn, whereis, [ConflictingName, with_meta]),
-            %% check that other processes are not alive because syn killed them
-            false = is_process_alive(Pid0),
-            true = rpc:call(SlaveNode, erlang, is_process_alive, [Pid1]);
-        _ ->
-            ok = no_process_is_registered_with_conflicting_name
-    end.
+    %% check metadata, resolution happens on master node
+    {Pid1, SlaveNode} = syn:whereis(ConflictingName, with_meta),
+    {Pid1, SlaveNode} = rpc:call(SlaveNode, syn, whereis, [ConflictingName, with_meta]),
+    %% check that other processes are not alive because syn killed them
+    false = is_process_alive(Pid0),
+    true = rpc:call(SlaveNode, erlang, is_process_alive, [Pid1]).
 
 two_nodes_registration_race_condition_conflict_resolution_when_process_died(Config) ->
     ConflictingName = "COMMON",
