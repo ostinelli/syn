@@ -483,7 +483,7 @@ resolve_conflict(
 
         {false, true} ->
             %% keep only alive process
-            {RemotePidAlive, false};
+            {RemotePid, false};
 
         {false, false} ->
             %% remove both
