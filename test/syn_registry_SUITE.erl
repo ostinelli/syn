@@ -52,8 +52,7 @@
     three_nodes_partial_netsplit_consistency/1,
     three_nodes_full_netsplit_consistency/1,
     three_nodes_start_syn_before_connecting_cluster_with_conflict/1,
-    three_nodes_start_syn_before_connecting_cluster_with_custom_conflict_resolution/1,
-    three_nodes_registration_race_condition_custom_conflict_resolution/1
+    three_nodes_start_syn_before_connecting_cluster_with_custom_conflict_resolution/1
 ]).
 
 %% support
@@ -118,8 +117,7 @@ groups() ->
             three_nodes_partial_netsplit_consistency,
             three_nodes_full_netsplit_consistency,
             three_nodes_start_syn_before_connecting_cluster_with_conflict,
-            three_nodes_start_syn_before_connecting_cluster_with_custom_conflict_resolution,
-            three_nodes_registration_race_condition_custom_conflict_resolution
+            three_nodes_start_syn_before_connecting_cluster_with_custom_conflict_resolution
         ]}
     ].
 %% -------------------------------------------------------------------
@@ -836,43 +834,6 @@ three_nodes_start_syn_before_connecting_cluster_with_custom_conflict_resolution(
     1 = syn:registry_count(),
     1 = rpc:call(SlaveNode1, syn, registry_count, []),
     1 = rpc:call(SlaveNode2, syn, registry_count, []),
-    %% retrieve
-    true = lists:member(syn:whereis(ConflictingName), [Pid0, Pid1, Pid2]),
-    true = lists:member(rpc:call(SlaveNode1, syn, whereis, [ConflictingName]), [Pid0, Pid1, Pid2]),
-    true = lists:member(rpc:call(SlaveNode2, syn, whereis, [ConflictingName]), [Pid0, Pid1, Pid2]),
-    %% check metadata that we kept the correct process on all nodes
-    {Pid1, keep_this_one} = syn:whereis(ConflictingName, with_meta),
-    {Pid1, keep_this_one} = rpc:call(SlaveNode1, syn, whereis, [ConflictingName, with_meta]),
-    {Pid1, keep_this_one} = rpc:call(SlaveNode1, syn, whereis, [ConflictingName, with_meta]),
-    %% check that other processes are still alive because we didn't kill them
-    true = is_process_alive(Pid0),
-    true = rpc:call(SlaveNode1, erlang, is_process_alive, [Pid1]),
-    true = rpc:call(SlaveNode2, erlang, is_process_alive, [Pid2]).
-
-three_nodes_registration_race_condition_custom_conflict_resolution(Config) ->
-    ConflictingName = "COMMON",
-    %% get slaves
-    SlaveNode1 = proplists:get_value(slave_node_1, Config),
-    SlaveNode2 = proplists:get_value(slave_node_2, Config),
-    %% use customer handler
-    syn_test_suite_helper:use_custom_handler(),
-    rpc:call(SlaveNode1, syn_test_suite_helper, use_custom_handler, []),
-    rpc:call(SlaveNode2, syn_test_suite_helper, use_custom_handler, []),
-    %% start syn on nodes
-    ok = syn:start(),
-    ok = rpc:call(SlaveNode1, syn, start, []),
-    ok = rpc:call(SlaveNode2, syn, start, []),
-    timer:sleep(500),
-    %% start processes
-    Pid0 = syn_test_suite_helper:start_process(),
-    Pid1 = syn_test_suite_helper:start_process(SlaveNode1),
-    Pid2 = syn_test_suite_helper:start_process(SlaveNode2),
-    %% inject into syn to simulate concurrent registration
-    ok = rpc:call(SlaveNode1, syn_registry, add_to_local_table, [ConflictingName, Pid1, keep_this_one, undefined]),
-    ok = rpc:call(SlaveNode2, syn_registry, add_to_local_table, [ConflictingName, Pid2, SlaveNode2, undefined]),
-    %% register on master node to trigger conflict resolution
-    ok = syn:register(ConflictingName, Pid0, node()),
-    timer:sleep(1000),
     %% retrieve
     true = lists:member(syn:whereis(ConflictingName), [Pid0, Pid1, Pid2]),
     true = lists:member(rpc:call(SlaveNode1, syn, whereis, [ConflictingName]), [Pid0, Pid1, Pid2]),
