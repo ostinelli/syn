@@ -220,19 +220,18 @@ handle_cast({sync_add, Name, RemotePid, RemoteMeta}, State) ->
                     TablePid = Entry#syn_registry_table.pid,
                     TableMeta = Entry#syn_registry_table.meta,
 
-                    resolve_conflict(Name, {TablePid, TableMeta}, {RemotePid, RemoteMeta},
-                        %% keep currently in table
-                        fun() ->
+                    case resolve_conflict(Name, {TablePid, TableMeta}, {RemotePid, RemoteMeta}, State) of
+                        PidToKeep when PidToKeep =:= TablePid ->
                             %% overwrite
-                            ok = rpc:call(RemoteNode, syn_registry, add_to_local_table, [Name, TablePid, TableMeta, undefined])
-                        end,
-                        %% keep remote
-                        fun() ->
+                            ok = rpc:call(RemoteNode, syn_registry, add_to_local_table, [Name, TablePid, TableMeta, undefined]);
+
+                        PidToKeep when PidToKeep =:= RemotePid ->
                             %% overwrite
-                            add_to_local_table(Name, RemotePid, RemoteMeta, undefined)
-                        end,
-                        State
-                    )
+                            add_to_local_table(Name, RemotePid, RemoteMeta, undefined);
+
+                        _ ->
+                            ok
+                    end
                 end
             )
     end,
@@ -315,17 +314,16 @@ handle_info({nodeup, RemoteNode}, State) ->
                             [node(), Name, {LocalPid, LocalMeta}, {RemotePid, RemoteMeta}]
                         ),
 
-                        resolve_conflict(Name, {LocalPid, LocalMeta}, {RemotePid, RemoteMeta},
-                            %% keep local
-                            fun() ->
-                                ok = rpc:call(RemoteNode, syn_registry, remove_from_local_table, [Name])
-                            end,
-                            %% keep remote
-                            fun() ->
-                                add_to_local_table(Name, RemotePid, RemoteMeta, undefined)
-                            end,
-                            State
-                        )
+                        case resolve_conflict(Name, {LocalPid, LocalMeta}, {RemotePid, RemoteMeta}, State) of
+                            PidToKeep when PidToKeep =:= LocalPid ->
+                                ok = rpc:call(RemoteNode, syn_registry, remove_from_local_table, [Name]);
+
+                            PidToKeep when PidToKeep =:= RemotePid ->
+                                add_to_local_table(Name, RemotePid, RemoteMeta, undefined);
+
+                            _ ->
+                                ok
+                        end
                 end
             end,
             %% add to table
@@ -463,16 +461,12 @@ handle_process_down(Name, Pid, Meta, Reason, #state{
     Name :: any(),
     {LocalPid :: pid(), LocalMeta :: any()},
     {RemotePid :: pid(), RemoteMeta :: any()},
-    KeepLocalFun :: fun(),
-    KeepRemoteFun :: fun(),
     #state{}
-) -> ok.
+) -> pid() | undefined.
 resolve_conflict(
     Name,
     {TablePid, TableMeta},
     {RemotePid, RemoteMeta},
-    KeepTableFun,
-    KeepRemoteFun,
     #state{custom_event_handler = CustomEventHandler}
 ) ->
     TablePidAlive = rpc:call(node(TablePid), erlang, is_process_alive, [TablePid]),
@@ -510,11 +504,12 @@ resolve_conflict(
                 "Syn(~p): Keeping local process ~p, killing remote ~p",
                 [node(), TablePid, RemotePid]
             ),
-            KeepTableFun(),
             case KillOther of
                 true -> exit(RemotePid, {syn_resolve_kill, Name, RemoteMeta});
                 _ -> ok
-            end;
+            end,
+            %% return
+            PidToKeep;
 
         RemotePid ->
             %% keep remote
@@ -522,22 +517,27 @@ resolve_conflict(
                 "Syn(~p): Keeping remote process ~p, killing local ~p",
                 [node(), RemotePid, TablePid]
             ),
-            KeepRemoteFun(),
             case KillOther of
                 true -> exit(TablePid, {syn_resolve_kill, Name, TableMeta});
                 _ -> ok
-            end;
+            end,
+            %% return
+            PidToKeep;
 
         none ->
             remove_from_local_table(Name),
             RemoteNode = node(RemotePid),
-            ok = rpc:call(RemoteNode, syn_registry, remove_from_local_table, [Name]);
+            ok = rpc:call(RemoteNode, syn_registry, remove_from_local_table, [Name]),
+            %% return
+            undefined;
 
         Other ->
             error_logger:error_msg(
                 "Syn(~p): Custom handler returned ~p, valid options were ~p and ~p",
                 [node(), Other, TablePid, RemotePid]
-            )
+            ),
+            %% return
+            undefined
     end.
 
 -spec raw_purge_registry_entries_for_remote_node(Node :: atom()) -> ok.
