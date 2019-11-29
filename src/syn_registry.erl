@@ -216,7 +216,7 @@ handle_cast({sync_register, Name, RemotePid, RemoteMeta}, State) ->
             global:trans({{?MODULE, {inconsistent_name, Name}}, self()},
                 fun() ->
                     error_logger:warning_msg(
-                        "Syn(~p): REGISTRY NAME INCONSISTENCY FOR ~p ----> Initiating for remote node ~p~n",
+                        "Syn(~p): REGISTRY INCONSISTENCY (name: ~p) ----> Initiating for remote node ~p~n",
                         [node(), Name, RemoteNode]
                     ),
 
@@ -239,7 +239,7 @@ handle_cast({sync_register, Name, RemotePid, RemoteMeta}, State) ->
                     end,
 
                     error_logger:info_msg(
-                        "Syn(~p): REGISTRY NAME INCONSISTENCY FOR ~p <---- Done for remote node ~p~n",
+                        "Syn(~p): REGISTRY INCONSISTENCY (name: ~p)  <---- Done for remote node ~p~n",
                         [node(), Name, RemoteNode]
                     )
                 end
@@ -526,7 +526,7 @@ resolve_conflict(
         TablePid ->
             %% keep local
             error_logger:info_msg(
-                "Syn(~p): Keeping local process ~p, killing remote ~p~n",
+                "Syn(~p): Keeping process in table ~p, killing remote process ~p~n",
                 [node(), TablePid, RemotePid]
             ),
             PidToKill = case KillOther of
@@ -539,7 +539,7 @@ resolve_conflict(
         RemotePid ->
             %% keep remote
             error_logger:info_msg(
-                "Syn(~p): Keeping remote process ~p, killing local ~p~n",
+                "Syn(~p): Keeping remote process ~p, killing process in table ~p~n",
                 [node(), RemotePid, TablePid]
             ),
             PidToKill = case KillOther of
