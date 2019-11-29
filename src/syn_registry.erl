@@ -208,39 +208,52 @@ handle_cast({sync_register, Name, RemotePid, RemoteMeta}, State) ->
             add_to_local_table(Name, RemotePid, RemoteMeta, undefined);
 
         Entry when Entry#syn_registry_table.pid =:= RemotePid ->
-            %% same process, no conflict
+            %% same process, no conflict, overwrite
             add_to_local_table(Name, RemotePid, RemoteMeta, undefined);
 
         Entry ->
             %% different pid, we have a conflict
             global:trans({{?MODULE, {inconsistent_name, Name}}, self()},
                 fun() ->
-                    error_logger:warning_msg(
-                        "Syn(~p): REGISTRY NAME INCONSISTENCY FOR ~p ----> Initiating for remote node ~p",
-                        [node(), Name, RemoteNode]
-                    ),
-                    TablePid = Entry#syn_registry_table.pid,
-                    TableMeta = Entry#syn_registry_table.meta,
+                    %% things might have changed while waiting to acquire lock, redo all
+                    case find_process_entry_by_name(Name) of
+                        undefined ->
+                            %% no conflict
+                            add_to_local_table(Name, RemotePid, RemoteMeta, undefined);
 
-                    case resolve_conflict(Name, {TablePid, TableMeta}, {RemotePid, RemoteMeta}, State) of
-                        {PidToKeep, PidToKill} when PidToKeep =:= TablePid ->
-                            ok = rpc:call(RemoteNode, syn_registry, add_to_local_table, [Name, TablePid, TableMeta, undefined]),
-                            syn_kill(PidToKill, Name, RemoteMeta);
+                        Entry when Entry#syn_registry_table.pid =:= RemotePid ->
+                            %% same process, no conflict, overwrite
+                            add_to_local_table(Name, RemotePid, RemoteMeta, undefined);
 
-                        {PidToKeep, PidToKill} when PidToKeep =:= RemotePid ->
-                            %% overwrite
-                            add_to_local_table(Name, RemotePid, RemoteMeta, undefined),
-                            syn_kill(PidToKill, Name, TableMeta);
+                        Entry ->
+                            error_logger:warning_msg(
+                                "Syn(~p): REGISTRY NAME INCONSISTENCY FOR ~p ----> Initiating for remote node ~p~n",
+                                [node(), Name, RemoteNode]
+                            ),
 
-                        _ ->
-                            %% no process is alive, monitors will remove them from tables
-                            ok
-                    end,
+                            TablePid = Entry#syn_registry_table.pid,
+                            TableMeta = Entry#syn_registry_table.meta,
 
-                    error_logger:warning_msg(
-                        "Syn(~p): REGISTRY NAME INCONSISTENCY FOR ~p <---- Done for remote node ~p",
-                        [node(), Name, RemoteNode]
-                    )
+                            case resolve_conflict(Name, {TablePid, TableMeta}, {RemotePid, RemoteMeta}, State) of
+                                {PidToKeep, PidToKill} when PidToKeep =:= TablePid ->
+                                    ok = rpc:call(RemoteNode, syn_registry, add_to_local_table, [Name, TablePid, TableMeta, undefined]),
+                                    syn_kill(PidToKill, Name, RemoteMeta);
+
+                                {PidToKeep, PidToKill} when PidToKeep =:= RemotePid ->
+                                    %% overwrite
+                                    add_to_local_table(Name, RemotePid, RemoteMeta, undefined),
+                                    syn_kill(PidToKill, Name, TableMeta);
+
+                                _ ->
+                                    %% no process is alive, monitors will remove them from tables
+                                    ok
+                            end,
+
+                            error_logger:warning_msg(
+                                "Syn(~p): REGISTRY NAME INCONSISTENCY FOR ~p <---- Done for remote node ~p~n",
+                                [node(), Name, RemoteNode]
+                            )
+                    end
                 end
             )
     end,
