@@ -423,7 +423,7 @@ leave_on_node(GroupName, Pid) ->
             %% remove from table
             remove_from_local_table(Entry);
 
-        Entry ->
+        _Entry ->
             %% race condition: leave request but entry in table is not a local pid (has no monitor)
             %% ignore it, sync messages will take care of it
             ok
