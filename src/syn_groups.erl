@@ -207,6 +207,7 @@ sync_get_local_group_tuples(FromNode) ->
     ignore |
     {stop, Reason :: any()}.
 init([]) ->
+    error_logger:info_msg("Syn(~p): Starting group manager on node~n", [node()]),
     %% rebuild
     rebuild_monitors(),
     %% monitor nodes
@@ -316,11 +317,11 @@ handle_info({nodeup, RemoteNode}, State) ->
     error_logger:info_msg("Syn(~p): Node ~p has joined the cluster~n", [node(), RemoteNode]),
     global:trans({{?MODULE, auto_merge_groups}, self()},
         fun() ->
-            error_logger:warning_msg("Syn(~p): GROUPS AUTOMERGE ----> Initiating for remote node ~p~n", [node(), RemoteNode]),
+            error_logger:info_msg("Syn(~p): GROUP MANAGER AUTOMERGE ----> Initiating for remote node ~p~n", [node(), RemoteNode]),
             %% get group tuples from remote node
             GroupTuples = rpc:call(RemoteNode, ?MODULE, sync_get_local_group_tuples, [node()]),
-            error_logger:warning_msg(
-                "Syn(~p): Received ~p group entrie(s) from remote node ~p~n",
+            error_logger:info_msg(
+                "Syn(~p): Received ~p group tuple(s) from remote node ~p~n",
                 [node(), length(GroupTuples), RemoteNode]
             ),
             %% ensure that groups doesn't have any joining node's entries
@@ -335,7 +336,7 @@ handle_info({nodeup, RemoteNode}, State) ->
                 end
             end, GroupTuples),
             %% exit
-            error_logger:warning_msg("Syn(~p): GROUPS AUTOMERGE <---- Done for remote node ~p~n", [node(), RemoteNode])
+            error_logger:info_msg("Syn(~p): GROUP MANAGER AUTOMERGE <---- Done for remote node ~p~n", [node(), RemoteNode])
         end
     ),
     %% resume

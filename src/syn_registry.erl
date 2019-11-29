@@ -126,6 +126,7 @@ sync_get_local_registry_tuples(FromNode) ->
     ignore |
     {stop, Reason :: any()}.
 init([]) ->
+    error_logger:info_msg("Syn(~p): Starting registry on node~n", [node()]),
     %% rebuild monitors (if coming after a crash)
     rebuild_monitors(),
     %% monitor nodes
@@ -238,7 +239,7 @@ handle_cast({sync_register, Name, RemotePid, RemoteMeta}, State) ->
                             ok
                     end,
 
-                    error_logger:warning_msg(
+                    error_logger:info_msg(
                         "Syn(~p): REGISTRY NAME INCONSISTENCY FOR ~p <---- Done for remote node ~p~n",
                         [node(), Name, RemoteNode]
                     )
@@ -290,10 +291,10 @@ handle_info({'DOWN', _MonitorRef, process, Pid, Reason}, State) ->
     {noreply, State};
 
 handle_info({nodeup, RemoteNode}, State) ->
-    error_logger:warning_msg("Syn(~p): Node ~p has joined the cluster~n", [node(), RemoteNode]),
+    error_logger:info_msg("Syn(~p): Node ~p has joined the cluster~n", [node(), RemoteNode]),
     global:trans({{?MODULE, auto_merge_registry}, self()},
         fun() ->
-            error_logger:warning_msg("Syn(~p): REGISTRY AUTOMERGE ----> Initiating for remote node ~p~n", [node(), RemoteNode]),
+            error_logger:info_msg("Syn(~p): REGISTRY AUTOMERGE ----> Initiating for remote node ~p~n", [node(), RemoteNode]),
             %% get registry tuples from remote node
             RegistryTuples = rpc:call(RemoteNode, ?MODULE, sync_get_local_registry_tuples, [node()]),
             error_logger:info_msg(
@@ -319,7 +320,7 @@ handle_info({nodeup, RemoteNode}, State) ->
                         LocalPid = Entry#syn_registry_table.pid,
                         LocalMeta = Entry#syn_registry_table.meta,
 
-                        error_logger:info_msg(
+                        error_logger:warning_msg(
                             "Syn(~p): Conflicting name in auto merge for: ~p, processes are ~p, ~p~n",
                             [node(), Name, {LocalPid, LocalMeta}, {RemotePid, RemoteMeta}]
                         ),
@@ -341,7 +342,7 @@ handle_info({nodeup, RemoteNode}, State) ->
             %% add to table
             lists:foreach(F, RegistryTuples),
             %% exit
-            error_logger:warning_msg("Syn(~p): REGISTRY AUTOMERGE <---- Done for remote node ~p~n", [node(), RemoteNode])
+            error_logger:info_msg("Syn(~p): REGISTRY AUTOMERGE <---- Done for remote node ~p~n", [node(), RemoteNode])
         end
     ),
     %% resume
@@ -415,7 +416,12 @@ unregister_on_node(Name) ->
             remove_from_local_table(Name);
 
         Entry when Entry#syn_registry_table.node =:= node() ->
-            error_logger:error_msg("Syn(~p): INTERNAL ERROR | Entry ~p has no monitor but it's running on node~n", [node(), Entry]);
+            error_logger:error_msg(
+                "Syn(~p): INTERNAL ERROR | Registry entry ~p has no monitor but it's running on node~n",
+                [node(), Entry]
+            ),
+            %% remove from table
+            remove_from_local_table(Name);
 
         Entry ->
             %% race condition: unregistration request but entry in table is not a local pid (has no monitor)
@@ -520,7 +526,7 @@ resolve_conflict(
     case PidToKeep of
         TablePid ->
             %% keep local
-            error_logger:error_msg(
+            error_logger:info_msg(
                 "Syn(~p): Keeping local process ~p, killing remote ~p~n",
                 [node(), TablePid, RemotePid]
             ),
@@ -533,7 +539,7 @@ resolve_conflict(
 
         RemotePid ->
             %% keep remote
-            error_logger:error_msg(
+            error_logger:info_msg(
                 "Syn(~p): Keeping remote process ~p, killing local ~p~n",
                 [node(), RemotePid, TablePid]
             ),
