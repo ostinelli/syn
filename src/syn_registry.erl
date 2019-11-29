@@ -126,7 +126,6 @@ sync_get_local_registry_tuples(FromNode) ->
     ignore |
     {stop, Reason :: any()}.
 init([]) ->
-    error_logger:info_msg("Syn(~p): Starting registry on node~n", [node()]),
     %% rebuild monitors (if coming after a crash)
     rebuild_monitors(),
     %% monitor nodes

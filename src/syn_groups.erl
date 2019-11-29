@@ -207,7 +207,6 @@ sync_get_local_group_tuples(FromNode) ->
     ignore |
     {stop, Reason :: any()}.
 init([]) ->
-    error_logger:info_msg("Syn(~p): Starting group manager on node~n", [node()]),
     %% rebuild
     rebuild_monitors(),
     %% monitor nodes
