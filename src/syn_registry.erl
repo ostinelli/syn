@@ -110,7 +110,7 @@ sync_unregister(RemoteNode, Name) ->
 
 -spec sync_get_local_registry_tuples(FromNode :: node()) -> [syn_registry_tuple()].
 sync_get_local_registry_tuples(FromNode) ->
-    error_logger:info_msg("Syn(~p): Received request of local registry tuples from remote node ~p", [node(), FromNode]),
+    error_logger:info_msg("Syn(~p): Received request of local registry tuples from remote node ~p~n", [node(), FromNode]),
     get_registry_tuples_for_node(node()).
 
 %% ===================================================================
@@ -187,7 +187,7 @@ handle_call({unregister_on_node, Name}, _From, State) ->
     end;
 
 handle_call(Request, From, State) ->
-    error_logger:warning_msg("Syn(~p): Received from ~p an unknown call message: ~p", [node(), Request, From]),
+    error_logger:warning_msg("Syn(~p): Received from ~p an unknown call message: ~p~n", [node(), Request, From]),
     {reply, undefined, State}.
 
 %% ----------------------------------------------------------------------------------------------------------
@@ -267,7 +267,7 @@ handle_cast({sync_unregister, Name}, State) ->
     {noreply, State};
 
 handle_cast(Msg, State) ->
-    error_logger:warning_msg("Syn(~p): Received an unknown cast message: ~p", [node(), Msg]),
+    error_logger:warning_msg("Syn(~p): Received an unknown cast message: ~p~n", [node(), Msg]),
     {noreply, State}.
 
 %% ----------------------------------------------------------------------------------------------------------
@@ -302,14 +302,14 @@ handle_info({'DOWN', _MonitorRef, process, Pid, Reason}, State) ->
     {noreply, State};
 
 handle_info({nodeup, RemoteNode}, State) ->
-    error_logger:warning_msg("Syn(~p): Node ~p has joined the cluster", [node(), RemoteNode]),
+    error_logger:warning_msg("Syn(~p): Node ~p has joined the cluster~n", [node(), RemoteNode]),
     global:trans({{?MODULE, auto_merge_registry}, self()},
         fun() ->
-            error_logger:warning_msg("Syn(~p): REGISTRY AUTOMERGE ----> Initiating for remote node ~p", [node(), RemoteNode]),
+            error_logger:warning_msg("Syn(~p): REGISTRY AUTOMERGE ----> Initiating for remote node ~p~n", [node(), RemoteNode]),
             %% get registry tuples from remote node
             RegistryTuples = rpc:call(RemoteNode, ?MODULE, sync_get_local_registry_tuples, [node()]),
             error_logger:info_msg(
-                "Syn(~p): Received ~p registry tuple(s) from remote node ~p",
+                "Syn(~p): Received ~p registry tuple(s) from remote node ~p~n",
                 [node(), length(RegistryTuples), RemoteNode]
             ),
             %% ensure that registry doesn't have any joining node's entries (here again for race conditions)
@@ -332,7 +332,7 @@ handle_info({nodeup, RemoteNode}, State) ->
                         LocalMeta = Entry#syn_registry_table.meta,
 
                         error_logger:info_msg(
-                            "Syn(~p): Conflicting name in auto merge for: ~p, processes are ~p, ~p",
+                            "Syn(~p): Conflicting name in auto merge for: ~p, processes are ~p, ~p~n",
                             [node(), Name, {LocalPid, LocalMeta}, {RemotePid, RemoteMeta}]
                         ),
 
@@ -353,19 +353,19 @@ handle_info({nodeup, RemoteNode}, State) ->
             %% add to table
             lists:foreach(F, RegistryTuples),
             %% exit
-            error_logger:warning_msg("Syn(~p): REGISTRY AUTOMERGE <---- Done for remote node ~p", [node(), RemoteNode])
+            error_logger:warning_msg("Syn(~p): REGISTRY AUTOMERGE <---- Done for remote node ~p~n", [node(), RemoteNode])
         end
     ),
     %% resume
     {noreply, State};
 
 handle_info({nodedown, RemoteNode}, State) ->
-    error_logger:warning_msg("Syn(~p): Node ~p has left the cluster, removing registry entries on local", [node(), RemoteNode]),
+    error_logger:warning_msg("Syn(~p): Node ~p has left the cluster, removing registry entries on local~n", [node(), RemoteNode]),
     raw_purge_registry_entries_for_remote_node(RemoteNode),
     {noreply, State};
 
 handle_info(Info, State) ->
-    error_logger:warning_msg("Syn(~p): Received an unknown info message: ~p", [node(), Info]),
+    error_logger:warning_msg("Syn(~p): Received an unknown info message: ~p~n", [node(), Info]),
     {noreply, State}.
 
 %% ----------------------------------------------------------------------------------------------------------
@@ -373,7 +373,7 @@ handle_info(Info, State) ->
 %% ----------------------------------------------------------------------------------------------------------
 -spec terminate(Reason :: any(), #state{}) -> terminated.
 terminate(Reason, _State) ->
-    error_logger:info_msg("Syn(~p): Terminating with reason: ~p", [node(), Reason]),
+    error_logger:info_msg("Syn(~p): Terminating with reason: ~p~n", [node(), Reason]),
     terminated.
 
 %% ----------------------------------------------------------------------------------------------------------
@@ -424,6 +424,11 @@ unregister_on_node(Name) ->
             %% demonitor
             erlang:demonitor(Entry#syn_registry_table.monitor_ref),
             %% remove from table
+            remove_from_local_table(Name);
+
+        Entry ->
+            error_logger:error_msg("Syn(~p): Entry ~p asked to be unregistered on node, but had no monitor~n", [node(), Entry]),
+            %% remove from table
             remove_from_local_table(Name)
     end.
 
@@ -472,7 +477,7 @@ handle_process_down(Name, Pid, Meta, Reason, #state{
                     syn_event_handler:do_on_process_exit(KillName, Pid, KillMeta, syn_resolve_kill, CustomEventHandler);
                 _ ->
                     error_logger:warning_msg(
-                        "Syn(~p): Received a DOWN message from an unregistered process ~p with reason: ~p",
+                        "Syn(~p): Received a DOWN message from an unregistered process ~p with reason: ~p~n",
                         [node(), Pid, Reason]
                     )
             end;
@@ -525,7 +530,7 @@ resolve_conflict(
         TablePid ->
             %% keep local
             error_logger:error_msg(
-                "Syn(~p): Keeping local process ~p, killing remote ~p",
+                "Syn(~p): Keeping local process ~p, killing remote ~p~n",
                 [node(), TablePid, RemotePid]
             ),
             PidToKill = case KillOther of
@@ -538,7 +543,7 @@ resolve_conflict(
         RemotePid ->
             %% keep remote
             error_logger:error_msg(
-                "Syn(~p): Keeping remote process ~p, killing local ~p",
+                "Syn(~p): Keeping remote process ~p, killing local ~p~n",
                 [node(), RemotePid, TablePid]
             ),
             PidToKill = case KillOther of
@@ -557,12 +562,13 @@ resolve_conflict(
 
         Other ->
             error_logger:error_msg(
-                "Syn(~p): Custom handler returned ~p, valid options were ~p and ~p",
+                "Syn(~p): Custom handler returned ~p, valid options were ~p and ~p~n",
                 [node(), Other, TablePid, RemotePid]
             ),
             %% return
             {undefined, undefined}
     end.
+
 -spec syn_kill(PidToKill :: pid(), Name :: any(), Meta :: any()) -> true.
 syn_kill(undefined, _, _) -> true;
 syn_kill(PidToKill, Name, Meta) -> exit(PidToKill, {syn_resolve_kill, Name, Meta}).

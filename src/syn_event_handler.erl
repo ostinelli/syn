@@ -107,7 +107,7 @@ do_resolve_registry_conflict(Name, {Pid1, Meta1}, {Pid2, Meta2}, CustomEventHand
                     {undefined, false}
             catch Exception:Reason ->
                 error_logger:error_msg(
-                    "Syn(~p): Error ~p in custom handler resolve_registry_conflict: ~p",
+                    "Syn(~p): Error ~p in custom handler resolve_registry_conflict: ~p~n",
                     [node(), Exception, Reason]
                 ),
                 {undefined, false}

@@ -191,7 +191,7 @@ sync_leave(RemoteNode, GroupName, Pid) ->
 
 -spec sync_get_local_group_tuples(FromNode :: node()) -> list(syn_group_tuple()).
 sync_get_local_group_tuples(FromNode) ->
-    error_logger:info_msg("Syn(~p): Received request of local group tuples from remote node: ~p", [node(), FromNode]),
+    error_logger:info_msg("Syn(~p): Received request of local group tuples from remote node: ~p~n", [node(), FromNode]),
     get_group_tuples_for_node(node()).
 
 %% ===================================================================
@@ -255,7 +255,7 @@ handle_call({leave_on_node, GroupName, Pid}, _From, State) ->
     end;
 
 handle_call(Request, From, State) ->
-    error_logger:warning_msg("Syn(~p): Received from ~p an unknown call message: ~p", [node(), Request, From]),
+    error_logger:warning_msg("Syn(~p): Received from ~p an unknown call message: ~p~n", [node(), Request, From]),
     {reply, undefined, State}.
 
 %% ----------------------------------------------------------------------------------------------------------
@@ -279,7 +279,7 @@ handle_cast({sync_leave, GroupName, Pid}, State) ->
     {noreply, State};
 
 handle_cast(Msg, State) ->
-    error_logger:warning_msg("Syn(~p): Received an unknown cast message: ~p", [node(), Msg]),
+    error_logger:warning_msg("Syn(~p): Received an unknown cast message: ~p~n", [node(), Msg]),
     {noreply, State}.
 
 %% ----------------------------------------------------------------------------------------------------------
@@ -313,14 +313,14 @@ handle_info({'DOWN', _MonitorRef, process, Pid, Reason}, State) ->
     {noreply, State};
 
 handle_info({nodeup, RemoteNode}, State) ->
-    error_logger:info_msg("Syn(~p): Node ~p has joined the cluster", [node(), RemoteNode]),
+    error_logger:info_msg("Syn(~p): Node ~p has joined the cluster~n", [node(), RemoteNode]),
     global:trans({{?MODULE, auto_merge_groups}, self()},
         fun() ->
-            error_logger:warning_msg("Syn(~p): GROUPS AUTOMERGE ----> Initiating for remote node ~p", [node(), RemoteNode]),
+            error_logger:warning_msg("Syn(~p): GROUPS AUTOMERGE ----> Initiating for remote node ~p~n", [node(), RemoteNode]),
             %% get group tuples from remote node
             GroupTuples = rpc:call(RemoteNode, ?MODULE, sync_get_local_group_tuples, [node()]),
             error_logger:warning_msg(
-                "Syn(~p): Received ~p group entrie(s) from remote node ~p",
+                "Syn(~p): Received ~p group entrie(s) from remote node ~p~n",
                 [node(), length(GroupTuples), RemoteNode]
             ),
             %% ensure that groups doesn't have any joining node's entries
@@ -335,19 +335,19 @@ handle_info({nodeup, RemoteNode}, State) ->
                 end
             end, GroupTuples),
             %% exit
-            error_logger:warning_msg("Syn(~p): GROUPS AUTOMERGE <---- Done for remote node ~p", [node(), RemoteNode])
+            error_logger:warning_msg("Syn(~p): GROUPS AUTOMERGE <---- Done for remote node ~p~n", [node(), RemoteNode])
         end
     ),
     %% resume
     {noreply, State};
 
 handle_info({nodedown, RemoteNode}, State) ->
-    error_logger:warning_msg("Syn(~p): Node ~p has left the cluster, removing group entries on local", [node(), RemoteNode]),
+    error_logger:warning_msg("Syn(~p): Node ~p has left the cluster, removing group entries on local~n", [node(), RemoteNode]),
     raw_purge_group_entries_for_node(RemoteNode),
     {noreply, State};
 
 handle_info(Info, State) ->
-    error_logger:warning_msg("Syn(~p): Received an unknown info message: ~p", [node(), Info]),
+    error_logger:warning_msg("Syn(~p): Received an unknown info message: ~p~n", [node(), Info]),
     {noreply, State}.
 
 %% ----------------------------------------------------------------------------------------------------------
@@ -355,7 +355,7 @@ handle_info(Info, State) ->
 %% ----------------------------------------------------------------------------------------------------------
 -spec terminate(Reason :: any(), #state{}) -> terminated.
 terminate(Reason, _State) ->
-    error_logger:info_msg("Syn(~p): Terminating with reason: ~p", [node(), Reason]),
+    error_logger:info_msg("Syn(~p): Terminating with reason: ~p~n", [node(), Reason]),
     terminated.
 
 %% ----------------------------------------------------------------------------------------------------------
@@ -474,7 +474,7 @@ handle_process_down(GroupName, Pid, Meta, Reason, #state{
     case GroupName of
         undefined ->
             error_logger:warning_msg(
-                "Syn(~p): Received a DOWN message from an unjoined group process ~p with reason: ~p",
+                "Syn(~p): Received a DOWN message from an unjoined group process ~p with reason: ~p~n",
                 [node(), Pid, Reason]
             );
         _ ->
