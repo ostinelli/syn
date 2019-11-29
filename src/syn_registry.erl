@@ -411,7 +411,7 @@ unregister_on_node(Name) ->
 
         Entry when Entry#syn_registry_table.monitor_ref =/= undefined ->
             %% demonitor
-            erlang:demonitor(Entry#syn_registry_table.monitor_ref),
+            erlang:demonitor(Entry#syn_registry_table.monitor_ref, [flush]),
             %% remove from table
             remove_from_local_table(Name);
 

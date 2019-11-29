@@ -408,7 +408,7 @@ leave_on_node(GroupName, Pid) ->
             case find_processes_entry_by_pid(Pid) of
                 [Entry] ->
                     %% demonitor
-                    erlang:demonitor(Entry#syn_groups_table.monitor_ref);
+                    erlang:demonitor(Entry#syn_groups_table.monitor_ref, [flush]);
                 _ ->
                     ok
             end,
