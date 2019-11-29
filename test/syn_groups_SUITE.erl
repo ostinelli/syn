@@ -303,7 +303,7 @@ single_node_publish(_Config) ->
     end,
     Pid = syn_test_suite_helper:start_process(F),
     Pid2 = syn_test_suite_helper:start_process(F),
-    OtherPid = syn_test_suite_helper:start_process(F),
+    _OtherPid = syn_test_suite_helper:start_process(F),
     %% join
     ok = syn:join(GroupName, Pid),
     ok = syn:join(GroupName, Pid2),
