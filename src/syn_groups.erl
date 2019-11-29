@@ -413,7 +413,20 @@ leave_on_node(GroupName, Pid) ->
                     ok
             end,
             %% remove from table
-            remove_from_local_table(Entry)
+            remove_from_local_table(Entry);
+
+        Entry when Entry#syn_groups_table.node =:= node() ->
+            error_logger:error_msg(
+                "Syn(~p): INTERNAL ERROR | Group entry ~p has no monitor but it's running on node~n",
+                [node(), Entry]
+            ),
+            %% remove from table
+            remove_from_local_table(Entry);
+
+        Entry ->
+            %% race condition: leave request but entry in table is not a local pid (has no monitor)
+            %% ignore it, sync messages will take care of it
+            ok
     end.
 
 -spec add_to_local_table(GroupName :: any(), Pid :: pid(), Meta :: any(), MonitorRef :: undefined | reference()) -> ok.
