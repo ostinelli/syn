@@ -424,7 +424,7 @@ unregister_on_node(Name) ->
             remove_from_local_table(Name);
 
         Entry ->
-            %% race condition: unregistration request but entry in table is not a local pid (has no monitor)
+            %% race condition: un-registration request but entry in table is not a local pid (has no monitor)
             %% ignore it, sync messages will take care of it
             ok
     end.
