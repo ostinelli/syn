@@ -215,45 +215,33 @@ handle_cast({sync_register, Name, RemotePid, RemoteMeta}, State) ->
             %% different pid, we have a conflict
             global:trans({{?MODULE, {inconsistent_name, Name}}, self()},
                 fun() ->
-                    %% things might have changed while waiting to acquire lock, redo all
-                    case find_process_entry_by_name(Name) of
-                        undefined ->
-                            %% no conflict
-                            add_to_local_table(Name, RemotePid, RemoteMeta, undefined);
+                    error_logger:warning_msg(
+                        "Syn(~p): REGISTRY NAME INCONSISTENCY FOR ~p ----> Initiating for remote node ~p~n",
+                        [node(), Name, RemoteNode]
+                    ),
 
-                        Entry when Entry#syn_registry_table.pid =:= RemotePid ->
-                            %% same process, no conflict, overwrite
-                            add_to_local_table(Name, RemotePid, RemoteMeta, undefined);
+                    TablePid = Entry#syn_registry_table.pid,
+                    TableMeta = Entry#syn_registry_table.meta,
 
-                        Entry ->
-                            error_logger:warning_msg(
-                                "Syn(~p): REGISTRY NAME INCONSISTENCY FOR ~p ----> Initiating for remote node ~p~n",
-                                [node(), Name, RemoteNode]
-                            ),
+                    case resolve_conflict(Name, {TablePid, TableMeta}, {RemotePid, RemoteMeta}, State) of
+                        {PidToKeep, PidToKill} when PidToKeep =:= TablePid ->
+                            ok = rpc:call(RemoteNode, syn_registry, add_to_local_table, [Name, TablePid, TableMeta, undefined]),
+                            syn_kill(PidToKill, Name, RemoteMeta);
 
-                            TablePid = Entry#syn_registry_table.pid,
-                            TableMeta = Entry#syn_registry_table.meta,
+                        {PidToKeep, PidToKill} when PidToKeep =:= RemotePid ->
+                            %% overwrite
+                            add_to_local_table(Name, RemotePid, RemoteMeta, undefined),
+                            syn_kill(PidToKill, Name, TableMeta);
 
-                            case resolve_conflict(Name, {TablePid, TableMeta}, {RemotePid, RemoteMeta}, State) of
-                                {PidToKeep, PidToKill} when PidToKeep =:= TablePid ->
-                                    ok = rpc:call(RemoteNode, syn_registry, add_to_local_table, [Name, TablePid, TableMeta, undefined]),
-                                    syn_kill(PidToKill, Name, RemoteMeta);
+                        _ ->
+                            %% no process is alive, monitors will remove them from tables
+                            ok
+                    end,
 
-                                {PidToKeep, PidToKill} when PidToKeep =:= RemotePid ->
-                                    %% overwrite
-                                    add_to_local_table(Name, RemotePid, RemoteMeta, undefined),
-                                    syn_kill(PidToKill, Name, TableMeta);
-
-                                _ ->
-                                    %% no process is alive, monitors will remove them from tables
-                                    ok
-                            end,
-
-                            error_logger:warning_msg(
-                                "Syn(~p): REGISTRY NAME INCONSISTENCY FOR ~p <---- Done for remote node ~p~n",
-                                [node(), Name, RemoteNode]
-                            )
-                    end
+                    error_logger:warning_msg(
+                        "Syn(~p): REGISTRY NAME INCONSISTENCY FOR ~p <---- Done for remote node ~p~n",
+                        [node(), Name, RemoteNode]
+                    )
                 end
             )
     end,
@@ -426,10 +414,13 @@ unregister_on_node(Name) ->
             %% remove from table
             remove_from_local_table(Name);
 
+        Entry when Entry#syn_registry_table.node =:= node() ->
+            error_logger:error_msg("Syn(~p): INTERNAL ERROR | Entry ~p has no monitor but it's running on node~n", [node(), Entry]);
+
         Entry ->
-            error_logger:error_msg("Syn(~p): Entry ~p asked to be unregistered on node, but had no monitor~n", [node(), Entry]),
-            %% remove from table
-            remove_from_local_table(Name)
+            %% race condition: unregistration request but entry in table is not a local pid (has no monitor)
+            %% ignore it, sync messages will take care of it
+            ok
     end.
 
 -spec add_to_local_table(Name :: any(), Pid :: pid(), Meta :: any(), MonitorRef :: undefined | reference()) -> ok.
