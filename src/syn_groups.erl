@@ -213,6 +213,8 @@ init([]) ->
     ok = net_kernel:monitor_nodes(true),
     %% get handler
     CustomEventHandler = syn_backbone:get_event_handler_module(),
+    %% start first sync
+    self() ! sync_all,
     %% init
     {ok, #state{
         custom_event_handler = CustomEventHandler
@@ -312,32 +314,18 @@ handle_info({'DOWN', _MonitorRef, process, Pid, Reason}, State) ->
     %% return
     {noreply, State};
 
+handle_info(sync_all, State) ->
+    error_logger:info_msg("Syn(~p): Start first groups sync~n", [node()]),
+    %% loop all nodes
+    lists:foreach(fun(RemoteNode) ->
+        group_manager_automerge(RemoteNode)
+    end, nodes()),
+    %% return
+    {noreply, State};
+
 handle_info({nodeup, RemoteNode}, State) ->
     error_logger:info_msg("Syn(~p): Node ~p has joined the cluster~n", [node(), RemoteNode]),
-    global:trans({{?MODULE, auto_merge_groups}, self()},
-        fun() ->
-            error_logger:info_msg("Syn(~p): GROUP MANAGER AUTOMERGE ----> Initiating for remote node ~p~n", [node(), RemoteNode]),
-            %% get group tuples from remote node
-            GroupTuples = rpc:call(RemoteNode, ?MODULE, sync_get_local_group_tuples, [node()]),
-            error_logger:info_msg(
-                "Syn(~p): Received ~p group tuple(s) from remote node ~p~n",
-                [node(), length(GroupTuples), RemoteNode]
-            ),
-            %% ensure that groups doesn't have any joining node's entries
-            raw_purge_group_entries_for_node(RemoteNode),
-            %% add
-            lists:foreach(fun({GroupName, RemotePid, RemoteMeta}) ->
-                case rpc:call(node(RemotePid), erlang, is_process_alive, [RemotePid]) of
-                    true ->
-                        add_to_local_table(GroupName, RemotePid, RemoteMeta, undefined);
-                    _ ->
-                        ok = rpc:call(RemoteNode, syn_registry, remove_from_local_table, [GroupName, RemotePid])
-                end
-            end, GroupTuples),
-            %% exit
-            error_logger:info_msg("Syn(~p): GROUP MANAGER AUTOMERGE <---- Done for remote node ~p~n", [node(), RemoteNode])
-        end
-    ),
+    group_manager_automerge(RemoteNode),
     %% resume
     {noreply, State};
 
@@ -493,6 +481,38 @@ handle_process_down(GroupName, Pid, Meta, Reason, #state{
         _ ->
             syn_event_handler:do_on_group_process_exit(GroupName, Pid, Meta, Reason, CustomEventHandler)
     end.
+
+-spec group_manager_automerge(RemoteNode :: node()) -> ok.
+group_manager_automerge(RemoteNode) ->
+    global:trans({{?MODULE, auto_merge_groups}, self()},
+        fun() ->
+            error_logger:info_msg("Syn(~p): GROUP MANAGER AUTOMERGE ----> Initiating for remote node ~p~n", [node(), RemoteNode]),
+            %% get group tuples from remote node
+            case rpc:call(RemoteNode, ?MODULE, sync_get_local_group_tuples, [node()]) of
+                {badrpc, _} ->
+                    error_logger:info_msg("Syn(~p): GROUP MANAGER AUTOMERGE <---- Syn not ready on remote node ~p, aborting~n", [node(), RemoteNode]);
+
+                GroupTuples ->
+                    error_logger:info_msg(
+                        "Syn(~p): Received ~p group tuple(s) from remote node ~p~n",
+                        [node(), length(GroupTuples), RemoteNode]
+                    ),
+                    %% ensure that groups doesn't have any joining node's entries
+                    raw_purge_group_entries_for_node(RemoteNode),
+                    %% add
+                    lists:foreach(fun({GroupName, RemotePid, RemoteMeta}) ->
+                        case rpc:call(node(RemotePid), erlang, is_process_alive, [RemotePid]) of
+                            true ->
+                                add_to_local_table(GroupName, RemotePid, RemoteMeta, undefined);
+                            _ ->
+                                ok = rpc:call(RemoteNode, syn_registry, remove_from_local_table, [GroupName, RemotePid])
+                        end
+                    end, GroupTuples),
+                    %% exit
+                    error_logger:info_msg("Syn(~p): GROUP MANAGER AUTOMERGE <---- Done for remote node ~p~n", [node(), RemoteNode])
+            end
+        end
+    ).
 
 -spec raw_purge_group_entries_for_node(Node :: atom()) -> ok.
 raw_purge_group_entries_for_node(Node) ->

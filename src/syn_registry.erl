@@ -132,6 +132,8 @@ init([]) ->
     ok = net_kernel:monitor_nodes(true),
     %% get handler
     CustomEventHandler = syn_backbone:get_event_handler_module(),
+    %% start first sync
+    self() ! sync_all,
     %% init
     {ok, #state{
         custom_event_handler = CustomEventHandler
@@ -289,61 +291,18 @@ handle_info({'DOWN', _MonitorRef, process, Pid, Reason}, State) ->
     %% return
     {noreply, State};
 
+handle_info(sync_all, State) ->
+    error_logger:info_msg("Syn(~p): Start first registry sync~n", [node()]),
+    %% loop all nodes
+    lists:foreach(fun(RemoteNode) ->
+        registry_automerge(RemoteNode, State)
+    end, nodes()),
+    %% return
+    {noreply, State};
+
 handle_info({nodeup, RemoteNode}, State) ->
     error_logger:info_msg("Syn(~p): Node ~p has joined the cluster~n", [node(), RemoteNode]),
-    global:trans({{?MODULE, auto_merge_registry}, self()},
-        fun() ->
-            error_logger:info_msg("Syn(~p): REGISTRY AUTOMERGE ----> Initiating for remote node ~p~n", [node(), RemoteNode]),
-            %% get registry tuples from remote node
-            RegistryTuples = rpc:call(RemoteNode, ?MODULE, sync_get_local_registry_tuples, [node()]),
-            error_logger:info_msg(
-                "Syn(~p): Received ~p registry tuple(s) from remote node ~p~n",
-                [node(), length(RegistryTuples), RemoteNode]
-            ),
-            %% ensure that registry doesn't have any joining node's entries (here again for race conditions)
-            raw_purge_registry_entries_for_remote_node(RemoteNode),
-            %% loop
-            F = fun({Name, RemotePid, RemoteMeta}) ->
-                %% check if same name is registered
-                case find_process_entry_by_name(Name) of
-                    undefined ->
-                        %% no conflict
-                        case rpc:call(node(RemotePid), erlang, is_process_alive, [RemotePid]) of
-                            true ->
-                                add_to_local_table(Name, RemotePid, RemoteMeta, undefined);
-                            _ ->
-                                ok = rpc:call(RemoteNode, syn_registry, remove_from_local_table, [Name])
-                        end;
-
-                    Entry ->
-                        LocalPid = Entry#syn_registry_table.pid,
-                        LocalMeta = Entry#syn_registry_table.meta,
-
-                        error_logger:warning_msg(
-                            "Syn(~p): Conflicting name in auto merge for: ~p, processes are ~p, ~p~n",
-                            [node(), Name, {LocalPid, LocalMeta}, {RemotePid, RemoteMeta}]
-                        ),
-
-                        case resolve_conflict(Name, {LocalPid, LocalMeta}, {RemotePid, RemoteMeta}, State) of
-                            {PidToKeep, PidToKill} when PidToKeep =:= LocalPid ->
-                                ok = rpc:call(RemoteNode, syn_registry, remove_from_local_table, [Name]),
-                                syn_kill(PidToKill, Name, RemoteMeta);
-
-                            {PidToKeep, PidToKill} when PidToKeep =:= RemotePid ->
-                                add_to_local_table(Name, RemotePid, RemoteMeta, undefined),
-                                syn_kill(PidToKill, Name, LocalMeta);
-
-                            _ ->
-                                ok
-                        end
-                end
-            end,
-            %% add to table
-            lists:foreach(F, RegistryTuples),
-            %% exit
-            error_logger:info_msg("Syn(~p): REGISTRY AUTOMERGE <---- Done for remote node ~p~n", [node(), RemoteNode])
-        end
-    ),
+    registry_automerge(RemoteNode, State),
     %% resume
     {noreply, State};
 
@@ -481,6 +440,67 @@ handle_process_down(Name, Pid, Meta, Reason, #state{
         _ ->
             syn_event_handler:do_on_process_exit(Name, Pid, Meta, Reason, CustomEventHandler)
     end.
+
+-spec registry_automerge(RemoteNode :: node(), #state{}) -> ok.
+registry_automerge(RemoteNode, State) ->
+    global:trans({{?MODULE, auto_merge_registry}, self()},
+        fun() ->
+            error_logger:info_msg("Syn(~p): REGISTRY AUTOMERGE ----> Initiating for remote node ~p~n", [node(), RemoteNode]),
+            %% get registry tuples from remote node
+            case rpc:call(RemoteNode, ?MODULE, sync_get_local_registry_tuples, [node()]) of
+                {badrpc, _} ->
+                    error_logger:info_msg("Syn(~p): REGISTRY AUTOMERGE <---- Syn not ready on remote node ~p, aborting~n", [node(), RemoteNode]);
+
+                RegistryTuples ->
+                    error_logger:info_msg(
+                        "Syn(~p): Received ~p registry tuple(s) from remote node ~p~n",
+                        [node(), length(RegistryTuples), RemoteNode]
+                    ),
+                    %% ensure that registry doesn't have any joining node's entries (here again for race conditions)
+                    raw_purge_registry_entries_for_remote_node(RemoteNode),
+                    %% loop
+                    F = fun({Name, RemotePid, RemoteMeta}) ->
+                        %% check if same name is registered
+                        case find_process_entry_by_name(Name) of
+                            undefined ->
+                                %% no conflict
+                                case rpc:call(node(RemotePid), erlang, is_process_alive, [RemotePid]) of
+                                    true ->
+                                        add_to_local_table(Name, RemotePid, RemoteMeta, undefined);
+                                    _ ->
+                                        ok = rpc:call(RemoteNode, syn_registry, remove_from_local_table, [Name])
+                                end;
+
+                            Entry ->
+                                LocalPid = Entry#syn_registry_table.pid,
+                                LocalMeta = Entry#syn_registry_table.meta,
+
+                                error_logger:warning_msg(
+                                    "Syn(~p): Conflicting name in auto merge for: ~p, processes are ~p, ~p~n",
+                                    [node(), Name, {LocalPid, LocalMeta}, {RemotePid, RemoteMeta}]
+                                ),
+
+                                case resolve_conflict(Name, {LocalPid, LocalMeta}, {RemotePid, RemoteMeta}, State) of
+                                    {PidToKeep, PidToKill} when PidToKeep =:= LocalPid ->
+                                        ok = rpc:call(RemoteNode, syn_registry, remove_from_local_table, [Name]),
+                                        syn_kill(PidToKill, Name, RemoteMeta);
+
+                                    {PidToKeep, PidToKill} when PidToKeep =:= RemotePid ->
+                                        add_to_local_table(Name, RemotePid, RemoteMeta, undefined),
+                                        syn_kill(PidToKill, Name, LocalMeta);
+
+                                    _ ->
+                                        ok
+                                end
+                        end
+                    end,
+                    %% add to table
+                    lists:foreach(F, RegistryTuples),
+                    %% exit
+                    error_logger:info_msg("Syn(~p): REGISTRY AUTOMERGE <---- Done for remote node ~p~n", [node(), RemoteNode])
+            end
+        end
+    ).
 
 -spec resolve_conflict(
     Name :: any(),
