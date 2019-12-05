@@ -493,7 +493,7 @@ two_nodes_registration_race_condition_conflict_resolution_keep_local(Config) ->
     %% start syn on nodes
     ok = syn:start(),
     ok = rpc:call(SlaveNode, syn, start, []),
-    timer:sleep(100),
+    timer:sleep(1000),
     %% start processes
     Pid0 = syn_test_suite_helper:start_process(),
     Pid1 = syn_test_suite_helper:start_process(SlaveNode),
@@ -520,7 +520,7 @@ two_nodes_registration_race_condition_conflict_resolution_keep_remote(Config) ->
     %% start syn on nodes
     ok = syn:start(),
     ok = rpc:call(SlaveNode, syn, start, []),
-    timer:sleep(100),
+    timer:sleep(1000),
     %% start processes
     Pid0 = syn_test_suite_helper:start_process(),
     Pid1 = syn_test_suite_helper:start_process(SlaveNode),

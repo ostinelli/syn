@@ -1028,7 +1028,7 @@ three_nodes_full_netsplit_consistency(Config) ->
     rpc:call(SlaveNode1, syn_test_suite_helper, disconnect_node, [SlaveNode2]),
     syn_test_suite_helper:disconnect_node(SlaveNode1),
     syn_test_suite_helper:disconnect_node(SlaveNode2),
-    timer:sleep(1000),
+    timer:sleep(2000),
     %% leave 0Changed
     ok = syn:leave(GroupName, Pid0Changed),
     %% retrieve local
