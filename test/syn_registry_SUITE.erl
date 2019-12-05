@@ -47,7 +47,9 @@
     two_nodes_registry_count/1,
     two_nodes_registration_race_condition_conflict_resolution_keep_local/1,
     two_nodes_registration_race_condition_conflict_resolution_keep_remote/1,
-    two_nodes_registration_race_condition_conflict_resolution_when_process_died/1
+    two_nodes_registration_race_condition_conflict_resolution_when_process_died/1,
+    two_nodes_registry_full_cluster_sync_on_boot_node_added_later/1,
+    two_nodes_registry_full_cluster_sync_on_boot_syn_started_later/1
 ]).
 -export([
     three_nodes_partial_netsplit_consistency/1,
@@ -114,7 +116,9 @@ groups() ->
             two_nodes_registry_count,
             two_nodes_registration_race_condition_conflict_resolution_keep_local,
             two_nodes_registration_race_condition_conflict_resolution_keep_remote,
-            two_nodes_registration_race_condition_conflict_resolution_when_process_died
+            two_nodes_registration_race_condition_conflict_resolution_when_process_died,
+            two_nodes_registry_full_cluster_sync_on_boot_node_added_later,
+            two_nodes_registry_full_cluster_sync_on_boot_syn_started_later
         ]},
         {three_nodes_process_registration, [shuffle], [
             three_nodes_partial_netsplit_consistency,
@@ -558,6 +562,39 @@ two_nodes_registration_race_condition_conflict_resolution_when_process_died(Conf
     {Pid1, SlaveNode} = rpc:call(SlaveNode, syn, whereis, [ConflictingName, with_meta]),
     %% check that process is alive
     true = rpc:call(SlaveNode, erlang, is_process_alive, [Pid1]).
+
+two_nodes_registry_full_cluster_sync_on_boot_node_added_later(_Config) ->
+    %% stop slave
+    syn_test_suite_helper:stop_slave(syn_slave),
+    %% start syn on local node
+    ok = syn:start(),
+    %% start process
+    Pid = syn_test_suite_helper:start_process(),
+    %% register
+    ok = syn:register(<<"proc">>, Pid),
+    %% start remote node and syn
+    {ok, SlaveNode} = syn_test_suite_helper:start_slave(syn_slave),
+    ok = rpc:call(SlaveNode, syn, start, []),
+    timer:sleep(1000),
+    %% check
+    Pid = syn:whereis(<<"proc">>),
+    Pid = rpc:call(SlaveNode, syn, whereis, [<<"proc">>]).
+
+two_nodes_registry_full_cluster_sync_on_boot_syn_started_later(Config) ->
+    %% get slaves
+    SlaveNode = proplists:get_value(slave_node, Config),
+    %% start syn on local node
+    ok = syn:start(),
+    %% start process
+    Pid = syn_test_suite_helper:start_process(),
+    %% register
+    ok = syn:register(<<"proc">>, Pid),
+    %% start ib remote syn
+    ok = rpc:call(SlaveNode, syn, start, []),
+    timer:sleep(500),
+    %% check
+    Pid = syn:whereis(<<"proc">>),
+    Pid = rpc:call(SlaveNode, syn, whereis, [<<"proc">>]).
 
 three_nodes_partial_netsplit_consistency(Config) ->
     %% get slaves

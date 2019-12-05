@@ -132,6 +132,8 @@ init([]) ->
     ok = net_kernel:monitor_nodes(true),
     %% get handler
     CustomEventHandler = syn_backbone:get_event_handler_module(),
+    %% send message to initiate full cluster sync
+    timer:send_after(0, self(), sync_full_cluster),
     %% init
     {ok, #state{
         custom_event_handler = CustomEventHandler
@@ -291,6 +293,13 @@ handle_info({nodedown, RemoteNode}, State) ->
     raw_purge_registry_entries_for_remote_node(RemoteNode),
     {noreply, State};
 
+handle_info(sync_full_cluster, State) ->
+    error_logger:info_msg("Syn(~p): Initiating full cluster registry sync for nodes: ~p~n", [node(), nodes()]),
+    lists:foreach(fun(RemoteNode) ->
+        registry_automerge(RemoteNode, State)
+    end, nodes()),
+    {noreply, State};
+
 handle_info(Info, State) ->
     error_logger:warning_msg("Syn(~p): Received an unknown info message: ~p~n", [node(), Info]),
     {noreply, State}.
@@ -427,46 +436,51 @@ registry_automerge(RemoteNode, State) ->
         fun() ->
             error_logger:info_msg("Syn(~p): REGISTRY AUTOMERGE ----> Initiating for remote node ~p~n", [node(), RemoteNode]),
             %% get registry tuples from remote node
-            RegistryTuples = rpc:call(RemoteNode, ?MODULE, sync_get_local_registry_tuples, [node()]),
-            error_logger:info_msg(
-                "Syn(~p): Received ~p registry tuple(s) from remote node ~p~n",
-                [node(), length(RegistryTuples), RemoteNode]
-            ),
-            %% ensure that registry doesn't have any joining node's entries (here again for race conditions)
-            raw_purge_registry_entries_for_remote_node(RemoteNode),
-            %% loop
-            F = fun({Name, RemotePid, RemoteMeta}) ->
-                %% check if same name is registered
-                case find_process_entry_by_name(Name) of
-                    undefined ->
-                        %% no conflict
-                        case rpc:call(node(RemotePid), erlang, is_process_alive, [RemotePid]) of
-                            true ->
-                                add_to_local_table(Name, RemotePid, RemoteMeta, undefined);
-                            _ ->
-                                ok = rpc:call(RemoteNode, syn_registry, remove_from_local_table, [Name])
-                        end;
+            case rpc:call(RemoteNode, ?MODULE, sync_get_local_registry_tuples, [node()]) of
+                {badrpc, _} ->
+                    error_logger:info_msg("Syn(~p): REGISTRY AUTOMERGE <---- Syn not ready on remote node ~p, postponing~n", [node(), RemoteNode]);
 
-                    Entry ->
-                        LocalPid = Entry#syn_registry_table.pid,
-                        LocalMeta = Entry#syn_registry_table.meta,
+                RegistryTuples ->
+                    error_logger:info_msg(
+                        "Syn(~p): Received ~p registry tuple(s) from remote node ~p~n",
+                        [node(), length(RegistryTuples), RemoteNode]
+                    ),
+                    %% ensure that registry doesn't have any joining node's entries (here again for race conditions)
+                    raw_purge_registry_entries_for_remote_node(RemoteNode),
+                    %% loop
+                    F = fun({Name, RemotePid, RemoteMeta}) ->
+                        %% check if same name is registered
+                        case find_process_entry_by_name(Name) of
+                            undefined ->
+                                %% no conflict
+                                case rpc:call(node(RemotePid), erlang, is_process_alive, [RemotePid]) of
+                                    true ->
+                                        add_to_local_table(Name, RemotePid, RemoteMeta, undefined);
+                                    _ ->
+                                        ok = rpc:call(RemoteNode, syn_registry, remove_from_local_table, [Name])
+                                end;
 
-                        error_logger:warning_msg(
-                            "Syn(~p): Conflicting name in auto merge for: ~p, processes are ~p, ~p~n",
-                            [node(), Name, {LocalPid, LocalMeta}, {RemotePid, RemoteMeta}]
-                        ),
+                            Entry ->
+                                LocalPid = Entry#syn_registry_table.pid,
+                                LocalMeta = Entry#syn_registry_table.meta,
 
-                        CallbackIfLocal = fun() ->
-                            %% keeping local: remote data still on remote node, remove there
-                            ok = rpc:call(RemoteNode, syn_registry, remove_from_local_table, [Name])
-                        end,
-                        resolve_conflict(Name, {LocalPid, LocalMeta}, {RemotePid, RemoteMeta}, CallbackIfLocal, State)
-                end
-            end,
-            %% add to table
-            lists:foreach(F, RegistryTuples),
-            %% exit
-            error_logger:info_msg("Syn(~p): REGISTRY AUTOMERGE <---- Done for remote node ~p~n", [node(), RemoteNode])
+                                error_logger:warning_msg(
+                                    "Syn(~p): Conflicting name in auto merge for: ~p, processes are ~p, ~p~n",
+                                    [node(), Name, {LocalPid, LocalMeta}, {RemotePid, RemoteMeta}]
+                                ),
+
+                                CallbackIfLocal = fun() ->
+                                    %% keeping local: remote data still on remote node, remove there
+                                    ok = rpc:call(RemoteNode, syn_registry, remove_from_local_table, [Name])
+                                end,
+                                resolve_conflict(Name, {LocalPid, LocalMeta}, {RemotePid, RemoteMeta}, CallbackIfLocal, State)
+                        end
+                    end,
+                    %% add to table
+                    lists:foreach(F, RegistryTuples),
+                    %% exit
+                    error_logger:info_msg("Syn(~p): REGISTRY AUTOMERGE <---- Done for remote node ~p~n", [node(), RemoteNode])
+            end
         end
     ).
 

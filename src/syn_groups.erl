@@ -213,6 +213,8 @@ init([]) ->
     ok = net_kernel:monitor_nodes(true),
     %% get handler
     CustomEventHandler = syn_backbone:get_event_handler_module(),
+    %% send message to initiate full cluster sync
+    timer:send_after(0, self(), sync_full_cluster),
     %% init
     {ok, #state{
         custom_event_handler = CustomEventHandler
@@ -314,13 +316,20 @@ handle_info({'DOWN', _MonitorRef, process, Pid, Reason}, State) ->
 
 handle_info({nodeup, RemoteNode}, State) ->
     error_logger:info_msg("Syn(~p): Node ~p has joined the cluster~n", [node(), RemoteNode]),
-    group_manager_automerge(RemoteNode),
+    groups_automerge(RemoteNode),
     %% resume
     {noreply, State};
 
 handle_info({nodedown, RemoteNode}, State) ->
     error_logger:warning_msg("Syn(~p): Node ~p has left the cluster, removing group entries on local~n", [node(), RemoteNode]),
     raw_purge_group_entries_for_node(RemoteNode),
+    {noreply, State};
+
+handle_info(sync_full_cluster, State) ->
+    error_logger:info_msg("Syn(~p): Initiating full cluster groups sync for nodes: ~p~n", [node(), nodes()]),
+    lists:foreach(fun(RemoteNode) ->
+        groups_automerge(RemoteNode)
+    end, nodes()),
     {noreply, State};
 
 handle_info(Info, State) ->
@@ -471,15 +480,15 @@ handle_process_down(GroupName, Pid, Meta, Reason, #state{
             syn_event_handler:do_on_group_process_exit(GroupName, Pid, Meta, Reason, CustomEventHandler)
     end.
 
--spec group_manager_automerge(RemoteNode :: node()) -> ok.
-group_manager_automerge(RemoteNode) ->
+-spec groups_automerge(RemoteNode :: node()) -> ok.
+groups_automerge(RemoteNode) ->
     global:trans({{?MODULE, auto_merge_groups}, self()},
         fun() ->
-            error_logger:info_msg("Syn(~p): GROUP MANAGER AUTOMERGE ----> Initiating for remote node ~p~n", [node(), RemoteNode]),
+            error_logger:info_msg("Syn(~p): GROUPS AUTOMERGE ----> Initiating for remote node ~p~n", [node(), RemoteNode]),
             %% get group tuples from remote node
             case rpc:call(RemoteNode, ?MODULE, sync_get_local_group_tuples, [node()]) of
                 {badrpc, _} ->
-                    error_logger:info_msg("Syn(~p): GROUP MANAGER AUTOMERGE <---- Syn not ready on remote node ~p, aborting~n", [node(), RemoteNode]);
+                    error_logger:info_msg("Syn(~p): GROUPS AUTOMERGE <---- Syn not ready on remote node ~p, postponing~n", [node(), RemoteNode]);
 
                 GroupTuples ->
                     error_logger:info_msg(
@@ -498,7 +507,7 @@ group_manager_automerge(RemoteNode) ->
                         end
                     end, GroupTuples),
                     %% exit
-                    error_logger:info_msg("Syn(~p): GROUP MANAGER AUTOMERGE <---- Done for remote node ~p~n", [node(), RemoteNode])
+                    error_logger:info_msg("Syn(~p): GROUPS AUTOMERGE <---- Done for remote node ~p~n", [node(), RemoteNode])
             end
         end
     ).
