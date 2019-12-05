@@ -213,8 +213,6 @@ init([]) ->
     ok = net_kernel:monitor_nodes(true),
     %% get handler
     CustomEventHandler = syn_backbone:get_event_handler_module(),
-    %% start first sync
-    self() ! sync_all,
     %% init
     {ok, #state{
         custom_event_handler = CustomEventHandler
@@ -311,15 +309,6 @@ handle_info({'DOWN', _MonitorRef, process, Pid, Reason}, State) ->
                 multicast_leave(GroupName, Pid)
             end, Entries)
     end,
-    %% return
-    {noreply, State};
-
-handle_info(sync_all, State) ->
-    error_logger:info_msg("Syn(~p): Start first groups sync~n", [node()]),
-    %% loop all nodes
-    lists:foreach(fun(RemoteNode) ->
-        group_manager_automerge(RemoteNode)
-    end, nodes()),
     %% return
     {noreply, State};
 
