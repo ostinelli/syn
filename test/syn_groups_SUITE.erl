@@ -47,8 +47,7 @@
     two_nodes_local_members/1,
     two_nodes_publish/1,
     two_nodes_local_publish/1,
-    two_nodes_multicall/1,
-    two_nodes_groups_wait_for_syn_up/1
+    two_nodes_multicall/1
 ]).
 -export([
     three_nodes_partial_netsplit_consistency/1,
@@ -105,8 +104,7 @@ groups() ->
             two_nodes_local_members,
             two_nodes_publish,
             two_nodes_local_publish,
-            two_nodes_multicall,
-            two_nodes_groups_wait_for_syn_up
+            two_nodes_multicall
         ]},
         {three_nodes_groups, [shuffle], [
             three_nodes_partial_netsplit_consistency,
@@ -727,23 +725,6 @@ two_nodes_multicall(Config) ->
         {Pid2, {pong, Pid2}}
     ]) =:= lists:sort(Replies),
     [PidUnresponsive] = BadPids.
-
-two_nodes_groups_wait_for_syn_up(_Config) ->
-    %% stop slave
-    syn_test_suite_helper:stop_slave(syn_slave),
-    %% start syn on local node
-    ok = syn:start(),
-    %% start process
-    Pid = syn_test_suite_helper:start_process(),
-    %% join
-    ok = syn:join(<<"group">>, Pid),
-    %% start remote node and syn
-    {ok, SlaveNode} = syn_test_suite_helper:start_slave(syn_slave),
-    ok = rpc:call(SlaveNode, syn, start, []),
-    timer:sleep(1000),
-    %% check
-    [Pid] = syn:get_members(<<"group">>),
-    [Pid] = rpc:call(SlaveNode, syn, get_members, [<<"group">>]).
 
 three_nodes_partial_netsplit_consistency(Config) ->
     GroupName = "my group",

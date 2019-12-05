@@ -215,28 +215,19 @@ handle_cast({sync_register, Name, RemotePid, RemoteMeta}, State) ->
             %% different pid, we have a conflict
             global:trans({{?MODULE, {inconsistent_name, Name}}, self()},
                 fun() ->
-                    error_logger:warning_msg(
-                        "Syn(~p): REGISTRY INCONSISTENCY (name: ~p) ----> Initiating for remote node ~p~n",
-                        [node(), Name, RemoteNode]
-                    ),
-
                     TablePid = Entry#syn_registry_table.pid,
                     TableMeta = Entry#syn_registry_table.meta,
 
-                    case resolve_conflict(Name, {TablePid, TableMeta}, {RemotePid, RemoteMeta}, State) of
-                        {PidToKeep, PidToKill} when PidToKeep =:= TablePid ->
-                            ok = rpc:call(RemoteNode, syn_registry, add_to_local_table, [Name, TablePid, TableMeta, undefined]),
-                            syn_kill(PidToKill, Name, RemoteMeta);
+                    error_logger:warning_msg(
+                        "Syn(~p): REGISTRY INCONSISTENCY (name: ~p for ~p and ~p) ----> Initiating for remote node ~p~n",
+                        [node(), Name, {TablePid, TableMeta}, {RemotePid, RemoteMeta}, RemoteNode]
+                    ),
 
-                        {PidToKeep, PidToKill} when PidToKeep =:= RemotePid ->
-                            %% overwrite
-                            add_to_local_table(Name, RemotePid, RemoteMeta, undefined),
-                            syn_kill(PidToKill, Name, TableMeta);
-
-                        _ ->
-                            %% no process is alive, monitors will remove them from tables
-                            ok
+                    CallbackIfLocal = fun() ->
+                        %% keeping local: overwrite local data to remote node
+                        ok = rpc:call(RemoteNode, syn_registry, add_to_local_table, [Name, TablePid, TableMeta, undefined])
                     end,
+                    resolve_conflict(Name, {TablePid, TableMeta}, {RemotePid, RemoteMeta}, CallbackIfLocal, State),
 
                     error_logger:info_msg(
                         "Syn(~p): REGISTRY INCONSISTENCY (name: ~p)  <---- Done for remote node ~p~n",
@@ -465,20 +456,11 @@ registry_automerge(RemoteNode, State) ->
                             [node(), Name, {LocalPid, LocalMeta}, {RemotePid, RemoteMeta}]
                         ),
 
-                        case resolve_conflict(Name, {LocalPid, LocalMeta}, {RemotePid, RemoteMeta}, State) of
-                            {PidToKeep, PidToKill} when PidToKeep =:= LocalPid ->
-%%                                        ok = rpc:call(RemoteNode, syn_registry, remove_from_local_table, [Name]),
-                                ok = rpc:call(RemoteNode, syn_registry, add_to_local_table, [Name, LocalPid, LocalMeta, undefined]),
-
-                                syn_kill(PidToKill, Name, RemoteMeta);
-
-                            {PidToKeep, PidToKill} when PidToKeep =:= RemotePid ->
-                                add_to_local_table(Name, RemotePid, RemoteMeta, undefined),
-                                syn_kill(PidToKill, Name, LocalMeta);
-
-                            _ ->
-                                ok
-                        end
+                        CallbackIfLocal = fun() ->
+                            %% keeping local: remote data still on remote node, remove there
+                            ok = rpc:call(RemoteNode, syn_registry, remove_from_local_table, [Name])
+                        end,
+                        resolve_conflict(Name, {LocalPid, LocalMeta}, {RemotePid, RemoteMeta}, CallbackIfLocal, State)
                 end
             end,
             %% add to table
@@ -492,12 +474,14 @@ registry_automerge(RemoteNode, State) ->
     Name :: any(),
     {LocalPid :: pid(), LocalMeta :: any()},
     {RemotePid :: pid(), RemoteMeta :: any()},
+    CallbackIfLocal :: fun(),
     #state{}
-) -> {PidToKeep :: pid() | undefined, PidToKill :: pid() | undefined}.
+) -> any().
 resolve_conflict(
     Name,
     {TablePid, TableMeta},
     {RemotePid, RemoteMeta},
+    CallbackIfLocal,
     #state{custom_event_handler = CustomEventHandler}
 ) ->
     TablePidAlive = rpc:call(node(TablePid), erlang, is_process_alive, [TablePid]),
@@ -532,43 +516,41 @@ resolve_conflict(
         TablePid ->
             %% keep local
             error_logger:info_msg(
-                "Syn(~p): Keeping process in table ~p, killing remote process ~p~n",
+                "Syn(~p): Keeping process in table ~p over remote process ~p~n",
                 [node(), TablePid, RemotePid]
             ),
-            PidToKill = case KillOther of
-                true -> RemotePid;
+            %% callback: keeping local
+            CallbackIfLocal(),
+            %% kill?
+            case KillOther of
+                true -> syn_kill(RemotePid, Name, RemoteMeta);
                 _ -> undefined
-            end,
-            %% return
-            {PidToKeep, PidToKill};
+            end;
 
         RemotePid ->
             %% keep remote
             error_logger:info_msg(
-                "Syn(~p): Keeping remote process ~p, killing process in table ~p~n",
+                "Syn(~p): Keeping remote process ~p over process in table ~p~n",
                 [node(), RemotePid, TablePid]
             ),
-            PidToKill = case KillOther of
-                true -> TablePid;
-                _ -> undefined
-            end,
-            %% return
-            {PidToKeep, PidToKill};
+            %% keeping remote: overwrite remote data to local
+            %% no process killing necessary because we kill remote only if in a custom handler
+            add_to_local_table(Name, RemotePid, RemoteMeta, undefined);
 
         none ->
+            error_logger:info_msg(
+                "Syn(~p): Removing both processes' ~p and ~p data from local and remote tables~n",
+                [node(), RemotePid, TablePid]
+            ),
             remove_from_local_table(Name),
             RemoteNode = node(RemotePid),
-            ok = rpc:call(RemoteNode, syn_registry, remove_from_local_table, [Name]),
-            %% return
-            {undefined, undefined};
+            ok = rpc:call(RemoteNode, syn_registry, remove_from_local_table, [Name]);
 
         Other ->
             error_logger:error_msg(
                 "Syn(~p): Custom handler returned ~p, valid options were ~p and ~p~n",
                 [node(), Other, TablePid, RemotePid]
-            ),
-            %% return
-            {undefined, undefined}
+            )
     end.
 
 -spec syn_kill(PidToKill :: pid(), Name :: any(), Meta :: any()) -> true.

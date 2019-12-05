@@ -45,7 +45,8 @@
 -export([
     two_nodes_register_monitor_and_unregister/1,
     two_nodes_registry_count/1,
-    two_nodes_registration_race_condition_conflict_resolution/1,
+    two_nodes_registration_race_condition_conflict_resolution_keep_local/1,
+    two_nodes_registration_race_condition_conflict_resolution_keep_remote/1,
     two_nodes_registration_race_condition_conflict_resolution_when_process_died/1
 ]).
 -export([
@@ -111,7 +112,8 @@ groups() ->
         {two_nodes_process_registration, [shuffle], [
             two_nodes_register_monitor_and_unregister,
             two_nodes_registry_count,
-            two_nodes_registration_race_condition_conflict_resolution,
+            two_nodes_registration_race_condition_conflict_resolution_keep_local,
+            two_nodes_registration_race_condition_conflict_resolution_keep_remote,
             two_nodes_registration_race_condition_conflict_resolution_when_process_died
         ]},
         {three_nodes_process_registration, [shuffle], [
@@ -480,7 +482,7 @@ two_nodes_registry_count(Config) ->
     0 = syn:registry_count(node()),
     0 = syn:registry_count(SlaveNode).
 
-two_nodes_registration_race_condition_conflict_resolution(Config) ->
+two_nodes_registration_race_condition_conflict_resolution_keep_local(Config) ->
     ConflictingName = "COMMON",
     %% get slaves
     SlaveNode = proplists:get_value(slave_node, Config),
@@ -492,15 +494,42 @@ two_nodes_registration_race_condition_conflict_resolution(Config) ->
     Pid0 = syn_test_suite_helper:start_process(),
     Pid1 = syn_test_suite_helper:start_process(SlaveNode),
     %% inject into syn to simulate concurrent registration
-    ok = rpc:call(SlaveNode, syn_registry, add_to_local_table, [ConflictingName, Pid1, SlaveNode, undefined]),
-    %% register on master node to trigger conflict resolution
-    ok = syn:register(ConflictingName, Pid0, node()),
+    ok = syn_registry:add_to_local_table(ConflictingName, Pid0, node(), undefined),
+    %% register on slave node to trigger conflict resolution on master node
+    ok = rpc:call(SlaveNode, syn, register, [ConflictingName, Pid1, SlaveNode]),
     timer:sleep(1000),
     %% check metadata, resolution happens on master node
-    {Pid1, SlaveNode} = syn:whereis(ConflictingName, with_meta),
-    {Pid1, SlaveNode} = rpc:call(SlaveNode, syn, whereis, [ConflictingName, with_meta]),
+    Node = node(),
+    {Pid0, Node} = syn:whereis(ConflictingName, with_meta),
+    {Pid0, Node} = rpc:call(SlaveNode, syn, whereis, [ConflictingName, with_meta]),
     %% check that other processes are not alive because syn killed them
-    false = is_process_alive(Pid0),
+    true = is_process_alive(Pid0),
+    false = rpc:call(SlaveNode, erlang, is_process_alive, [Pid1]).
+
+two_nodes_registration_race_condition_conflict_resolution_keep_remote(Config) ->
+    ConflictingName = "COMMON",
+    %% get slaves
+    SlaveNode = proplists:get_value(slave_node, Config),
+    %% use customer handler
+    syn_test_suite_helper:use_custom_handler(),
+    rpc:call(SlaveNode, syn_test_suite_helper, use_custom_handler, []),
+    %% start syn on nodes
+    ok = syn:start(),
+    ok = rpc:call(SlaveNode, syn, start, []),
+    timer:sleep(100),
+    %% start processes
+    Pid0 = syn_test_suite_helper:start_process(),
+    Pid1 = syn_test_suite_helper:start_process(SlaveNode),
+    %% inject into syn to simulate concurrent registration
+    ok = syn_registry:add_to_local_table(ConflictingName, Pid0, node(), undefined),
+    %% register on slave node to trigger conflict resolution on master node
+    ok = rpc:call(SlaveNode, syn, register, [ConflictingName, Pid1, keep_this_one]),
+    timer:sleep(1000),
+    %% check metadata, resolution happens on master node
+    {Pid1, keep_this_one} = syn:whereis(ConflictingName, with_meta),
+    {Pid1, keep_this_one} = rpc:call(SlaveNode, syn, whereis, [ConflictingName, with_meta]),
+    %% check that other processes are not alive because syn killed them
+    true = is_process_alive(Pid0),
     true = rpc:call(SlaveNode, erlang, is_process_alive, [Pid1]).
 
 two_nodes_registration_race_condition_conflict_resolution_when_process_died(Config) ->
