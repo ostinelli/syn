@@ -455,20 +455,17 @@ single_node_groups_count(_Config) ->
     %% start
     ok = syn:start(),
     %% start process
-    Pid1 = syn_test_suite_helper:start_process(),
-    Pid2 = syn_test_suite_helper:start_process(),
+    Pid = syn_test_suite_helper:start_process(),
     %% join
-    ok = syn:join(GroupName1, Pid1),
-    ok = syn:join(GroupName2, Pid2),
+    ok = syn:join(GroupName1, Pid),
+    ok = syn:join(GroupName2, Pid),
     %% count
     2 = syn:groups_count(),
     2 = syn:groups_count(node()),
     %% kill & leave
-    ok = syn:leave(GroupName1, Pid1),
-    syn_test_suite_helper:kill_process(Pid1),
-    ok = syn:leave(GroupName2, Pid2),
-    syn_test_suite_helper:kill_process(Pid2),
-    timer:sleep(100),
+    ok = syn:leave(GroupName1, Pid),
+    ok = syn:leave(GroupName2, Pid),
+    syn_test_suite_helper:kill_process(Pid),
     %% count
     0 = syn:groups_count(),
     0 = syn:groups_count(node()).
