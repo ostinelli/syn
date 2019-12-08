@@ -11,6 +11,7 @@ clean:
 	@find $(PROJECT_DIR)/. -name "erl_crash\.dump" | xargs rm -f
 	@find $(PROJECT_DIR)/. -name "*\.beam" | xargs rm -f
 	@find $(PROJECT_DIR)/. -name "*\.so" | xargs rm -f
+	@rm -rf _build
 
 dialyzer:
 	@rebar3 dialyzer

@@ -40,6 +40,7 @@
 -export([publish/2]).
 -export([publish_to_local/2]).
 -export([multi_call/2, multi_call/3, multi_call_reply/2]).
+-export([groups_count/0, groups_count/1]).
 
 %% gen_server via interface
 -export([register_name/2, unregister_name/1, whereis_name/1, send/2]).
@@ -84,6 +85,14 @@ registry_count() ->
 -spec registry_count(Node :: atom()) -> non_neg_integer().
 registry_count(Node) ->
     syn_registry:count(Node).
+
+-spec groups_count() -> non_neg_integer().
+groups_count() ->
+    syn_groups:count().
+
+-spec groups_count(Node :: atom()) -> non_neg_integer().
+groups_count(Node) ->
+    syn_groups:count(Node).
 
 %% ----- \/ gen_server via module interface --------------------------
 -spec register_name(Name :: any(), Pid :: pid()) -> yes | no.

@@ -37,6 +37,7 @@
 -export([publish/2]).
 -export([publish_to_local/2]).
 -export([multi_call/2, multi_call/3, multi_call_reply/2]).
+-export([count/0, count/1]).
 
 %% sync API
 -export([sync_join/4, sync_leave/3]).
@@ -193,6 +194,14 @@ sync_leave(RemoteNode, GroupName, Pid) ->
 sync_get_local_group_tuples(FromNode) ->
     error_logger:info_msg("Syn(~p): Received request of local group tuples from remote node: ~p~n", [node(), FromNode]),
     get_group_tuples_for_node(node()).
+
+-spec count() -> non_neg_integer().
+count() ->
+    mnesia:table_info(syn_groups_table, size).
+
+-spec count(Node :: node()) -> non_neg_integer().
+count(Node) ->
+    length(get_group_tuples_for_node(Node)).
 
 %% ===================================================================
 %% Callbacks

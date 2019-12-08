@@ -40,7 +40,8 @@
     single_node_multicall/1,
     single_node_multicall_with_custom_timeout/1,
     single_node_callback_on_process_exit/1,
-    single_node_monitor_after_group_crash/1
+    single_node_monitor_after_group_crash/1,
+    single_node_groups_count/1
 ]).
 -export([
     two_nodes_join_monitor_and_unregister/1,
@@ -99,7 +100,8 @@ groups() ->
             single_node_multicall,
             single_node_multicall_with_custom_timeout,
             single_node_callback_on_process_exit,
-            single_node_monitor_after_group_crash
+            single_node_monitor_after_group_crash,
+            single_node_groups_count
         ]},
         {two_nodes_groups, [shuffle], [
             two_nodes_join_monitor_and_unregister,
@@ -446,6 +448,31 @@ single_node_monitor_after_group_crash(_Config) ->
     %% retrieve
     false = syn:member(Pid, GroupName),
     [] = syn:get_members(GroupName).
+
+single_node_groups_count(_Config) ->
+    GroupName1 = "my count group 1",
+    GroupName2 = "my count group 2",
+    %% start
+    ok = syn:start(),
+    %% start process
+    Pid1 = syn_test_suite_helper:start_process(),
+    Pid2 = syn_test_suite_helper:start_process(),
+    %% join
+    ok = syn:join(GroupName1, Pid1),
+    ok = syn:join(GroupName2, Pid2),
+    %% count
+    2 = syn:groups_count(),
+    2 = syn:groups_count(node()),
+    %% kill & leave
+    ok = syn:leave(GroupName1, Pid1),
+    syn_test_suite_helper:kill_process(Pid1),
+    ok = syn:leave(GroupName2, Pid2),
+    syn_test_suite_helper:kill_process(Pid2),
+    exit(whereis(syn_groups), kill),
+    timer:sleep(100),
+    %% count
+    0 = syn:groups_count(),
+    0 = syn:groups_count(node()).
 
 two_nodes_join_monitor_and_unregister(Config) ->
     GroupName = "my group",

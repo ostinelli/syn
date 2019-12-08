@@ -67,7 +67,7 @@
 
 %% include
 -include_lib("common_test/include/ct.hrl").
--include_lib("../src/syn.hrl").
+-include_lib("../include/syn.hrl").
 
 %% ===================================================================
 %% Callbacks
