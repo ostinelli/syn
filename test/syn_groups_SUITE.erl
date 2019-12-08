@@ -468,7 +468,6 @@ single_node_groups_count(_Config) ->
     syn_test_suite_helper:kill_process(Pid1),
     ok = syn:leave(GroupName2, Pid2),
     syn_test_suite_helper:kill_process(Pid2),
-    exit(whereis(syn_groups), kill),
     timer:sleep(100),
     %% count
     0 = syn:groups_count(),
