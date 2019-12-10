@@ -51,7 +51,7 @@ start_link() ->
 init([]) ->
     Children = [
         ?CHILD(syn_backbone, worker),
-%%        ?CHILD(syn_groups, worker),
+        ?CHILD(syn_groups, worker),
         ?CHILD(syn_registry, worker)
     ],
     {ok, {{one_for_one, 10, 10}, Children}}.

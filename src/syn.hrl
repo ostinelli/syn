@@ -23,15 +23,6 @@
 %% OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 %% THE SOFTWARE.
 %% ==========================================================================================================
-%% records
--record(syn_groups_table, {
-    name = undefined :: any(),
-    pid = undefined :: atom() | pid(),
-    node = undefined :: atom(),
-    meta = undefined :: any(),
-    monitor_ref = undefined :: atom() | reference()
-}).
-
 %% types
 -type syn_registry_entry() :: {
     Name :: any(),
@@ -45,7 +36,14 @@
     Pid :: pid(),
     Meta :: any()
 }.
--type syn_group_tuple() :: {
+-type syn_groups_entry() :: {
+    GroupName :: any(),
+    Pid :: pid(),
+    Meta :: any(),
+    MonitorRef :: undefined | reference(),
+    Node :: node()
+}.
+-type syn_groups_tuple() :: {
     GroupName :: any(),
     Pid :: pid(),
     Meta :: any()

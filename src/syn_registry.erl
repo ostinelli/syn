@@ -290,7 +290,13 @@ handle_info({nodedown, RemoteNode}, State) ->
     {noreply, State};
 
 handle_info(sync_full_cluster, State) ->
-    error_logger:info_msg("Syn(~p): Initiating full cluster registry sync for nodes: ~p~n", [node(), nodes()]),
+    case length(nodes()) > 0 of
+        true ->
+            error_logger:info_msg("Syn(~p): Initiating full cluster registry sync for nodes: ~p~n", [node(), nodes()]);
+
+        _ ->
+            ok
+    end,
     lists:foreach(fun(RemoteNode) ->
         registry_automerge(RemoteNode, State)
     end, nodes()),
@@ -340,6 +346,7 @@ register_on_node(Name, Pid, Meta) ->
         undefined ->
             %% process is not monitored yet, add
             erlang:monitor(process, Pid);
+
         MRef ->
             MRef
     end,
@@ -352,7 +359,7 @@ unregister_on_node(Name) ->
         undefined ->
             {error, undefined};
 
-        {Name, _Pid, _Meta, MonitorRef, Node} when MonitorRef =/= undefined ->
+        {Name, _Pid, _Meta, MonitorRef, _Node} when MonitorRef =/= undefined ->
             %% demonitor
             erlang:demonitor(MonitorRef, [flush]),
             %% remove from table
@@ -400,20 +407,28 @@ remove_from_local_table(Name) ->
 
 -spec find_registry_tuple_by_name(Name :: any()) -> RegistryTuple :: syn_registry_tuple() | undefined.
 find_registry_tuple_by_name(Name) ->
+    Guard = case is_tuple(Name) of
+        true -> {'=:=', '$1', {Name}};
+        _ -> {'=:=', '$1', Name}
+    end,
     case ets:select(syn_registry_by_name, [{
         {'$1', '$2', '$3', '_', '_'},
-        [{'=:=', '$1', Name}],
+        [Guard],
         [{{'$1', '$2', '$3'}}]
     }]) of
         [RegistryTuple] -> RegistryTuple;
         _ -> undefined
     end.
 
--spec find_registry_entry_by_name(Name :: any()) -> Object :: syn_registry_tuple() | undefined.
+-spec find_registry_entry_by_name(Name :: any()) -> Entry :: syn_registry_entry() | undefined.
 find_registry_entry_by_name(Name) ->
+    Guard = case is_tuple(Name) of
+        true -> {'=:=', '$1', {Name}};
+        _ -> {'=:=', '$1', Name}
+    end,
     case ets:select(syn_registry_by_name, [{
         {'$1', '$2', '$3', '_', '_'},
-        [{'=:=', '$1', Name}],
+        [Guard],
         ['$_']
     }]) of
         [RegistryTuple] -> RegistryTuple;

@@ -73,10 +73,14 @@ get_event_handler_module() ->
     {stop, Reason :: any()}.
 init([]) ->
     %% create ETS tables
-    %% objects have structure {Name, Pid, Meta, MonitorRef, Node}
+    %% entries have structure {Name, Pid, Meta, MonitorRef, Node}
     ets:new(syn_registry_by_name, [set, public, named_table, {read_concurrency, true}, {write_concurrency, true}]),
-    %% objects have format {{Pid, Name}, Meta, MonitorRef, Node}
+    %% entries have format {{Pid, Name}, Meta, MonitorRef, Node}
     ets:new(syn_registry_by_pid, [ordered_set, public, named_table, {read_concurrency, true}, {write_concurrency, true}]),
+    %% entries have format {{GroupName, Pid}, Meta, MonitorRef, Node}
+    ets:new(syn_groups_by_name, [ordered_set, public, named_table, {read_concurrency, true}, {write_concurrency, true}]),
+    %% entries have format {{Pid, GroupName}, Meta, MonitorRef, Node}
+    ets:new(syn_groups_by_pid, [ordered_set, public, named_table, {read_concurrency, true}, {write_concurrency, true}]),
     %% init
     {ok, #state{}}.
 
@@ -128,6 +132,8 @@ terminate(Reason, _State) ->
     %% delete ETS tables
     ets:delete(syn_registry_by_name),
     ets:delete(syn_registry_by_pid),
+    ets:delete(syn_groups_by_name),
+    ets:delete(syn_groups_by_pid),
     %% return
     terminated.
 

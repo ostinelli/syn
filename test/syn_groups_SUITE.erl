@@ -92,7 +92,6 @@ all() ->
 groups() ->
     [
         {single_node_groups, [shuffle], [
-            single_node_join_and_monitor,
             single_node_join_and_leave,
             single_node_join_errors,
             single_node_publish,
