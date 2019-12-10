@@ -24,13 +24,20 @@
 %% THE SOFTWARE.
 %% ==========================================================================================================
 -module(syn_backbone).
+-behaviour(gen_server).
 
 %% API
--export([init/0]).
+-export([start_link/0]).
 -export([get_event_handler_module/0]).
+
+%% gen_server callbacks
+-export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
 %% macros
 -define(DEFAULT_EVENT_HANDLER_MODULE, syn_event_handler).
+
+%% records
+-record(state, {}).
 
 %% includes
 -include("syn.hrl").
@@ -38,18 +45,10 @@
 %% ===================================================================
 %% API
 %% ===================================================================
--spec init() -> ok | {error, Reason :: any()}.
-init() ->
-    drop_tables(),
-    case create_registry_table() of
-        {atomic, ok} ->
-            case create_groups_table() of
-                {atomic, ok} -> ok;
-                {aborted, Reason} -> {error, {could_not_create_syn_groups_table, Reason}}
-            end;
-        {aborted, Reason} ->
-            {error, {could_not_create_syn_registry_table, Reason}}
-    end.
+-spec start_link() -> {ok, pid()} | {error, any()}.
+start_link() ->
+    Options = [],
+    gen_server:start_link({local, ?MODULE}, ?MODULE, [], Options).
 
 -spec get_event_handler_module() -> module().
 get_event_handler_module() ->
@@ -61,27 +60,78 @@ get_event_handler_module() ->
     CustomEventHandler.
 
 %% ===================================================================
-%% Internal
+%% Callbacks
 %% ===================================================================
--spec drop_tables() -> ok.
-drop_tables() ->
-    mnesia:delete_table(syn_registry_table),
-    mnesia:delete_table(syn_groups_table).
 
--spec create_registry_table() -> {atomic, ok} | {aborted, Reason :: any()}.
-create_registry_table() ->
-    mnesia:create_table(syn_registry_table, [
-        {type, set},
-        {attributes, record_info(fields, syn_registry_table)},
-        {index, [#syn_registry_table.pid, #syn_groups_table.node]},
-        {storage_properties, [{ets, [{read_concurrency, true}, {write_concurrency, true}]}]}
-    ]).
+%% ----------------------------------------------------------------------------------------------------------
+%% Init
+%% ----------------------------------------------------------------------------------------------------------
+-spec init([]) ->
+    {ok, #state{}} |
+    {ok, #state{}, Timeout :: non_neg_integer()} |
+    ignore |
+    {stop, Reason :: any()}.
+init([]) ->
+    %% create ETS tables
+    ets:new(syn_registry_by_name, [set, public, named_table, {read_concurrency, true}, {write_concurrency, true}]),
+    ets:new(syn_registry_by_pid, [set, public, named_table, {read_concurrency, true}, {write_concurrency, true}]),
+    %% init
+    {ok, #state{}}.
 
--spec create_groups_table() -> {atomic, ok} | {aborted, Reason :: any()}.
-create_groups_table() ->
-    mnesia:create_table(syn_groups_table, [
-        {type, bag},
-        {attributes, record_info(fields, syn_groups_table)},
-        {index, [#syn_groups_table.pid, #syn_groups_table.node]},
-        {storage_properties, [{ets, [{read_concurrency, true}, {write_concurrency, true}]}]}
-    ]).
+%% ----------------------------------------------------------------------------------------------------------
+%% Call messages
+%% ----------------------------------------------------------------------------------------------------------
+-spec handle_call(Request :: any(), From :: any(), #state{}) ->
+    {reply, Reply :: any(), #state{}} |
+    {reply, Reply :: any(), #state{}, Timeout :: non_neg_integer()} |
+    {noreply, #state{}} |
+    {noreply, #state{}, Timeout :: non_neg_integer()} |
+    {stop, Reason :: any(), Reply :: any(), #state{}} |
+    {stop, Reason :: any(), #state{}}.
+
+handle_call(Request, From, State) ->
+    error_logger:warning_msg("Syn(~p): Received from ~p an unknown call message: ~p~n", [node(), Request, From]),
+    {reply, undefined, State}.
+
+%% ----------------------------------------------------------------------------------------------------------
+%% Cast messages
+%% ----------------------------------------------------------------------------------------------------------
+-spec handle_cast(Msg :: any(), #state{}) ->
+    {noreply, #state{}} |
+    {noreply, #state{}, Timeout :: non_neg_integer()} |
+    {stop, Reason :: any(), #state{}}.
+
+handle_cast(Msg, State) ->
+    error_logger:warning_msg("Syn(~p): Received an unknown cast message: ~p~n", [node(), Msg]),
+    {noreply, State}.
+
+%% ----------------------------------------------------------------------------------------------------------
+%% All non Call / Cast messages
+%% ----------------------------------------------------------------------------------------------------------
+-spec handle_info(Info :: any(), #state{}) ->
+    {noreply, #state{}} |
+    {noreply, #state{}, Timeout :: non_neg_integer()} |
+    {stop, Reason :: any(), #state{}}.
+
+handle_info(Info, State) ->
+    error_logger:warning_msg("Syn(~p): Received an unknown info message: ~p~n", [node(), Info]),
+    {noreply, State}.
+
+%% ----------------------------------------------------------------------------------------------------------
+%% Terminate
+%% ----------------------------------------------------------------------------------------------------------
+-spec terminate(Reason :: any(), #state{}) -> terminated.
+terminate(Reason, _State) ->
+    error_logger:info_msg("Syn(~p): Terminating with reason: ~p~n", [node(), Reason]),
+    %% delete ETS tables
+    ets:delete(syn_registry_by_name),
+    ets:delete(syn_registry_by_pid),
+    %% return
+    terminated.
+
+%% ----------------------------------------------------------------------------------------------------------
+%% Convert process state when code is changed.
+%% ----------------------------------------------------------------------------------------------------------
+-spec code_change(OldVsn :: any(), #state{}, Extra :: any()) -> {ok, #state{}}.
+code_change(_OldVsn, State, _Extra) ->
+    {ok, State}.

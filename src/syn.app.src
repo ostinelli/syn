@@ -3,14 +3,14 @@
         {description, "A global Process Registry and Process Group manager."},
         {vsn, "2.0.3"},
         {registered, [
+            syn_backbone,
             syn_groups,
             syn_registry,
             syn_sup
         ]},
         {applications, [
             kernel,
-            stdlib,
-            mnesia
+            stdlib
         ]},
         {mod, {syn_app, []}},
         {env, []},

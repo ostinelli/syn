@@ -37,12 +37,7 @@
     StartArgs :: any()
 ) -> {ok, pid()} | {ok, pid(), State :: any()} | {error, any()}.
 start(_StartType, _StartArgs) ->
-    case syn_backbone:init() of
-        ok ->
-            syn_sup:start_link();
-        Other ->
-            Other
-    end.
+    syn_sup:start_link().
 
 -spec stop(State :: any()) -> ok.
 stop(_State) ->
