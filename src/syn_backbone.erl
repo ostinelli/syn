@@ -73,8 +73,10 @@ get_event_handler_module() ->
     {stop, Reason :: any()}.
 init([]) ->
     %% create ETS tables
+    %% objects have structure {Name, Pid, Meta, MonitorRef, Node}
     ets:new(syn_registry_by_name, [set, public, named_table, {read_concurrency, true}, {write_concurrency, true}]),
-    ets:new(syn_registry_by_pid, [set, public, named_table, {read_concurrency, true}, {write_concurrency, true}]),
+    %% objects have format {{Pid, Name}, Meta, MonitorRef, Node}
+    ets:new(syn_registry_by_pid, [ordered_set, public, named_table, {read_concurrency, true}, {write_concurrency, true}]),
     %% init
     {ok, #state{}}.
 

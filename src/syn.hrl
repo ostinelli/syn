@@ -24,13 +24,6 @@
 %% THE SOFTWARE.
 %% ==========================================================================================================
 %% records
--record(syn_registry_table, {
-    name = undefined :: any(),
-    pid = undefined :: atom() | pid(),
-    node = undefined :: atom(),
-    meta = undefined :: any(),
-    monitor_ref = undefined :: atom() | reference()
-}).
 -record(syn_groups_table, {
     name = undefined :: any(),
     pid = undefined :: atom() | pid(),
@@ -40,6 +33,13 @@
 }).
 
 %% types
+-type syn_registry_entry() :: {
+    Name :: any(),
+    Pid :: pid(),
+    Meta :: any(),
+    MonitorRef :: undefined | reference(),
+    Node :: node()
+}.
 -type syn_registry_tuple() :: {
     Name :: any(),
     Pid :: pid(),
@@ -50,7 +50,3 @@
     Pid :: pid(),
     Meta :: any()
 }.
--export_type([
-    syn_registry_tuple/0,
-    syn_group_tuple/0
-]).
