@@ -44,9 +44,9 @@
 
 %% records
 -record(state, {
-    custom_event_handler = undefined :: module(),
-    anti_entropy_interval_ms = undefined :: non_neg_integer(),
-    anti_entropy_interval_max_deviation_ms = undefined :: non_neg_integer()
+    custom_event_handler :: undefined | module(),
+    anti_entropy_interval_ms :: undefined | non_neg_integer(),
+    anti_entropy_interval_max_deviation_ms :: undefined | non_neg_integer()
 }).
 
 %% includes
@@ -668,14 +668,14 @@ resolve_conflict(
     end.
 
 -spec syn_kill(PidToKill :: pid(), Name :: any(), Meta :: any()) -> true.
-syn_kill(undefined, _, _) -> true;
 syn_kill(PidToKill, Name, Meta) -> exit(PidToKill, {syn_resolve_kill, Name, Meta}).
 
 -spec raw_purge_registry_entries_for_remote_node(Node :: atom()) -> ok.
 raw_purge_registry_entries_for_remote_node(Node) when Node =/= node() ->
     %% NB: no demonitoring is done, this is why it's raw
     ets:match_delete(syn_registry_by_name, {'_', '_', '_', '_', Node}),
-    ets:match_delete(syn_registry_by_pid, {{'_', '_'}, '_', '_', Node}).
+    ets:match_delete(syn_registry_by_pid, {{'_', '_'}, '_', '_', Node}),
+    ok.
 
 -spec rebuild_monitors() -> ok.
 rebuild_monitors() ->

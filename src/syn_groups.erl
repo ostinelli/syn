@@ -57,9 +57,9 @@
 
 %% records
 -record(state, {
-    custom_event_handler = undefined :: module(),
-    anti_entropy_interval_ms = undefined :: non_neg_integer(),
-    anti_entropy_interval_max_deviation_ms = undefined :: non_neg_integer()
+    custom_event_handler :: undefined | module(),
+    anti_entropy_interval_ms :: undefined | non_neg_integer(),
+    anti_entropy_interval_max_deviation_ms :: undefined | non_neg_integer()
 }).
 
 %% macros
@@ -471,7 +471,7 @@ add_to_local_table(GroupName, Pid, Meta, MonitorRef) ->
 -spec remove_from_local_table(GroupName :: any(), Pid :: pid()) -> ok | {error, Reason :: any()}.
 remove_from_local_table(GroupName, Pid) ->
     case ets:lookup(syn_groups_by_name, {GroupName, Pid}) of
-        undefined ->
+        [] ->
             {error, not_in_group};
 
         _ ->
@@ -572,7 +572,8 @@ groups_automerge(RemoteNode) ->
 raw_purge_group_entries_for_node(Node) ->
     %% NB: no demonitoring is done, this is why it's raw
     ets:match_delete(syn_groups_by_name, {{'_', '_'}, '_', '_', Node}),
-    ets:match_delete(syn_groups_by_pid, {{'_', '_'}, '_', '_', Node}).
+    ets:match_delete(syn_groups_by_pid, {{'_', '_'}, '_', '_', Node}),
+    ok.
 
 -spec multi_call_and_receive(
     CollectorPid :: pid(),
