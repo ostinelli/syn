@@ -1,5 +1,6 @@
 
 
+
 [![Build Status](https://travis-ci.org/ostinelli/syn.svg?branch=master)](https://travis-ci.org/ostinelli/syn) [![Hex pm](https://img.shields.io/hexpm/v/syn.svg)](https://hex.pm/packages/syn)
 
 
@@ -354,7 +355,7 @@ In Syn you can specify a custom callback module if you want to:
   * Customize the method to resolve registry naming conflict in case of net splits.
 
 ### Setup
-The callback module can be set in the environment variable `syn`, in the environment variable `event_handler`. You're probably best off using an application configuration file.
+The callback module can be set in the environment variable `syn`, with the `event_handler` key. You're probably best off using an application configuration file.
 
 #### Elixir
 In `config.exs` you can specify your callback module:
@@ -470,8 +471,40 @@ This method MUST return the `pid()` of the process that you wish to keep. The ot
 
 > Important Note: the conflict resolution method SHOULD be defined in the same way across all nodes of the cluster. Having different conflict resolution options on different nodes can have unexpected results.
 
+## Anti-Entropy
+Anti-entropy is a mechanism to force alignment between nodes. It shouldn't be needed with Syn in most cases. However, despite Syn's best efforts and under rare conditions, depending on your cluster topology and other factors, it might be possible that registry and groups get misaligned.
+
+> Anti-entropy in Syn is an experimental feature. As with every anti-entropy feature, it comes with a cost: during the forced syncing, the local tables will be rebuilt with data that gets sent from other nodes. This takes time, due to the sending of data across nodes and subsequent storage. As an example, a node that handles 1,000,000 processes will have to send data for ~80MB (depending on your metadata's size) to other nodes. During the syncing, Syn might time out some calls. Your mileage may vary, so it is recommended that you benchmark your use case.
+
+### Setup
+To activate anti-entropy you need to set in the environment variable `syn` the key `anti_entropy`. You're probably best off using an application configuration file.
+
+#### Elixir
+In `config.exs` you can specify your anti-entropy settings:
+
+```elixir
+config :syn,
+  anti_entropy:
+    registry: [interval: 300, interval_max_deviation: 60]
+    groups: [interval: 300, interval_max_deviation: 60]
+```
+
+#### Erlang
+In `sys.config` you can specify your callback module:
+
+```erlang
+{syn, [
+    {anti_entropy, [
+        {registry, [{interval, 300}, {interval_max_deviation, 60}],
+        {groups, [{interval, 300}, {interval_max_deviation, 60}]
+    ]}
+]}
+```
+
+`interval` specifies in seconds the interval between every anti-entropy syncing, while `interval_max_deviation` the max deviation in seconds from the `interval`. For instance, with an `interval` of 300 seconds and an `interval_max_deviation` of 60, anti-entropy will be called with an interval range of 240 to 360 seconds.
+
 ## Internals
-Syn uses mnesia for local tables only, no mnesia distribution mechanisms are used. Syn has its own replication and net splits conflict resolution mechanisms.
+As of v2.1, Syn uses ETS for memory storage. Syn has its own replication and net splits conflict resolution mechanisms.
 
 ## Contributing
 So you want to contribute? That's great! Please follow the guidelines below. It will make it easier to get merged in.
