@@ -57,7 +57,8 @@
     three_nodes_start_syn_before_connecting_cluster_with_conflict/1,
     three_nodes_start_syn_before_connecting_cluster_with_custom_conflict_resolution/1,
     three_nodes_registration_race_condition_custom_conflict_resolution/1,
-    three_nodes_anti_entropy/1
+    three_nodes_anti_entropy/1,
+    three_nodes_anti_entropy_manual/1
 ]).
 
 %% support
@@ -127,7 +128,8 @@ groups() ->
             three_nodes_start_syn_before_connecting_cluster_with_conflict,
             three_nodes_start_syn_before_connecting_cluster_with_custom_conflict_resolution,
             three_nodes_registration_race_condition_custom_conflict_resolution,
-            three_nodes_anti_entropy
+            three_nodes_anti_entropy,
+            three_nodes_anti_entropy_manual
         ]}
     ].
 %% -------------------------------------------------------------------
@@ -974,6 +976,60 @@ three_nodes_anti_entropy(Config) ->
     ok = rpc:call(SlaveNode2, syn_registry, add_to_local_table, ["conflict", Pid2Conflict, SlaveNode2, undefined]),
     %% wait to let anti-entropy settle
     timer:sleep(5000),
+    %% check
+    Node = node(),
+    {Pid0, Node} = syn:whereis("pid0", with_meta),
+    {Pid1, SlaveNode1} = syn:whereis("pid1", with_meta),
+    {Pid2, SlaveNode2} = syn:whereis("pid2", with_meta),
+    {Pid1Conflict, keep_this_one} = syn:whereis("conflict", with_meta),
+    {Pid0, Node} = rpc:call(SlaveNode1, syn, whereis, ["pid0", with_meta]),
+    {Pid1, SlaveNode1} = rpc:call(SlaveNode1, syn, whereis, ["pid1", with_meta]),
+    {Pid2, SlaveNode2} = rpc:call(SlaveNode1, syn, whereis, ["pid2", with_meta]),
+    {Pid1Conflict, keep_this_one} = rpc:call(SlaveNode1, syn, whereis, ["conflict", with_meta]),
+    {Pid0, Node} = rpc:call(SlaveNode2, syn, whereis, ["pid0", with_meta]),
+    {Pid1, SlaveNode1} = rpc:call(SlaveNode2, syn, whereis, ["pid1", with_meta]),
+    {Pid2, SlaveNode2} = rpc:call(SlaveNode2, syn, whereis, ["pid2", with_meta]),
+    {Pid1Conflict, keep_this_one} = rpc:call(SlaveNode2, syn, whereis, ["conflict", with_meta]).
+
+three_nodes_anti_entropy_manual(Config) ->
+    %% get slaves
+    SlaveNode1 = proplists:get_value(slave_node_1, Config),
+    SlaveNode2 = proplists:get_value(slave_node_2, Config),
+    %% use customer handler
+    syn_test_suite_helper:use_custom_handler(),
+    rpc:call(SlaveNode1, syn_test_suite_helper, use_custom_handler, []),
+    rpc:call(SlaveNode2, syn_test_suite_helper, use_custom_handler, []),
+    %% start syn on nodes
+    ok = syn:start(),
+    ok = rpc:call(SlaveNode1, syn, start, []),
+    ok = rpc:call(SlaveNode2, syn, start, []),
+    timer:sleep(100),
+    %% start processes
+    Pid0 = syn_test_suite_helper:start_process(),
+    Pid1 = syn_test_suite_helper:start_process(SlaveNode1),
+    Pid2 = syn_test_suite_helper:start_process(SlaveNode2),
+    Pid0Conflict = syn_test_suite_helper:start_process(),
+    Pid1Conflict = syn_test_suite_helper:start_process(SlaveNode1),
+    Pid2Conflict = syn_test_suite_helper:start_process(SlaveNode2),
+    timer:sleep(100),
+    %% inject data to simulate latent conflicts
+    ok = syn_registry:add_to_local_table("pid0", Pid0, node(), undefined),
+    ok = rpc:call(SlaveNode1, syn_registry, add_to_local_table, ["pid1", Pid1, SlaveNode1, undefined]),
+    ok = rpc:call(SlaveNode2, syn_registry, add_to_local_table, ["pid2", Pid2, SlaveNode2, undefined]),
+    ok = syn_registry:add_to_local_table("conflict", Pid0Conflict, node(), undefined),
+    ok = rpc:call(SlaveNode1, syn_registry, add_to_local_table, ["conflict", Pid1Conflict, keep_this_one, undefined]),
+    ok = rpc:call(SlaveNode2, syn_registry, add_to_local_table, ["conflict", Pid2Conflict, SlaveNode2, undefined]),
+    %% call anti entropy
+    {error, not_remote_node} = syn:sync_from_node(registry, node()),
+    ok = syn:sync_from_node(registry, SlaveNode1),
+    ok = syn:sync_from_node(registry, SlaveNode2),
+    {error, not_remote_node} = rpc:call(SlaveNode1, syn, sync_from_node, [registry, SlaveNode1]),
+    ok = rpc:call(SlaveNode1, syn, sync_from_node, [registry, node()]),
+    ok = rpc:call(SlaveNode1, syn, sync_from_node, [registry, SlaveNode2]),
+    {error, not_remote_node} = rpc:call(SlaveNode2, syn, sync_from_node, [registry, SlaveNode2]),
+    ok = rpc:call(SlaveNode2, syn, sync_from_node, [registry, node()]),
+    ok = rpc:call(SlaveNode2, syn, sync_from_node, [registry, SlaveNode1]),
+    timer:sleep(500),
     %% check
     Node = node(),
     {Pid0, Node} = syn:whereis("pid0", with_meta),

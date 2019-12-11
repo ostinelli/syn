@@ -37,6 +37,7 @@
 -export([sync_register/4, sync_unregister/2]).
 -export([sync_get_local_registry_tuples/1]).
 -export([add_to_local_table/4, remove_from_local_table/1]).
+-export([sync_from_node/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
@@ -117,6 +118,13 @@ sync_unregister(RemoteNode, Name) ->
 sync_get_local_registry_tuples(FromNode) ->
     error_logger:info_msg("Syn(~p): Received request of local registry tuples from remote node ~p~n", [node(), FromNode]),
     get_registry_tuples_for_node(node()).
+
+-spec sync_from_node(RemoteNode :: node()) -> ok | {error, Reason :: any()}.
+sync_from_node(RemoteNode) ->
+    case RemoteNode =:= node() of
+        true -> {error, not_remote_node};
+        _ -> gen_server:cast(?MODULE, {sync_from_node, RemoteNode})
+    end.
 
 %% ===================================================================
 %% Callbacks
@@ -255,6 +263,11 @@ handle_cast({sync_unregister, Name}, State) ->
     %% remove
     remove_from_local_table(Name),
     %% return
+    {noreply, State};
+
+handle_cast({sync_from_node, RemoteNode}, State) ->
+    error_logger:info_msg("Syn(~p): Initiating REGISTRY forced sync for node ~p~n", [node(), RemoteNode]),
+    registry_automerge(RemoteNode, State),
     {noreply, State};
 
 handle_cast(Msg, State) ->

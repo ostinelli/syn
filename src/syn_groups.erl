@@ -42,6 +42,7 @@
 -export([sync_join/4, sync_leave/3]).
 -export([sync_get_local_group_tuples/1]).
 -export([remove_from_local_table/2]).
+-export([sync_from_node/1]).
 
 %% tests
 -ifdef(TEST).
@@ -199,6 +200,13 @@ sync_get_local_group_tuples(FromNode) ->
     error_logger:info_msg("Syn(~p): Received request of local group tuples from remote node: ~p~n", [node(), FromNode]),
     get_group_tuples_for_node(node()).
 
+-spec sync_from_node(RemoteNode :: node()) -> ok | {error, Reason :: any()}.
+sync_from_node(RemoteNode) ->
+    case RemoteNode =:= node() of
+        true -> {error, not_remote_node};
+        _ -> gen_server:cast(?MODULE, {sync_from_node, RemoteNode})
+    end.
+
 %% ===================================================================
 %% Callbacks
 %% ===================================================================
@@ -291,6 +299,11 @@ handle_cast({sync_leave, GroupName, Pid}, State) ->
     %% remove entry
     remove_from_local_table(GroupName, Pid),
     %% return
+    {noreply, State};
+
+handle_cast({sync_from_node, RemoteNode}, State) ->
+    error_logger:info_msg("Syn(~p): Initiating forced GROUPS sync for node ~p~n", [node(), RemoteNode]),
+    groups_automerge(RemoteNode),
     {noreply, State};
 
 handle_cast(Msg, State) ->

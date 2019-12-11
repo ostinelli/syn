@@ -50,7 +50,8 @@
     two_nodes_multicall/1,
     two_nodes_groups_full_cluster_sync_on_boot_node_added_later/1,
     two_nodes_groups_full_cluster_sync_on_boot_syn_started_later/1,
-    three_nodes_anti_entropy/1
+    three_nodes_anti_entropy/1,
+    three_nodes_anti_entropy_manual/1
 ]).
 -export([
     three_nodes_partial_netsplit_consistency/1,
@@ -113,7 +114,8 @@ groups() ->
         {three_nodes_groups, [shuffle], [
             three_nodes_partial_netsplit_consistency,
             three_nodes_full_netsplit_consistency,
-            three_nodes_anti_entropy
+            three_nodes_anti_entropy,
+            three_nodes_anti_entropy_manual
         ]}
     ].
 %% -------------------------------------------------------------------
@@ -1111,6 +1113,50 @@ three_nodes_anti_entropy(Config) ->
     ok = rpc:call(SlaveNode2, syn_groups, add_to_local_table, ["my-group", Pid2, SlaveNode2, undefined]),
     ok = rpc:call(SlaveNode2, syn_groups, add_to_local_table, ["my-group-isolated", Pid2Isolated, SlaveNode2, undefined]),
     timer:sleep(5000),
+    %% check
+    Members = lists:sort([
+        {Pid0, node()},
+        {Pid1, SlaveNode1},
+        {Pid2, SlaveNode2}
+    ]),
+    Members = syn:get_members("my-group", with_meta),
+    Members = rpc:call(SlaveNode1, syn, get_members, ["my-group", with_meta]),
+    Members = rpc:call(SlaveNode2, syn, get_members, ["my-group", with_meta]),
+    [{Pid2Isolated, SlaveNode2}] = syn:get_members("my-group-isolated", with_meta),
+    [{Pid2Isolated, SlaveNode2}] = rpc:call(SlaveNode1, syn, get_members, ["my-group-isolated", with_meta]),
+    [{Pid2Isolated, SlaveNode2}] = rpc:call(SlaveNode2, syn, get_members, ["my-group-isolated", with_meta]).
+
+three_nodes_anti_entropy_manual(Config) ->
+    %% get slaves
+    SlaveNode1 = proplists:get_value(slave_node_1, Config),
+    SlaveNode2 = proplists:get_value(slave_node_2, Config),
+    %% start syn on nodes
+    ok = syn:start(),
+    ok = rpc:call(SlaveNode1, syn, start, []),
+    ok = rpc:call(SlaveNode2, syn, start, []),
+    timer:sleep(100),
+    %% start processes
+    Pid0 = syn_test_suite_helper:start_process(),
+    Pid1 = syn_test_suite_helper:start_process(SlaveNode1),
+    Pid2 = syn_test_suite_helper:start_process(SlaveNode2),
+    Pid2Isolated = syn_test_suite_helper:start_process(SlaveNode2),
+    timer:sleep(100),
+    %% inject data to simulate latent conflicts
+    ok = syn_groups:add_to_local_table("my-group", Pid0, node(), undefined),
+    ok = rpc:call(SlaveNode1, syn_groups, add_to_local_table, ["my-group", Pid1, SlaveNode1, undefined]),
+    ok = rpc:call(SlaveNode2, syn_groups, add_to_local_table, ["my-group", Pid2, SlaveNode2, undefined]),
+    ok = rpc:call(SlaveNode2, syn_groups, add_to_local_table, ["my-group-isolated", Pid2Isolated, SlaveNode2, undefined]),
+    %% call anti entropy
+    {error, not_remote_node} = syn:sync_from_node(groups, node()),
+    ok = syn:sync_from_node(groups, SlaveNode1),
+    ok = syn:sync_from_node(groups, SlaveNode2),
+    {error, not_remote_node} = rpc:call(SlaveNode1, syn, sync_from_node, [groups, SlaveNode1]),
+    ok = rpc:call(SlaveNode1, syn, sync_from_node, [groups, node()]),
+    ok = rpc:call(SlaveNode1, syn, sync_from_node, [groups, SlaveNode2]),
+    {error, not_remote_node} = rpc:call(SlaveNode2, syn, sync_from_node, [groups, SlaveNode2]),
+    ok = rpc:call(SlaveNode2, syn, sync_from_node, [groups, node()]),
+    ok = rpc:call(SlaveNode2, syn, sync_from_node, [groups, SlaveNode1]),
+    timer:sleep(500),
     %% check
     Members = lists:sort([
         {Pid0, node()},
