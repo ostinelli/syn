@@ -73,12 +73,9 @@ clean_after_test() ->
     %% shutdown
     lists:foreach(fun(Node) ->
         rpc:call(Node, syn, stop, []),
-        rpc:call(Node, application, stop, [mnesia]),
         %% clean env
         rpc:call(Node, application, unset_env, [syn, event_handler])
-    end, Nodes),
-    %% clean mnesia
-    mnesia:delete_schema(Nodes).
+    end, Nodes).
 
 start_process() ->
     Pid = spawn(fun process_main/0),
