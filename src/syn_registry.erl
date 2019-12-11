@@ -129,10 +129,10 @@ sync_get_local_registry_tuples(FromNode) ->
     ignore |
     {stop, Reason :: any()}.
 init([]) ->
-    %% rebuild monitors (if coming after a crash)
-    rebuild_monitors(),
     %% monitor nodes
     ok = net_kernel:monitor_nodes(true),
+    %% rebuild monitors (if coming after a crash)
+    rebuild_monitors(),
     %% get handler
     CustomEventHandler = syn_backbone:get_event_handler_module(),
     %% send message to initiate full cluster sync

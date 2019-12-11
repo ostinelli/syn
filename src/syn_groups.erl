@@ -205,10 +205,10 @@ sync_get_local_group_tuples(FromNode) ->
     ignore |
     {stop, Reason :: any()}.
 init([]) ->
-    %% rebuild
-    rebuild_monitors(),
     %% monitor nodes
     ok = net_kernel:monitor_nodes(true),
+    %% rebuild
+    rebuild_monitors(),
     %% get handler
     CustomEventHandler = syn_backbone:get_event_handler_module(),
     %% send message to initiate full cluster sync
