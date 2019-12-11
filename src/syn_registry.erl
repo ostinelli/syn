@@ -502,29 +502,7 @@ registry_automerge(RemoteNode, State) ->
                     raw_purge_registry_entries_for_remote_node(RemoteNode),
                     %% loop
                     F = fun({Name, RemotePid, RemoteMeta}) ->
-                        %% check if same name is registered
-                        case find_registry_tuple_by_name(Name) of
-                            undefined ->
-                                %% no conflict
-                                case rpc:call(node(RemotePid), erlang, is_process_alive, [RemotePid]) of
-                                    true ->
-                                        add_to_local_table(Name, RemotePid, RemoteMeta, undefined);
-                                    _ ->
-                                        ok = rpc:call(RemoteNode, syn_registry, remove_from_local_table, [Name])
-                                end;
-
-                            {Name, LocalPid, LocalMeta} ->
-                                error_logger:warning_msg(
-                                    "Syn(~p): Conflicting name in auto merge for: ~p, processes are ~p, ~p~n",
-                                    [node(), Name, {LocalPid, LocalMeta}, {RemotePid, RemoteMeta}]
-                                ),
-
-                                CallbackIfLocal = fun() ->
-                                    %% keeping local: remote data still on remote node, remove there
-                                    ok = rpc:call(RemoteNode, syn_registry, remove_from_local_table, [Name])
-                                end,
-                                resolve_conflict(Name, {LocalPid, LocalMeta}, {RemotePid, RemoteMeta}, CallbackIfLocal, State)
-                        end
+                        resolve_tuple(Name, RemotePid, RemoteMeta, RemoteNode, State)
                     end,
                     %% add to table
                     lists:foreach(F, Entries),
@@ -533,6 +511,38 @@ registry_automerge(RemoteNode, State) ->
             end
         end
     ).
+
+-spec resolve_tuple(
+    Name :: any(),
+    RemotePid :: pid(),
+    RemoteMeta :: any(),
+    RemoteNode :: node(),
+    #state{}
+) -> any().
+resolve_tuple(Name, RemotePid, RemoteMeta, RemoteNode, State) ->
+    %% check if same name is registered
+    case find_registry_tuple_by_name(Name) of
+        undefined ->
+            %% no conflict
+            case rpc:call(node(RemotePid), erlang, is_process_alive, [RemotePid]) of
+                true ->
+                    add_to_local_table(Name, RemotePid, RemoteMeta, undefined);
+                _ ->
+                    ok = rpc:call(RemoteNode, syn_registry, remove_from_local_table, [Name])
+            end;
+
+        {Name, LocalPid, LocalMeta} ->
+            error_logger:warning_msg(
+                "Syn(~p): Conflicting name in auto merge for: ~p, processes are ~p, ~p~n",
+                [node(), Name, {LocalPid, LocalMeta}, {RemotePid, RemoteMeta}]
+            ),
+
+            CallbackIfLocal = fun() ->
+                %% keeping local: remote data still on remote node, remove there
+                ok = rpc:call(RemoteNode, syn_registry, remove_from_local_table, [Name])
+            end,
+            resolve_conflict(Name, {LocalPid, LocalMeta}, {RemotePid, RemoteMeta}, CallbackIfLocal, State)
+    end.
 
 -spec resolve_conflict(
     Name :: any(),
