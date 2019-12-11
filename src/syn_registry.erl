@@ -139,14 +139,14 @@ init([]) ->
     CustomEventHandler = syn_backbone:get_event_handler_module(),
     %% get anti-entropy interval
     {AntiEntropyIntervalMs, AntiEntropyIntervalMaxDeviationMs} = syn_backbone:get_anti_entropy_settings(registry),
-    %% send message to initiate full cluster sync
-    timer:send_after(0, self(), sync_full_cluster),
     %% build state
     State = #state{
         custom_event_handler = CustomEventHandler,
         anti_entropy_interval_ms = AntiEntropyIntervalMs,
         anti_entropy_interval_max_deviation_ms = AntiEntropyIntervalMaxDeviationMs
     },
+    %% send message to initiate full cluster sync
+    timer:send_after(0, self(), sync_full_cluster),
     %% start anti-entropy
     set_timer_for_anti_entropy(State),
     %% init

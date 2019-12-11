@@ -43,6 +43,11 @@
 -export([sync_get_local_group_tuples/1]).
 -export([remove_from_local_table/2]).
 
+%% tests
+-ifdef(TEST).
+-export([add_to_local_table/4]).
+-endif.
+
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
@@ -51,7 +56,9 @@
 
 %% records
 -record(state, {
-    custom_event_handler = undefined :: module()
+    custom_event_handler = undefined :: module(),
+    anti_entropy_interval_ms = undefined :: non_neg_integer(),
+    anti_entropy_interval_max_deviation_ms = undefined :: non_neg_integer()
 }).
 
 %% macros
@@ -211,12 +218,20 @@ init([]) ->
     rebuild_monitors(),
     %% get handler
     CustomEventHandler = syn_backbone:get_event_handler_module(),
+    %% get anti-entropy interval
+    {AntiEntropyIntervalMs, AntiEntropyIntervalMaxDeviationMs} = syn_backbone:get_anti_entropy_settings(groups),
+    %% build state
+    State = #state{
+        custom_event_handler = CustomEventHandler,
+        anti_entropy_interval_ms = AntiEntropyIntervalMs,
+        anti_entropy_interval_max_deviation_ms = AntiEntropyIntervalMaxDeviationMs
+    },
     %% send message to initiate full cluster sync
     timer:send_after(0, self(), sync_full_cluster),
+    %% start anti-entropy
+    set_timer_for_anti_entropy(State),
     %% init
-    {ok, #state{
-        custom_event_handler = CustomEventHandler
-    }}.
+    {ok, State}.
 
 %% ----------------------------------------------------------------------------------------------------------
 %% Call messages
@@ -331,6 +346,23 @@ handle_info(sync_full_cluster, State) ->
     lists:foreach(fun(RemoteNode) ->
         groups_automerge(RemoteNode)
     end, nodes()),
+    {noreply, State};
+
+handle_info(sync_anti_entropy, State) ->
+    %% sync
+    RemoteNodes = nodes(),
+    case length(RemoteNodes) > 0 of
+        true ->
+            RandomRemoteNode = lists:nth(rand:uniform(length(RemoteNodes)), RemoteNodes),
+            error_logger:info_msg("Syn(~p): Initiating anti-entropy sync for node ~p~n", [node(), RandomRemoteNode]),
+            groups_automerge(RandomRemoteNode);
+
+        _ ->
+            ok
+    end,
+    %% set timer
+    set_timer_for_anti_entropy(State),
+    %% return
     {noreply, State};
 
 handle_info(Info, State) ->
@@ -580,3 +612,13 @@ rebuild_monitors() ->
                 multicast_leave(GroupName, Pid)
         end
     end, GroupTuples).
+
+-spec set_timer_for_anti_entropy(#state{}) -> ok.
+set_timer_for_anti_entropy(#state{anti_entropy_interval_ms = undefined}) -> ok;
+set_timer_for_anti_entropy(#state{
+    anti_entropy_interval_ms = AntiEntropyIntervalMs,
+    anti_entropy_interval_max_deviation_ms = AntiEntropyIntervalMaxDeviationMs
+}) ->
+    IntervalMs = round(AntiEntropyIntervalMs + rand:uniform() * AntiEntropyIntervalMaxDeviationMs),
+    {ok, _} = timer:send_after(IntervalMs, self(), sync_anti_entropy),
+    ok.
