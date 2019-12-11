@@ -224,11 +224,11 @@ single_node_register_and_monitor(_Config) ->
     undefined = syn:whereis(<<"my proc">>),
     %% register
     ok = syn:register(<<"my proc">>, Pid),
-    ok = syn:register(<<"my proc 2">>, Pid),
+    ok = syn:register({"my proc 2"}, Pid),
     ok = syn:register(<<"my proc with meta">>, PidWithMeta, {meta, <<"meta">>}),
     %% retrieve
     Pid = syn:whereis(<<"my proc">>),
-    Pid = syn:whereis(<<"my proc 2">>),
+    Pid = syn:whereis({"my proc 2"}),
     {PidWithMeta, {meta, <<"meta">>}} = syn:whereis(<<"my proc with meta">>, with_meta),
     %% re-register
     ok = syn:register(<<"my proc with meta">>, PidWithMeta, {meta2, <<"meta2">>}),
@@ -239,7 +239,7 @@ single_node_register_and_monitor(_Config) ->
     timer:sleep(100),
     %% retrieve
     undefined = syn:whereis(<<"my proc">>),
-    undefined = syn:whereis(<<"my proc 2">>),
+    undefined = syn:whereis({"my proc 2"}),
     undefined = syn:whereis(<<"my proc with meta">>).
 
 single_node_register_and_unregister(_Config) ->
