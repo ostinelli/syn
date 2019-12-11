@@ -473,12 +473,12 @@ This method MUST return the `pid()` of the process that you wish to keep. The ot
 > Important Note: the conflict resolution method SHOULD be defined in the same way across all nodes of the cluster. Having different conflict resolution options on different nodes can have unexpected results.
 
 ## Anti-Entropy
-Anti-entropy is a mechanism to force alignment between nodes. It shouldn't be needed with Syn in most cases. However, despite Syn's best efforts and under rare conditions, depending on your cluster topology and other factors, it might be possible that registry and groups get misaligned.
+Anti-entropy is a mechanism to force alignment between nodes. It isn't needed with Syn in most cases. However, despite Syn's best efforts and under rare conditions, depending on your cluster topology and other factors, it _might_ be possible that registry and groups get misaligned.
 
 > Anti-entropy in Syn is an experimental feature. As with every anti-entropy feature, it comes with a cost: during the forced syncing, the local tables will be rebuilt with data that gets sent from other nodes. This takes time, due to the sending of data across nodes and subsequent storage. As an example, a node that handles 1,000,000 local registry / groups processes will have to send data for ~80MB (depending on your metadata's size) to other nodes. During the syncing, Syn might time out some calls. Your mileage may vary, so it is recommended that you benchmark your use case.
 
 ### Setup
-To activate anti-entropy you need to set in the environment variable `syn` the key `anti_entropy`. You're probably best off using an application configuration file.
+To activate anti-entropy you need to set in the environment variable `syn` the key `anti_entropy`. You're probably best off using an application configuration file. If you do not specify the `anti_entropy` key, the anti-entropy mechanism will be disabled by default.
 
 #### Elixir
 In `config.exs` you can specify your anti-entropy settings:
@@ -491,7 +491,7 @@ config :syn,
 ```
 
 #### Erlang
-In `sys.config` you can specify your callback module:
+In `sys.config` you can specify your anti-entropy settings:
 
 ```erlang
 {syn, [
