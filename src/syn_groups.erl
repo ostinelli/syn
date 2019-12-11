@@ -40,7 +40,7 @@
 
 %% sync API
 -export([sync_join/4, sync_leave/3]).
--export([sync_get_local_group_tuples/1]).
+-export([sync_get_local_groups_tuples/1]).
 -export([remove_from_local_table/2]).
 -export([sync_from_node/1]).
 
@@ -195,10 +195,10 @@ sync_join(RemoteNode, GroupName, Pid, Meta) ->
 sync_leave(RemoteNode, GroupName, Pid) ->
     gen_server:cast({?MODULE, RemoteNode}, {sync_leave, GroupName, Pid}).
 
--spec sync_get_local_group_tuples(FromNode :: node()) -> list(syn_groups_tuple()).
-sync_get_local_group_tuples(FromNode) ->
+-spec sync_get_local_groups_tuples(FromNode :: node()) -> list(syn_groups_tuple()).
+sync_get_local_groups_tuples(FromNode) ->
     error_logger:info_msg("Syn(~p): Received request of local group tuples from remote node: ~p~n", [node(), FromNode]),
-    get_group_tuples_for_node(node()).
+    get_groups_tuples_for_node(node()).
 
 -spec sync_from_node(RemoteNode :: node()) -> ok | {error, Reason :: any()}.
 sync_from_node(RemoteNode) ->
@@ -514,8 +514,8 @@ find_monitor_for_pid(Pid) when is_pid(Pid) ->
         _ -> undefined
     end.
 
--spec get_group_tuples_for_node(Node :: node()) -> [syn_groups_tuple()].
-get_group_tuples_for_node(Node) ->
+-spec get_groups_tuples_for_node(Node :: node()) -> [syn_groups_tuple()].
+get_groups_tuples_for_node(Node) ->
     ets:select(syn_groups_by_name, [{
         {{'$1', '$2'}, '$3', '_', '$5'},
         [{'=:=', '$5', Node}],
@@ -542,7 +542,7 @@ groups_automerge(RemoteNode) ->
         fun() ->
             error_logger:info_msg("Syn(~p): GROUPS AUTOMERGE ----> Initiating for remote node ~p~n", [node(), RemoteNode]),
             %% get group tuples from remote node
-            case rpc:call(RemoteNode, ?MODULE, sync_get_local_group_tuples, [node()]) of
+            case rpc:call(RemoteNode, ?MODULE, sync_get_local_groups_tuples, [node()]) of
                 {badrpc, _} ->
                     error_logger:info_msg("Syn(~p): GROUPS AUTOMERGE <---- Syn not ready on remote node ~p, postponing~n", [node(), RemoteNode]);
 
@@ -613,7 +613,7 @@ collect_replies(MemberPids, Replies, BadPids) ->
 
 -spec rebuild_monitors() -> ok.
 rebuild_monitors() ->
-    GroupTuples = get_group_tuples_for_node(node()),
+    GroupTuples = get_groups_tuples_for_node(node()),
     %% ensure that groups doesn't have any joining node's entries
     raw_purge_group_entries_for_node(node()),
     %% add
