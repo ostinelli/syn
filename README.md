@@ -1,6 +1,7 @@
 
 
 
+
 [![Build Status](https://travis-ci.org/ostinelli/syn.svg?branch=master)](https://travis-ci.org/ostinelli/syn) [![Hex pm](https://img.shields.io/hexpm/v/syn.svg)](https://hex.pm/packages/syn)
 
 
@@ -474,7 +475,7 @@ This method MUST return the `pid()` of the process that you wish to keep. The ot
 ## Anti-Entropy
 Anti-entropy is a mechanism to force alignment between nodes. It shouldn't be needed with Syn in most cases. However, despite Syn's best efforts and under rare conditions, depending on your cluster topology and other factors, it might be possible that registry and groups get misaligned.
 
-> Anti-entropy in Syn is an experimental feature. As with every anti-entropy feature, it comes with a cost: during the forced syncing, the local tables will be rebuilt with data that gets sent from other nodes. This takes time, due to the sending of data across nodes and subsequent storage. As an example, a node that handles 1,000,000 processes will have to send data for ~80MB (depending on your metadata's size) to other nodes. During the syncing, Syn might time out some calls. Your mileage may vary, so it is recommended that you benchmark your use case.
+> Anti-entropy in Syn is an experimental feature. As with every anti-entropy feature, it comes with a cost: during the forced syncing, the local tables will be rebuilt with data that gets sent from other nodes. This takes time, due to the sending of data across nodes and subsequent storage. As an example, a node that handles 1,000,000 local registry / groups processes will have to send data for ~80MB (depending on your metadata's size) to other nodes. During the syncing, Syn might time out some calls. Your mileage may vary, so it is recommended that you benchmark your use case.
 
 ### Setup
 To activate anti-entropy you need to set in the environment variable `syn` the key `anti_entropy`. You're probably best off using an application configuration file.
@@ -503,8 +504,29 @@ In `sys.config` you can specify your callback module:
 
 `interval` specifies in seconds the interval between every anti-entropy syncing, while `interval_max_deviation` the max deviation in seconds from the `interval`. For instance, with an `interval` of 300 seconds and an `interval_max_deviation` of 60, anti-entropy will be called with an interval range of 240 to 360 seconds.
 
+### Manual sync
+You can force an anti-entropy sync with a remote node by calling the following:
+
+```erlang
+syn:sync_from_node(Module, RemoteNode) -> ok | {error, Reason}.
+
+Types:
+    Module = registry | groups
+    RemoteNode = node()
+    Reason = not_remote_node
+```
+
+This is a unidirectional sync, that will sync the data of all the processes running on `RemoteNode` to the local node. If you want to sync data in both ways, you can do so with a RPC, for instance:
+
+```erlang
+ok = syn:sync_from_node(registry, 'remote@example.com'),
+ok = rpc:call('remote@example.com', syn, sync_from_node, [registry, node()]).
+```
+
+> As per the notes above, in normal conditions Syn doesn't need to be manually synced. Use these functions as a last resort.
+
 ## Internals
-As of v2.1, Syn uses ETS for memory storage. Syn has its own replication and net splits conflict resolution mechanisms.
+As of v2.1, Syn uses ETS for memory storage and doesn't have any external dependency. Syn has its own replication and net splits conflict resolution mechanisms.
 
 ## Contributing
 So you want to contribute? That's great! Please follow the guidelines below. It will make it easier to get merged in.
