@@ -33,6 +33,7 @@
 -export([start_process/0, start_process/1, start_process/2]).
 -export([kill_process/1]).
 -export([use_custom_handler/0]).
+-export([use_anti_entropy/2]).
 -export([send_error_logger_to_disk/0]).
 
 %% internal
@@ -97,6 +98,21 @@ kill_process(Pid) ->
 
 use_custom_handler() ->
     application:set_env(syn, event_handler, syn_test_event_handler).
+
+use_anti_entropy(registry, Interval) ->
+    application:set_env(syn, anti_entropy, [
+        {registry, [
+            {interval, Interval},
+            {interval_max_deviation, 0.1}
+        ]}
+    ]);
+use_anti_entropy(groups, Interval) ->
+    application:set_env(syn, anti_entropy, [
+        {groups, [
+            {interval, Interval},
+            {interval_max_deviation, 0.1}
+        ]}
+    ]).
 
 send_error_logger_to_disk() ->
     error_logger:logfile({open, atom_to_list(node())}).
