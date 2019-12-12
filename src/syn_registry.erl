@@ -407,19 +407,23 @@ unregister_on_node(Name) ->
             %% return
             {ok, Pid};
 
-        {Name, Pid, _Meta, _MonitorRef, Node} = RegistryTuple when Node =:= node() ->
+        {Name, Pid, _Meta, _MonitorRef, Node} = RegistryEntry when Node =:= node() ->
             error_logger:error_msg(
                 "Syn(~p): INTERNAL ERROR | Registry entry ~p has no monitor but it's running on node~n",
-                [node(), RegistryTuple]
+                [node(), RegistryEntry]
             ),
             %% remove from table
             remove_from_local_table(Name, Pid),
             %% return
             {ok, Pid};
 
-        _ ->
+        RegistryEntry ->
             %% race condition: un-registration request but entry in table is not a local pid (has no monitor)
             %% sync messages will take care of it
+            error_logger:info_msg(
+                "Syn(~p): Registry entry ~p is not monitored and it's not running on node~n",
+                [node(), RegistryEntry]
+            ),
             {error, remote_pid}
     end.
 
