@@ -574,12 +574,7 @@ resolve_tuple(Name, RemotePid, RemoteMeta, RemoteNode, State) ->
     case find_registry_tuple_by_name(Name) of
         undefined ->
             %% no conflict
-            case rpc:call(node(RemotePid), erlang, is_process_alive, [RemotePid]) of
-                true ->
-                    add_to_local_table(Name, RemotePid, RemoteMeta, undefined);
-                _ ->
-                    ok = rpc:call(RemoteNode, syn_registry, remove_from_local_table, [Name, RemotePid])
-            end;
+            add_to_local_table(Name, RemotePid, RemoteMeta, undefined);
 
         {Name, LocalPid, LocalMeta} ->
             error_logger:warning_msg(
