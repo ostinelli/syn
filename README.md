@@ -165,6 +165,24 @@ Types:
 
 > You don't need to unregister names of processes that are about to die, since they are monitored by Syn and they will be removed automatically. If you manually unregister a process just before it dies, the callback on process exit (see here below) might not get called.
 
+To reregister a a previously registered Name with a different Pid:
+
+```erlang
+syn:reregister(Name, Pid) ->
+    syn:reregister(Name, Pid, undefined).
+```
+
+```erlang
+syn:reregister(Name, Pid, Meta) -> ok.
+
+Types:
+    Name = any()
+    Pid = pid()
+    Meta = any()
+```
+
+> Re-registering is specifically useful if you are re-registering a process on a different node from where the process currently registered with Name is running on, as `reregister` will ensure that the registration succeeds.
+
 To retrieve the count of total registered processes running in the cluster:
 
 ```erlang

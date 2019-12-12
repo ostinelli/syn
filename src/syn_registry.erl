@@ -29,6 +29,7 @@
 %% API
 -export([start_link/0]).
 -export([register/2, register/3]).
+-export([reregister/2, reregister/3]).
 -export([unregister/1]).
 -export([whereis/1, whereis/2]).
 -export([count/0, count/1]).
@@ -68,6 +69,28 @@ register(Name, Pid) ->
 register(Name, Pid, Meta) when is_pid(Pid) ->
     Node = node(Pid),
     gen_server:call({?MODULE, Node}, {register_on_node, Name, Pid, Meta}).
+
+-spec reregister(Name :: any(), Pid :: pid()) -> ok | {error, Reason :: any()}.
+reregister(Name, Pid) ->
+    reregister(Name, Pid, undefined).
+
+-spec reregister(Name :: any(), Pid :: pid(), Meta :: any()) -> ok | {error, Reason :: any()}.
+reregister(Name, Pid, Meta) when is_pid(Pid) ->
+    reregister(Name, Pid, Meta, 0).
+
+-spec reregister(Name :: any(), Pid :: pid(), Meta :: any(), RetryCount :: non_neg_integer()) ->
+    ok | {error, Reason :: any()}.
+reregister(Name, Pid, Meta, RetryCount) when RetryCount > 50 ->
+    exit(self(), {timeout, {gen_server, call, [?MODULE, reregister, {Name, Pid, Meta}]}});
+reregister(Name, Pid, Meta, RetryCount) when is_pid(Pid) ->
+    ?MODULE:unregister(Name),
+    case find_registry_tuple_by_name(Name) of
+        undefined ->
+            register(Name, Pid, Meta);
+        {Name, _Pid, _Meta} ->
+            timer:sleep(100),
+            reregister(Name, Pid, Meta, RetryCount + 1)
+    end.
 
 -spec unregister(Name :: any()) -> ok | {error, Reason :: any()}.
 unregister(Name) ->

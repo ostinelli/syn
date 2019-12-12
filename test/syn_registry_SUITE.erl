@@ -50,7 +50,8 @@
     two_nodes_registration_race_condition_conflict_resolution_keep_remote/1,
     two_nodes_registration_race_condition_conflict_resolution_when_process_died/1,
     two_nodes_registry_full_cluster_sync_on_boot_node_added_later/1,
-    two_nodes_registry_full_cluster_sync_on_boot_syn_started_later/1
+    two_nodes_registry_full_cluster_sync_on_boot_syn_started_later/1,
+    two_nodes_reregister/1
 ]).
 -export([
     three_nodes_partial_netsplit_consistency/1,
@@ -124,7 +125,8 @@ groups() ->
             two_nodes_registration_race_condition_conflict_resolution_keep_remote,
             two_nodes_registration_race_condition_conflict_resolution_when_process_died,
             two_nodes_registry_full_cluster_sync_on_boot_node_added_later,
-            two_nodes_registry_full_cluster_sync_on_boot_syn_started_later
+            two_nodes_registry_full_cluster_sync_on_boot_syn_started_later,
+            two_nodes_reregister
         ]},
         {three_nodes_process_registration, [shuffle], [
             three_nodes_partial_netsplit_consistency,
@@ -618,6 +620,25 @@ two_nodes_registry_full_cluster_sync_on_boot_syn_started_later(Config) ->
     %% check
     Pid = syn:whereis(<<"proc">>),
     Pid = rpc:call(SlaveNode, syn, whereis, [<<"proc">>]).
+
+two_nodes_reregister(Config) ->
+    Name = "common name",
+    %% get slave
+    SlaveNode = proplists:get_value(slave_node, Config),
+    %% start
+    ok = syn:start(),
+    ok = rpc:call(SlaveNode, syn, start, []),
+    timer:sleep(100),
+    %% start processes
+    PidLocal = syn_test_suite_helper:start_process(),
+    PidRemote = syn_test_suite_helper:start_process(SlaveNode),
+    ok = rpc:call(SlaveNode, syn, register, [Name, PidRemote]),
+    timer:sleep(1000),
+    %% fast unreg-reg
+    ok = syn:reregister(Name, PidLocal),
+    ok = rpc:call(SlaveNode, syn, reregister, [Name, PidRemote, some_meta]),
+    timer:sleep(250),
+    {PidRemote, some_meta} = syn:whereis(PidRemote).
 
 three_nodes_partial_netsplit_consistency(Config) ->
     %% get slaves
