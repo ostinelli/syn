@@ -617,12 +617,13 @@ two_nodes_reregister(Config) ->
     PidLocal = syn_test_suite_helper:start_process(),
     PidRemote = syn_test_suite_helper:start_process(SlaveNode),
     ok = rpc:call(SlaveNode, syn, register, [Name, PidRemote]),
-    timer:sleep(1000),
     %% fast unreg-reg
     ok = syn:reregister(Name, PidLocal),
+    timer:sleep(1000),
+    PidLocal = syn:whereis(Name),
     ok = rpc:call(SlaveNode, syn, reregister, [Name, PidRemote, some_meta]),
     timer:sleep(1000),
-    {PidRemote, some_meta} = syn:whereis(PidRemote).
+    {PidRemote, some_meta} = syn:whereis(Name, with_meta).
 
 three_nodes_partial_netsplit_consistency(Config) ->
     %% get slaves

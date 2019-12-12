@@ -86,7 +86,7 @@ reregister(Name, Pid, Meta, RetryCount) when is_pid(Pid) ->
     ?MODULE:unregister(Name),
     case find_registry_tuple_by_name(Name) of
         undefined ->
-            register(Name, Pid, Meta);
+            ?MODULE:register(Name, Pid, Meta);
         {Name, _Pid, _Meta} ->
             timer:sleep(100),
             reregister(Name, Pid, Meta, RetryCount + 1)
@@ -475,6 +475,7 @@ remove_from_local_table(Name, Pid) ->
             ets:delete(syn_registry_by_name, Name),
             ets:match_delete(syn_registry_by_pid, {{Pid, Name}, '_', '_', '_'}),
             ok;
+
         {Name, TablePid, _} ->
             error_logger:info_msg(
                 "Syn(~p): Request to delete registry name ~p for pid ~p but locally have ~p, ignoring~n",
