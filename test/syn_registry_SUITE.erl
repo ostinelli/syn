@@ -563,6 +563,7 @@ two_nodes_registration_race_condition_conflict_resolution_when_process_died(Conf
     syn_registry:add_to_local_table(ConflictingName, Pid0, keep_this_one, undefined),
     %% kill process
     syn_test_suite_helper:kill_process(Pid0),
+    timer:sleep(250),
     %% register to trigger conflict resolution
     ok = rpc:call(SlaveNode, syn, register, [ConflictingName, Pid1, SlaveNode]),
     timer:sleep(1000),
