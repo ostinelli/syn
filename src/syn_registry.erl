@@ -248,16 +248,16 @@ handle_cast({sync_register, Name, RemotePid, RemoteMeta}, State) ->
     %% get remote node
     RemoteNode = node(RemotePid),
     %% check for conflicts
-    case find_registry_tuple_by_name(Name) of
+    case find_registry_entry_by_name(Name) of
         undefined ->
             %% no conflict
             add_to_local_table(Name, RemotePid, RemoteMeta, undefined);
 
-        {Name, RemotePid, _Meta} ->
+        {Name, RemotePid, _Meta, MonitorRef, _Node} ->
             %% same process, no conflict, overwrite
-            add_to_local_table(Name, RemotePid, RemoteMeta, undefined);
+            add_to_local_table(Name, RemotePid, RemoteMeta, MonitorRef);
 
-        {Name, TablePid, TableMeta} ->
+        {Name, TablePid, TableMeta, MonitorRef, _Node} ->
             %% different pid, we have a conflict
             global:trans({{?MODULE, {inconsistent_name, Name}}, self()},
                 fun() ->
@@ -268,7 +268,7 @@ handle_cast({sync_register, Name, RemotePid, RemoteMeta}, State) ->
 
                     CallbackIfLocal = fun() ->
                         %% keeping local: overwrite local data to remote node
-                        ok = rpc:call(RemoteNode, syn_registry, add_to_local_table, [Name, TablePid, TableMeta, undefined])
+                        ok = rpc:call(RemoteNode, syn_registry, add_to_local_table, [Name, TablePid, TableMeta, MonitorRef])
                     end,
                     resolve_conflict(Name, {TablePid, TableMeta}, {RemotePid, RemoteMeta}, CallbackIfLocal, State),
 
@@ -453,21 +453,16 @@ unregister_on_node(Name) ->
 -spec add_to_local_table(Name :: any(), Pid :: pid(), Meta :: any(), MonitorRef :: undefined | reference()) -> ok.
 add_to_local_table(Name, Pid, Meta, MonitorRef) ->
     %% remove entry if previous exists & get pre-existing monitor ref
-    OldMonitorRef = case find_registry_entry_by_name(Name) of
+    case find_registry_tuple_by_name(Name) of
         undefined ->
             undefined;
 
-        {Name, OldPid, _OldMeta, OldMRef, _Node} ->
-            ets:delete(syn_registry_by_pid, {OldPid, Name}),
-            OldMRef
-    end,
-    MonitorRef1 = case MonitorRef of
-        undefined -> OldMonitorRef;
-        _ -> MonitorRef
+        {Name, OldPid, _OldMeta} ->
+            ets:delete(syn_registry_by_pid, {OldPid, Name})
     end,
     %% overwrite & add
-    ets:insert(syn_registry_by_name, {Name, Pid, Meta, MonitorRef1, node(Pid)}),
-    ets:insert(syn_registry_by_pid, {{Pid, Name}, Meta, MonitorRef1, node(Pid)}),
+    ets:insert(syn_registry_by_name, {Name, Pid, Meta, MonitorRef, node(Pid)}),
+    ets:insert(syn_registry_by_pid, {{Pid, Name}, Meta, MonitorRef, node(Pid)}),
     ok.
 
 -spec remove_from_local_table(Name :: any(), Pid :: pid()) -> ok.
