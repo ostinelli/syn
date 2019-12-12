@@ -621,7 +621,7 @@ two_nodes_reregister(Config) ->
     %% fast unreg-reg
     ok = syn:reregister(Name, PidLocal),
     ok = rpc:call(SlaveNode, syn, reregister, [Name, PidRemote, some_meta]),
-    timer:sleep(250),
+    timer:sleep(1000),
     {PidRemote, some_meta} = syn:whereis(PidRemote).
 
 three_nodes_partial_netsplit_consistency(Config) ->
