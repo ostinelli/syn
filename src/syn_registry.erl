@@ -429,17 +429,22 @@ unregister_on_node(Name) ->
 
 -spec add_to_local_table(Name :: any(), Pid :: pid(), Meta :: any(), MonitorRef :: undefined | reference()) -> ok.
 add_to_local_table(Name, Pid, Meta, MonitorRef) ->
-    %% remove entry if previous exists
-    case find_registry_tuple_by_name(Name) of
+    %% remove entry if previous exists & get pre-existing monitor ref
+    OldMonitorRef = case find_registry_entry_by_name(Name) of
         undefined ->
-            ok;
+            undefined;
 
-        {Name, OldPid, _OldMeta} ->
-            ets:delete(syn_registry_by_pid, {OldPid, Name})
+        {Name, OldPid, _OldMeta, OldMRef, _Node} ->
+            ets:delete(syn_registry_by_pid, {OldPid, Name}),
+            OldMRef
+    end,
+    MonitorRef1 = case MonitorRef of
+        undefined -> OldMonitorRef;
+        _ -> MonitorRef
     end,
     %% overwrite & add
-    ets:insert(syn_registry_by_name, {Name, Pid, Meta, MonitorRef, node(Pid)}),
-    ets:insert(syn_registry_by_pid, {{Pid, Name}, Meta, MonitorRef, node(Pid)}),
+    ets:insert(syn_registry_by_name, {Name, Pid, Meta, MonitorRef1, node(Pid)}),
+    ets:insert(syn_registry_by_pid, {{Pid, Name}, Meta, MonitorRef1, node(Pid)}),
     ok.
 
 -spec remove_from_local_table(Name :: any(), Pid :: pid()) -> ok.
