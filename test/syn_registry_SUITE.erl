@@ -58,13 +58,15 @@
     three_nodes_start_syn_before_connecting_cluster_with_custom_conflict_resolution/1,
     three_nodes_registration_race_condition_custom_conflict_resolution/1,
     three_nodes_anti_entropy/1,
-    three_nodes_anti_entropy_manual/1
+    three_nodes_anti_entropy_manual/1,
+    three_nodes_concurrent_registration_unregistration/1
 ]).
 
 %% support
 -export([
     start_syn_delayed_and_register_local_process/3,
-    start_syn_delayed_with_custom_handler_register_local_process/4
+    start_syn_delayed_with_custom_handler_register_local_process/4,
+    seq_unregister_register/3
 ]).
 
 %% include
@@ -129,7 +131,8 @@ groups() ->
             three_nodes_start_syn_before_connecting_cluster_with_custom_conflict_resolution,
             three_nodes_registration_race_condition_custom_conflict_resolution,
             three_nodes_anti_entropy,
-            three_nodes_anti_entropy_manual
+            three_nodes_anti_entropy_manual,
+            three_nodes_concurrent_registration_unregistration
         ]}
     ].
 %% -------------------------------------------------------------------
@@ -388,7 +391,7 @@ single_node_ensure_callback_process_exit_is_called_if_process_killed(_Config) ->
     TestPid = self(),
     ok = syn:register(Name, Pid, {some_meta, TestPid}),
     %% remove from table to simulate conflict resolution
-    syn_registry:remove_from_local_table(Name),
+    syn_registry:remove_from_local_table(Name, TestPid),
     %% kill
     exit(Pid, {syn_resolve_kill, Name, {some_meta, TestPid}}),
     receive
@@ -1045,6 +1048,38 @@ three_nodes_anti_entropy_manual(Config) ->
     {Pid2, SlaveNode2} = rpc:call(SlaveNode2, syn, whereis, ["pid2", with_meta]),
     {Pid1Conflict, keep_this_one} = rpc:call(SlaveNode2, syn, whereis, ["conflict", with_meta]).
 
+three_nodes_concurrent_registration_unregistration(Config) ->
+    CommonName = "common-name",
+    %% get slaves
+    SlaveNode1 = proplists:get_value(slave_node_1, Config),
+    SlaveNode2 = proplists:get_value(slave_node_2, Config),
+    %% start syn on nodes
+    ok = syn:start(),
+    ok = rpc:call(SlaveNode1, syn, start, []),
+    ok = rpc:call(SlaveNode2, syn, start, []),
+    timer:sleep(100),
+    %% start processes
+    Pid0 = syn_test_suite_helper:start_process(),
+    Pid1 = syn_test_suite_helper:start_process(SlaveNode1),
+    Pid2 = syn_test_suite_helper:start_process(SlaveNode2),
+    timer:sleep(100),
+    %% register on 0
+    ok = syn:register(CommonName, Pid0, node()),
+    timer:sleep(250),
+    %% check
+    Node = node(),
+    {Pid0, Node} = syn:whereis(CommonName, with_meta),
+    {Pid0, Node} = rpc:call(SlaveNode1, syn, whereis, [CommonName, with_meta]),
+    {Pid0, Node} = rpc:call(SlaveNode2, syn, whereis, [CommonName, with_meta]),
+    %% simulate unregistration with inconsistent data
+    syn_registry:sync_unregister(SlaveNode1, Pid1, CommonName),
+    timer:sleep(250),
+    %% check
+    Node = node(),
+    {Pid0, Node} = syn:whereis(CommonName, with_meta),
+    {Pid0, Node} = rpc:call(SlaveNode1, syn, whereis, [CommonName, with_meta]),
+    {Pid0, Node} = rpc:call(SlaveNode2, syn, whereis, [CommonName, with_meta]).
+
 %% ===================================================================
 %% Internal
 %% ===================================================================
@@ -1073,3 +1108,7 @@ start_syn_delayed_with_custom_handler_register_local_process(Name, Pid, Meta, Ms
         syn:start(),
         ok = syn:register(Name, Pid, Meta)
     end).
+
+seq_unregister_register(Name, Pid, Meta) ->
+    syn:unregister(Name),
+    syn:register(Name, Pid, Meta).
