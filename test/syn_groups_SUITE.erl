@@ -1157,7 +1157,7 @@ three_nodes_anti_entropy_manual(Config) ->
     {error, not_remote_node} = rpc:call(SlaveNode2, syn, sync_from_node, [groups, SlaveNode2]),
     ok = rpc:call(SlaveNode2, syn, sync_from_node, [groups, node()]),
     ok = rpc:call(SlaveNode2, syn, sync_from_node, [groups, SlaveNode1]),
-    timer:sleep(500),
+    timer:sleep(5000),
     %% check
     Members = lists:sort([
         {Pid0, node()},
