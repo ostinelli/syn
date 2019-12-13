@@ -207,7 +207,8 @@ end_per_group(_GroupName, _Config) ->
 %% Config0 = Config1 = [tuple()]
 %% Reason = any()
 %% -------------------------------------------------------------------
-init_per_testcase(_TestCase, Config) ->
+init_per_testcase(TestCase, Config) ->
+    ct:pal("Starting test: ~p", [TestCase]),
     Config.
 
 %% -------------------------------------------------------------------
