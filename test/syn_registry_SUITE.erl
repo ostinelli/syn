@@ -40,7 +40,8 @@
     single_node_register_gen_server/1,
     single_node_callback_on_process_exit/1,
     single_node_ensure_callback_process_exit_is_called_if_process_killed/1,
-    single_node_monitor_after_registry_crash/1
+    single_node_monitor_after_registry_crash/1,
+    single_node_keep_monitor_reference_for_pid_if_there/1
 ]).
 -export([
     two_nodes_register_monitor_and_unregister/1,
@@ -88,9 +89,9 @@
 %% -------------------------------------------------------------------
 all() ->
     [
-        {group, single_node_process_registration},
-        {group, two_nodes_process_registration},
-        {group, three_nodes_process_registration}
+        {group, single_node_process_registration}
+%%        {group, two_nodes_process_registration},
+%%        {group, three_nodes_process_registration}
     ].
 
 %% -------------------------------------------------------------------
@@ -108,14 +109,15 @@ all() ->
 groups() ->
     [
         {single_node_process_registration, [shuffle], [
-            single_node_register_and_monitor,
-            single_node_register_and_unregister,
-            single_node_registration_errors,
-            single_node_registry_count,
-            single_node_register_gen_server,
-            single_node_callback_on_process_exit,
-            single_node_ensure_callback_process_exit_is_called_if_process_killed,
-            single_node_monitor_after_registry_crash
+%%            single_node_register_and_monitor,
+%%            single_node_register_and_unregister,
+%%            single_node_registration_errors,
+%%            single_node_registry_count,
+%%            single_node_register_gen_server,
+%%            single_node_callback_on_process_exit,
+%%            single_node_ensure_callback_process_exit_is_called_if_process_killed,
+%%            single_node_monitor_after_registry_crash,
+            single_node_keep_monitor_reference_for_pid_if_there
         ]},
         {two_nodes_process_registration, [shuffle], [
             two_nodes_register_monitor_and_unregister,
@@ -423,6 +425,28 @@ single_node_monitor_after_registry_crash(_Config) ->
     timer:sleep(200),
     %% retrieve
     undefined = syn:whereis(<<"my proc 2">>).
+
+single_node_keep_monitor_reference_for_pid_if_there(_Config) ->
+    %% start
+    ok = syn:start(),
+    %% start processes
+    Pid = syn_test_suite_helper:start_process(),
+    Pid2 = syn_test_suite_helper:start_process(),
+    %% register
+    ok = syn:register(<<"my proc">>, Pid),
+    ok = syn:register(<<"my proc 2">>, Pid2),
+    %% get monitor
+    [{<<"my proc">>, Pid, undefined, MonitorRef, _}] = ets:lookup(syn_registry_by_name, <<"my proc">>),
+    %% insert into table and keep reference
+    syn_registry:add_to_local_table(<<"my proc">>, Pid, undefined, undefined),
+    %% check internals
+    [{<<"my proc">>, Pid, undefined, MonitorRef, _}] = ets:lookup(syn_registry_by_name, <<"my proc">>),
+    %% get monitor
+    [{<<"my proc 2">>, Pid2, undefined, MonitorRef2, _}] = ets:lookup(syn_registry_by_name, <<"my proc 2">>),
+    %% insert into table and keep reference
+    syn_registry:add_to_local_table(<<"my proc 3">>, Pid2, undefined, undefined),
+    %% check internals
+    [{<<"my proc 3">>, Pid2, undefined, MonitorRef2, _}] = ets:lookup(syn_registry_by_name, <<"my proc 3">>).
 
 two_nodes_register_monitor_and_unregister(Config) ->
     %% get slave

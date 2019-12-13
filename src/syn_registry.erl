@@ -483,6 +483,15 @@ unregister_on_node(Name) ->
 
 -spec add_to_local_table(Name :: any(), Pid :: pid(), Meta :: any(), MonitorRef :: undefined | reference()) -> ok.
 add_to_local_table(Name, Pid, Meta, MonitorRef) ->
+    %% keep monitor reference if it exists for pid & new monitor is undefined
+    %% (rpc calls from other nodes during conflict resolution may otherwise overwrite this)
+    MonitorRef1 = case MonitorRef of
+        undefined ->
+            find_monitor_for_pid(Pid);
+
+        _ ->
+            MonitorRef
+    end,
     %% remove entry if previous exists
     case find_registry_tuple_by_name(Name) of
         undefined ->
@@ -492,8 +501,8 @@ add_to_local_table(Name, Pid, Meta, MonitorRef) ->
             ets:delete(syn_registry_by_pid, {OldPid, Name})
     end,
     %% overwrite & add
-    ets:insert(syn_registry_by_name, {Name, Pid, Meta, MonitorRef, node(Pid)}),
-    ets:insert(syn_registry_by_pid, {{Pid, Name}, Meta, MonitorRef, node(Pid)}),
+    ets:insert(syn_registry_by_name, {Name, Pid, Meta, MonitorRef1, node(Pid)}),
+    ets:insert(syn_registry_by_pid, {{Pid, Name}, Meta, MonitorRef1, node(Pid)}),
     ok.
 
 -spec remove_from_local_table(Name :: any(), Pid :: pid()) -> ok.
