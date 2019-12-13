@@ -80,13 +80,21 @@ reregister(Name, Pid, Meta) when is_pid(Pid) ->
 
 -spec reregister(Name :: any(), Pid :: pid(), Meta :: any(), RetryCount :: non_neg_integer()) ->
     ok | {error, Reason :: any()}.
-reregister(Name, Pid, Meta, RetryCount) when RetryCount > 50 ->
+reregister(Name, Pid, Meta, RetryCount) when RetryCount > 40 ->
     exit(self(), {timeout, {gen_server, call, [?MODULE, reregister, {Name, Pid, Meta}]}});
 reregister(Name, Pid, Meta, RetryCount) when is_pid(Pid) ->
     ?MODULE:unregister(Name),
     case find_registry_tuple_by_name(Name) of
         undefined ->
-            ?MODULE:register(Name, Pid, Meta);
+            case ?MODULE:register(Name, Pid, Meta) of
+                {error, taken} ->
+                    %% race conditions, retry
+                    reregister(Name, Pid, Meta, RetryCount);
+
+                Result ->
+                    Result
+            end;
+
         {Name, _Pid, _Meta} ->
             timer:sleep(100),
             reregister(Name, Pid, Meta, RetryCount + 1)
