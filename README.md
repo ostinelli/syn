@@ -482,7 +482,7 @@ Called when a process in a group exits. It will be called only on the node where
 #### `resolve_registry_conflict/3`
 In case of net splits, a specific Name might get registered simultaneously on two different nodes. In this case, the cluster experiences a registry naming conflict.
 
-When this happens, Syn will resolve this Process Registry conflict by choosing a single process. By default, Syn will keep the process running on the remote node from where the conflict is being resolved on, and will kill the other process by sending a `kill` signal with `exit(Pid, kill)`.
+When this happens, Syn will resolve this Process Registry conflict by choosing a single process. By default, Syn will keep the process running on the remote node from where the conflict is being resolved on, and will kill the other process by sending a `kill` signal with `exit(Pid, {syn_resolve_kill, Name, Meta})`.
 
 If this is not desired, you can set this callback to perform custom operations (such as a graceful shutdown).
 
