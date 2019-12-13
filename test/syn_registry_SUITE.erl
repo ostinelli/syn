@@ -60,7 +60,8 @@
     three_nodes_registration_race_condition_custom_conflict_resolution/1,
     three_nodes_anti_entropy/1,
     three_nodes_anti_entropy_manual/1,
-    three_nodes_concurrent_registration_unregistration/1
+    three_nodes_concurrent_registration_unregistration/1,
+    three_nodes_resolve_conflict_on_all_nodes/1
 ]).
 
 %% support
@@ -134,7 +135,8 @@ groups() ->
             three_nodes_registration_race_condition_custom_conflict_resolution,
             three_nodes_anti_entropy,
             three_nodes_anti_entropy_manual,
-            three_nodes_concurrent_registration_unregistration
+            three_nodes_concurrent_registration_unregistration,
+            three_nodes_resolve_conflict_on_all_nodes
         ]}
     ].
 %% -------------------------------------------------------------------
@@ -1103,6 +1105,35 @@ three_nodes_concurrent_registration_unregistration(Config) ->
     {Pid0, Node} = syn:whereis(CommonName, with_meta),
     {Pid0, Node} = rpc:call(SlaveNode1, syn, whereis, [CommonName, with_meta]),
     {Pid0, Node} = rpc:call(SlaveNode2, syn, whereis, [CommonName, with_meta]).
+
+three_nodes_resolve_conflict_on_all_nodes(Config) ->
+    CommonName = "common-name",
+    %% get slaves
+    SlaveNode1 = proplists:get_value(slave_node_1, Config),
+    SlaveNode2 = proplists:get_value(slave_node_2, Config),
+    %% start syn on nodes
+    ok = syn:start(),
+    ok = rpc:call(SlaveNode1, syn, start, []),
+    ok = rpc:call(SlaveNode2, syn, start, []),
+    timer:sleep(100),
+    %% start processes
+    Pid0 = syn_test_suite_helper:start_process(),
+    Pid1 = syn_test_suite_helper:start_process(SlaveNode1),
+    Pid2 = syn_test_suite_helper:start_process(SlaveNode2),
+    timer:sleep(100),
+    %% register on slave 1begin
+    ok = rpc:call(SlaveNode1, syn, register, [CommonName, Pid1, SlaveNode1]),
+    timer:sleep(100),
+    %% check
+    {Pid1, SlaveNode1} = syn:whereis(CommonName, with_meta),
+    {Pid1, SlaveNode1} = rpc:call(SlaveNode1, syn, whereis, [CommonName, with_meta]),
+    {Pid1, SlaveNode1} = rpc:call(SlaveNode2, syn, whereis, [CommonName, with_meta]),
+    %% force  a sync registration conflict on master node from slave 2
+    syn_registry:sync_register(node(), CommonName, Pid2, SlaveNode2),
+    timer:sleep(1000),
+    %% check
+    {Pid2, SlaveNode2} = syn:whereis(CommonName, with_meta),
+    {Pid2, SlaveNode2} = rpc:call(SlaveNode1, syn, whereis, [CommonName, with_meta]).
 
 %% ===================================================================
 %% Internal

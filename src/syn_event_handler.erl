@@ -96,23 +96,23 @@ do_on_group_process_exit(GroupName, Pid, Meta, Reason, CustomEventHandler) ->
     {Pid1 :: pid(), Meta1 :: any()},
     {Pid2 :: pid(), Meta2 :: any()},
     CustomEventHandler :: module()
-) -> {PidToKeep :: pid() | undefined, KillOther :: boolean()}.
+) -> {PidToKeep :: pid() | undefined, PidToKill :: pid() | undefined}.
 do_resolve_registry_conflict(Name, {Pid1, Meta1}, {Pid2, Meta2}, CustomEventHandler) ->
     case erlang:function_exported(CustomEventHandler, resolve_registry_conflict, 3) of
         true ->
             try CustomEventHandler:resolve_registry_conflict(Name, {Pid1, Meta1}, {Pid2, Meta2}) of
                 PidToKeep when is_pid(PidToKeep) ->
-                    {PidToKeep, false};
+                    {PidToKeep, undefined};
                 _ ->
-                    {undefined, false}
+                    {undefined, undefined}
             catch Exception:Reason ->
                 error_logger:error_msg(
                     "Syn(~p): Error ~p in custom handler resolve_registry_conflict: ~p~n",
                     [node(), Exception, Reason]
                 ),
-                {undefined, false}
+                {undefined, undefined}
             end;
         _ ->
-            %% by default, keep pid that generated the conflict
-            {Pid2, true}
+            %% by default, keep pid that generated the conflict & kill the one in the local table
+            {Pid2, Pid1}
     end.
