@@ -868,13 +868,13 @@ three_nodes_start_syn_before_connecting_cluster_with_conflict(Config) ->
     rpc:call(SlaveNode1, syn_test_suite_helper, disconnect_node, [SlaveNode2]),
     syn_test_suite_helper:disconnect_node(SlaveNode1),
     syn_test_suite_helper:disconnect_node(SlaveNode2),
-    timer:sleep(1500),
+    timer:sleep(2000),
     [] = nodes(),
     %% reconnect all
     syn_test_suite_helper:connect_node(SlaveNode1),
     syn_test_suite_helper:connect_node(SlaveNode2),
     rpc:call(SlaveNode1, syn_test_suite_helper, connect_node, [SlaveNode2]),
-    timer:sleep(1500),
+    timer:sleep(2500),
     %% count
     1 = syn:registry_count(),
     1 = rpc:call(SlaveNode1, syn, registry_count, []),
