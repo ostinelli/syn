@@ -556,18 +556,19 @@ two_nodes_registration_race_condition_conflict_resolution_when_process_died(Conf
     %% start syn on nodes
     ok = syn:start(),
     ok = rpc:call(SlaveNode, syn, start, []),
-    timer:sleep(100),
+    timer:sleep(1000),
     %% start processes
     Pid0 = syn_test_suite_helper:start_process(),
     Pid1 = syn_test_suite_helper:start_process(SlaveNode),
     %% inject into syn to simulate concurrent registration
     syn_registry:add_to_local_table(ConflictingName, Pid0, keep_this_one, undefined),
+    timer:sleep(250),
     %% kill process
     syn_test_suite_helper:kill_process(Pid0),
-    timer:sleep(250),
     %% register to trigger conflict resolution
+    timer:sleep(250),
     ok = rpc:call(SlaveNode, syn, register, [ConflictingName, Pid1, SlaveNode]),
-    timer:sleep(1000),
+    timer:sleep(250),
     %% check
     {Pid1, SlaveNode} = syn:whereis(ConflictingName, with_meta),
     {Pid1, SlaveNode} = rpc:call(SlaveNode, syn, whereis, [ConflictingName, with_meta]),

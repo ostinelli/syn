@@ -72,9 +72,11 @@ clean_after_test() ->
     Nodes = [node() | nodes()],
     %% shutdown
     lists:foreach(fun(Node) ->
-        rpc:call(Node, syn, stop, []),
+        %% close syn
+        rpc:call(Node, application, stop, [syn]),
         %% clean env
-        rpc:call(Node, application, unset_env, [syn, event_handler])
+        rpc:call(Node, application, unset_env, [syn, event_handler]),
+        rpc:call(Node, application, unset_env, [syn, anti_entropy])
     end, Nodes).
 
 start_process() ->
