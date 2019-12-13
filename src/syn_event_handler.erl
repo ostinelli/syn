@@ -102,17 +102,17 @@ do_resolve_registry_conflict(Name, {Pid1, Meta1}, {Pid2, Meta2}, CustomEventHand
         true ->
             try CustomEventHandler:resolve_registry_conflict(Name, {Pid1, Meta1}, {Pid2, Meta2}) of
                 PidToKeep when is_pid(PidToKeep) ->
-                    {PidToKeep, undefined};
+                    {PidToKeep, false};
                 _ ->
-                    {undefined, undefined}
+                    {undefined, false}
             catch Exception:Reason ->
                 error_logger:error_msg(
                     "Syn(~p): Error ~p in custom handler resolve_registry_conflict: ~p~n",
                     [node(), Exception, Reason]
                 ),
-                {undefined, undefined}
+                {undefined, false}
             end;
         _ ->
             %% by default, keep pid that generated the conflict & kill the one in the local table
-            {Pid2, Pid1}
+            {Pid2, true}
     end.

@@ -47,6 +47,7 @@
     two_nodes_register_monitor_and_unregister/1,
     two_nodes_registry_count/1,
     two_nodes_registration_race_condition_conflict_resolution_keep_remote/1,
+    two_nodes_registration_race_condition_conflict_resolution_keep_remote_with_custom_handler/1,
     two_nodes_registration_race_condition_conflict_resolution_keep_local_with_custom_handler/1,
     two_nodes_registration_race_condition_conflict_resolution_when_process_died/1,
     two_nodes_registry_full_cluster_sync_on_boot_node_added_later/1,
@@ -89,9 +90,9 @@
 %% -------------------------------------------------------------------
 all() ->
     [
-        {group, single_node_process_registration}
-%%        {group, two_nodes_process_registration},
-%%        {group, three_nodes_process_registration}
+        {group, single_node_process_registration},
+        {group, two_nodes_process_registration},
+        {group, three_nodes_process_registration}
     ].
 
 %% -------------------------------------------------------------------
@@ -109,20 +110,21 @@ all() ->
 groups() ->
     [
         {single_node_process_registration, [shuffle], [
-%%            single_node_register_and_monitor,
-%%            single_node_register_and_unregister,
-%%            single_node_registration_errors,
-%%            single_node_registry_count,
-%%            single_node_register_gen_server,
-%%            single_node_callback_on_process_exit,
-%%            single_node_ensure_callback_process_exit_is_called_if_process_killed,
-%%            single_node_monitor_after_registry_crash,
+            single_node_register_and_monitor,
+            single_node_register_and_unregister,
+            single_node_registration_errors,
+            single_node_registry_count,
+            single_node_register_gen_server,
+            single_node_callback_on_process_exit,
+            single_node_ensure_callback_process_exit_is_called_if_process_killed,
+            single_node_monitor_after_registry_crash,
             single_node_keep_monitor_reference_for_pid_if_there
         ]},
         {two_nodes_process_registration, [shuffle], [
             two_nodes_register_monitor_and_unregister,
             two_nodes_registry_count,
             two_nodes_registration_race_condition_conflict_resolution_keep_remote,
+            two_nodes_registration_race_condition_conflict_resolution_keep_remote_with_custom_handler,
             two_nodes_registration_race_condition_conflict_resolution_keep_local_with_custom_handler,
             two_nodes_registration_race_condition_conflict_resolution_when_process_died,
             two_nodes_registry_full_cluster_sync_on_boot_node_added_later,
@@ -545,6 +547,34 @@ two_nodes_registration_race_condition_conflict_resolution_keep_remote(Config) ->
     false = is_process_alive(Pid0),
     true = rpc:call(SlaveNode, erlang, is_process_alive, [Pid1]).
 
+two_nodes_registration_race_condition_conflict_resolution_keep_remote_with_custom_handler(Config) ->
+    ConflictingName = "COMMON",
+    %% get slaves
+    SlaveNode = proplists:get_value(slave_node, Config),
+    %% use customer handler
+    syn_test_suite_helper:use_custom_handler(),
+    rpc:call(SlaveNode, syn_test_suite_helper, use_custom_handler, []),
+    %% start syn on nodes
+    ok = syn:start(),
+    ok = rpc:call(SlaveNode, syn, start, []),
+    timer:sleep(1000),
+    %% start processes
+    Pid0 = syn_test_suite_helper:start_process(),
+    Pid1 = syn_test_suite_helper:start_process(SlaveNode),
+    %% inject into syn to simulate concurrent registration
+    ok = syn:register(ConflictingName, Pid0, node()),
+    %% trigger conflict resolution on master node
+    ok = syn_registry:sync_register(node(), ConflictingName, Pid1, keep_this_one),
+    timer:sleep(1000),
+    %% check metadata, resolution happens on master node
+    {Pid1, keep_this_one} = syn:whereis(ConflictingName, with_meta),
+    %% check that other processes are not alive because syn killed them
+    true = is_process_alive(Pid0),
+    true = rpc:call(SlaveNode, erlang, is_process_alive, [Pid1]),
+    %% check that discarded process is not monitored
+    {monitored_by, Monitors} = erlang:process_info(Pid0, monitored_by),
+    0 = length(Monitors).
+
 two_nodes_registration_race_condition_conflict_resolution_keep_local_with_custom_handler(Config) ->
     ConflictingName = "COMMON",
     %% get slaves
@@ -569,7 +599,10 @@ two_nodes_registration_race_condition_conflict_resolution_keep_local_with_custom
     {Pid0, keep_this_one} = rpc:call(SlaveNode, syn, whereis, [ConflictingName, with_meta]),
     %% check that other processes are not alive because syn killed them
     true = is_process_alive(Pid0),
-    true = rpc:call(SlaveNode, erlang, is_process_alive, [Pid1]).
+    true = rpc:call(SlaveNode, erlang, is_process_alive, [Pid1]),
+    %% check that discarded process is not monitored
+    {monitored_by, Monitors} = rpc:call(SlaveNode, erlang, process_info, [Pid1, monitored_by]),
+    0 = length(Monitors).
 
 two_nodes_registration_race_condition_conflict_resolution_when_process_died(Config) ->
     ConflictingName = "COMMON",

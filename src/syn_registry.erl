@@ -37,8 +37,10 @@
 %% sync API
 -export([sync_register/4, sync_unregister/3]).
 -export([sync_get_local_registry_tuples/1]).
--export([add_to_local_table/4, remove_from_local_table/2]).
 -export([sync_from_node/1]).
+-export([add_to_local_table/4, remove_from_local_table/2]).
+-export([sync_demonitor_and_kill_on_node/5]).
+-export([find_monitor_for_pid/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
@@ -145,6 +147,17 @@ sync_register(RemoteNode, Name, RemotePid, RemoteMeta) ->
 -spec sync_unregister(RemoteNode :: node(), Name :: any(), Pid :: pid()) -> ok.
 sync_unregister(RemoteNode, Name, Pid) ->
     gen_server:cast({?MODULE, RemoteNode}, {sync_unregister, Name, Pid}).
+
+-spec sync_demonitor_and_kill_on_node(
+    Name :: any(),
+    Pid :: pid(),
+    Meta :: any(),
+    MonitorRef :: reference(),
+    Kill :: boolean()
+) -> ok.
+sync_demonitor_and_kill_on_node(Name, Pid, Meta, MonitorRef, Kill) ->
+    RemoteNode = node(Pid),
+    gen_server:cast({?MODULE, RemoteNode}, {sync_demonitor_and_kill_on_node, Name, Pid, Meta, MonitorRef, Kill}).
 
 -spec sync_get_local_registry_tuples(FromNode :: node()) -> [syn_registry_tuple()].
 sync_get_local_registry_tuples(FromNode) ->
@@ -276,31 +289,33 @@ handle_cast({sync_register, Name, RemotePid, RemoteMeta}, State) ->
                     ),
 
                     case resolve_conflict(Name, {TablePid, TableMeta}, {RemotePid, RemoteMeta}, State) of
-                        {TablePid, PidToKill} ->
-                            %% keep local: overwrite local data to all remote nodes
+                        {TablePid, KillOtherPid} ->
+                            %% keep local
+                            %% demonitor
+                            MonitorRef = rpc:call(RemoteNode, syn_registry, find_monitor_for_pid, [RemotePid]),
+                            sync_demonitor_and_kill_on_node(Name, RemotePid, RemoteMeta, MonitorRef, KillOtherPid),
+                            %% overwrite local data to all remote nodes
                             lists:foreach(fun(RNode) ->
                                 ok = rpc:call(RNode, syn_registry, add_to_local_table, [Name, TablePid, TableMeta, undefined])
-                            end, nodes()),
-                            %% kill
-                            syn_kill(Name, PidToKill, RemoteMeta);
+                            end, nodes());
 
-                        {RemotePid, PidToKill} ->
-
+                        {RemotePid, KillOtherPid} ->
+                            %% keep remote
+                            %% demonitor
+                            MonitorRef = rpc:call(node(TablePid), syn_registry, find_monitor_for_pid, [TablePid]),
+                            sync_demonitor_and_kill_on_node(Name, TablePid, TableMeta, MonitorRef, KillOtherPid),
+                            %% overwrite remote data to all other nodes (including local)
                             NodesExceptRemoteNode = [node() | nodes()] -- [RemoteNode],
-                            %% keep remote: overwrite remote data to all other nodes (including local)
                             lists:foreach(fun(RNode) ->
                                 ok = rpc:call(RNode, syn_registry, add_to_local_table, [Name, RemotePid, RemoteMeta, undefined])
-                            end, NodesExceptRemoteNode),
-                            %% kill
-                            syn_kill(Name, PidToKill, TableMeta);
+                            end, NodesExceptRemoteNode);
 
                         undefined ->
                             AllNodes = [node() | nodes()],
                             %% both are dead, remove from all nodes
                             lists:foreach(fun(RNode) ->
                                 ok = rpc:call(RNode, syn_registry, remove_from_local_table, [Name, RemotePid])
-                            end, AllNodes),
-                            remove_from_local_table(Name, TablePid)
+                            end, AllNodes)
                     end,
 
                     error_logger:info_msg(
@@ -322,6 +337,20 @@ handle_cast({sync_unregister, Name, Pid}, State) ->
 handle_cast({sync_from_node, RemoteNode}, State) ->
     error_logger:info_msg("Syn(~p): Initiating REGISTRY forced sync for node ~p~n", [node(), RemoteNode]),
     registry_automerge(RemoteNode, State),
+    {noreply, State};
+
+handle_cast({sync_demonitor_and_kill_on_node, Name, Pid, Meta, MonitorRef, Kill}, State) ->
+    error_logger:info_msg("Syn(~p): Sync demonitoring pid ~p~n", [node(), Pid]),
+    %% demonitor
+    catch erlang:demonitor(MonitorRef, [flush]),
+    %% kill
+    case Kill of
+        true ->
+            exit(Pid, {syn_resolve_kill, Name, Meta});
+
+        _ ->
+            ok
+    end,
     {noreply, State};
 
 handle_cast(Msg, State) ->
@@ -651,17 +680,21 @@ resolve_tuple_in_automerge(Name, RemotePid, RemoteMeta, RemoteNode, State) ->
             ),
 
             case resolve_conflict(Name, {TablePid, TableMeta}, {RemotePid, RemoteMeta}, State) of
-                {TablePid, PidToKill} ->
-                    %% keep local: remote data still on remote node, remove there
-                    ok = rpc:call(RemoteNode, syn_registry, remove_from_local_table, [Name, RemotePid]),
-                    %% kill
-                    syn_kill(Name, PidToKill, RemoteMeta);
+                {TablePid, KillOtherPid} ->
+                    %% keep local
+                    %% demonitor
+                    MonitorRef = rpc:call(RemoteNode, syn_registry, find_monitor_for_pid, [RemotePid]),
+                    sync_demonitor_and_kill_on_node(Name, RemotePid, RemoteMeta, MonitorRef, KillOtherPid),
+                    %% remote data still on remote node, remove there
+                    ok = rpc:call(RemoteNode, syn_registry, remove_from_local_table, [Name, RemotePid]);
 
-                {RemotePid, PidToKill} ->
-                    %% keep remote: overwrite remote data to local
-                    add_to_local_table(Name, RemotePid, RemoteMeta, undefined),
-                    %% kill
-                    syn_kill(Name, PidToKill, TableMeta);
+                {RemotePid, KillOtherPid} ->
+                    %% keep remote
+                    %% demonitor
+                    MonitorRef = rpc:call(RemoteNode, syn_registry, find_monitor_for_pid, [TablePid]),
+                    sync_demonitor_and_kill_on_node(Name, TablePid, TableMeta, MonitorRef, KillOtherPid),
+                    %% overwrite remote data to local
+                    add_to_local_table(Name, RemotePid, RemoteMeta, undefined);
 
                 undefined ->
                     %% both are dead, remove from local & remote
@@ -675,7 +708,7 @@ resolve_tuple_in_automerge(Name, RemotePid, RemoteMeta, RemoteNode, State) ->
     {TablePid :: pid(), TableMeta :: any()},
     {RemotePid :: pid(), RemoteMeta :: any()},
     #state{}
-) -> {PidToKeep :: pid(), PidToKill :: pid() | undefined} | undefined.
+) -> {PidToKeep :: pid(), KillOtherPid :: boolean() | undefined} | undefined.
 resolve_conflict(
     Name,
     {TablePid, TableMeta},
@@ -686,7 +719,7 @@ resolve_conflict(
     RemotePidAlive = rpc:call(node(RemotePid), erlang, is_process_alive, [RemotePid]),
 
     %% check if pids are alive (race conditions if pid dies during resolution)
-    {PidToKeep, PidToKill} = case {TablePidAlive, RemotePidAlive} of
+    {PidToKeep, KillOtherPid} = case {TablePidAlive, RemotePidAlive} of
         {true, true} ->
             %% call conflict resolution
             syn_event_handler:do_resolve_registry_conflict(
@@ -698,15 +731,15 @@ resolve_conflict(
 
         {true, false} ->
             %% keep only alive process
-            {TablePid, undefined};
+            {TablePid, false};
 
         {false, true} ->
             %% keep only alive process
-            {RemotePid, undefined};
+            {RemotePid, false};
 
         {false, false} ->
             %% remove both
-            {undefined, undefined}
+            {undefined, false}
     end,
 
     %% keep chosen one
@@ -717,7 +750,7 @@ resolve_conflict(
                 "Syn(~p): Keeping process in table ~p over remote process ~p~n",
                 [node(), TablePid, RemotePid]
             ),
-            {TablePid, PidToKill};
+            {TablePid, KillOtherPid};
 
         RemotePid ->
             %% keep remote
@@ -725,7 +758,7 @@ resolve_conflict(
                 "Syn(~p): Keeping remote process ~p over process in table ~p~n",
                 [node(), RemotePid, TablePid]
             ),
-            {RemotePid, PidToKill};
+            {RemotePid, KillOtherPid};
 
         undefined ->
             error_logger:info_msg(
@@ -741,10 +774,6 @@ resolve_conflict(
             ),
             undefined
     end.
-
--spec syn_kill(Name :: any(), PidToKill :: pid() | undefined, Meta :: any()) -> true.
-syn_kill(_Name, undefined, _Meta) -> ok;
-syn_kill(Name, PidToKill, Meta) -> exit(PidToKill, {syn_resolve_kill, Name, Meta}).
 
 -spec raw_purge_registry_entries_for_remote_node(Node :: atom()) -> ok.
 raw_purge_registry_entries_for_remote_node(Node) when Node =/= node() ->
