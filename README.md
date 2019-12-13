@@ -2,6 +2,7 @@
 
 
 
+
 [![Build Status](https://travis-ci.org/ostinelli/syn.svg?branch=master)](https://travis-ci.org/ostinelli/syn) [![Hex pm](https://img.shields.io/hexpm/v/syn.svg)](https://hex.pm/packages/syn)
 
 
@@ -523,25 +524,13 @@ In `sys.config` you can specify your anti-entropy settings:
 `interval` specifies in seconds the interval between every anti-entropy syncing, while `interval_max_deviation` the max deviation in seconds from the `interval`. For instance, with an `interval` of 300 seconds and an `interval_max_deviation` of 60, anti-entropy will be called with an interval range of 240 to 360 seconds.
 
 ### Manual sync
-You can force an anti-entropy sync with a remote node by calling the following:
+You can force an anti-entropy sync on the whole cluster by calling the following:
 
 ```erlang
-syn:sync_from_node(Module, RemoteNode) -> ok | {error, Reason}.
-
-Types:
-    Module = registry | groups
-    RemoteNode = node()
-    Reason = not_remote_node
+syn:force_cluster_sync(registry | groups) -> ok.
 ```
 
-This is a unidirectional sync, that will sync the data of all the processes running on `RemoteNode` to the local node. If you want to sync data in both ways, you can do so with a RPC, for instance:
-
-```erlang
-ok = syn:sync_from_node(registry, 'remote@example.com'),
-ok = rpc:call('remote@example.com', syn, sync_from_node, [registry, node()]).
-```
-
-> As per the notes above, in normal conditions Syn doesn't need to be manually synced. Use these functions as a last resort.
+> As per the notes above, in normal conditions Syn doesn't need to be manually synced. This function will force a full mesh sync on all of the cluster. Use it as a last resort.
 
 ## Internals
 As of v2.1, Syn uses ETS for memory storage and doesn't have any external dependency. Syn has its own replication and net splits conflict resolution mechanisms.

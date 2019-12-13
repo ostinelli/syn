@@ -1087,16 +1087,8 @@ three_nodes_anti_entropy_manual(Config) ->
     ok = rpc:call(SlaveNode1, syn_registry, add_to_local_table, ["conflict", Pid1Conflict, keep_this_one, undefined]),
     ok = rpc:call(SlaveNode2, syn_registry, add_to_local_table, ["conflict", Pid2Conflict, SlaveNode2, undefined]),
     %% call anti entropy
-    {error, not_remote_node} = syn:sync_from_node(registry, node()),
-    ok = syn:sync_from_node(registry, SlaveNode1),
-    ok = syn:sync_from_node(registry, SlaveNode2),
-    {error, not_remote_node} = rpc:call(SlaveNode1, syn, sync_from_node, [registry, SlaveNode1]),
-    ok = rpc:call(SlaveNode1, syn, sync_from_node, [registry, node()]),
-    ok = rpc:call(SlaveNode1, syn, sync_from_node, [registry, SlaveNode2]),
-    {error, not_remote_node} = rpc:call(SlaveNode2, syn, sync_from_node, [registry, SlaveNode2]),
-    ok = rpc:call(SlaveNode2, syn, sync_from_node, [registry, node()]),
-    ok = rpc:call(SlaveNode2, syn, sync_from_node, [registry, SlaveNode1]),
-    timer:sleep(500),
+    ok = syn:force_cluster_sync(registry),
+    timer:sleep(1000),
     %% check
     Node = node(),
     {Pid0, Node} = syn:whereis("pid0", with_meta),

@@ -41,7 +41,7 @@
 -export([publish/2]).
 -export([publish_to_local/2]).
 -export([multi_call/2, multi_call/3, multi_call_reply/2]).
--export([sync_from_node/2]).
+-export([force_cluster_sync/1]).
 
 %% gen_server via interface
 -export([register_name/2, unregister_name/1, whereis_name/1, send/2]).
@@ -184,8 +184,8 @@ multi_call_reply(CallerPid, Reply) ->
     syn_groups:multi_call_reply(CallerPid, Reply).
 
 %% ----- \/ anti entropy ---------------------------------------------
--spec sync_from_node(registry | groups, RemoteNode :: node()) -> ok | {error, Reason :: any()}.
-sync_from_node(registry, RemoteNode) ->
-    syn_registry:sync_from_node(RemoteNode);
-sync_from_node(groups, RemoteNode) ->
-    syn_groups:sync_from_node(RemoteNode).
+-spec force_cluster_sync(registry | groups) -> ok.
+force_cluster_sync(registry) ->
+    syn_registry:force_cluster_sync();
+force_cluster_sync(groups) ->
+    syn_groups:force_cluster_sync().

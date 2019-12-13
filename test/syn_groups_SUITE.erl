@@ -1148,15 +1148,7 @@ three_nodes_anti_entropy_manual(Config) ->
     ok = rpc:call(SlaveNode2, syn_groups, add_to_local_table, ["my-group", Pid2, SlaveNode2, undefined]),
     ok = rpc:call(SlaveNode2, syn_groups, add_to_local_table, ["my-group-isolated", Pid2Isolated, SlaveNode2, undefined]),
     %% call anti entropy
-    {error, not_remote_node} = syn:sync_from_node(groups, node()),
-    ok = syn:sync_from_node(groups, SlaveNode1),
-    ok = syn:sync_from_node(groups, SlaveNode2),
-    {error, not_remote_node} = rpc:call(SlaveNode1, syn, sync_from_node, [groups, SlaveNode1]),
-    ok = rpc:call(SlaveNode1, syn, sync_from_node, [groups, node()]),
-    ok = rpc:call(SlaveNode1, syn, sync_from_node, [groups, SlaveNode2]),
-    {error, not_remote_node} = rpc:call(SlaveNode2, syn, sync_from_node, [groups, SlaveNode2]),
-    ok = rpc:call(SlaveNode2, syn, sync_from_node, [groups, node()]),
-    ok = rpc:call(SlaveNode2, syn, sync_from_node, [groups, SlaveNode1]),
+    ok = syn:force_cluster_sync(groups),
     timer:sleep(5000),
     %% check
     Members = lists:sort([

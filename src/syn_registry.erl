@@ -36,10 +36,10 @@
 
 %% sync API
 -export([sync_register/4, sync_unregister/3]).
--export([sync_get_local_registry_tuples/1]).
--export([sync_from_node/1]).
--export([add_to_local_table/4, remove_from_local_table/2]).
 -export([sync_demonitor_and_kill_on_node/5]).
+-export([sync_get_local_registry_tuples/1]).
+-export([force_cluster_sync/0]).
+-export([add_to_local_table/4, remove_from_local_table/2]).
 -export([find_monitor_for_pid/1]).
 
 %% gen_server callbacks
@@ -164,12 +164,11 @@ sync_get_local_registry_tuples(FromNode) ->
     error_logger:info_msg("Syn(~p): Received request of local registry tuples from remote node ~p~n", [node(), FromNode]),
     get_registry_tuples_for_node(node()).
 
--spec sync_from_node(RemoteNode :: node()) -> ok | {error, Reason :: any()}.
-sync_from_node(RemoteNode) ->
-    case RemoteNode =:= node() of
-        true -> {error, not_remote_node};
-        _ -> gen_server:cast(?MODULE, {sync_from_node, RemoteNode})
-    end.
+-spec force_cluster_sync() -> ok.
+force_cluster_sync() ->
+    lists:foreach(fun(RemoteNode) ->
+        gen_server:cast({?MODULE, RemoteNode}, force_cluster_sync)
+    end, [node() | nodes()]).
 
 %% ===================================================================
 %% Callbacks
@@ -199,7 +198,7 @@ init([]) ->
         anti_entropy_interval_max_deviation_ms = AntiEntropyIntervalMaxDeviationMs
     },
     %% send message to initiate full cluster sync
-    timer:send_after(0, self(), sync_full_cluster),
+    timer:send_after(0, self(), sync_from_full_cluster),
     %% start anti-entropy
     set_timer_for_anti_entropy(State),
     %% init
@@ -333,9 +332,9 @@ handle_cast({sync_unregister, Name, Pid}, State) ->
     %% return
     {noreply, State};
 
-handle_cast({sync_from_node, RemoteNode}, State) ->
-    error_logger:info_msg("Syn(~p): Initiating REGISTRY forced sync for node ~p~n", [node(), RemoteNode]),
-    registry_automerge(RemoteNode, State),
+handle_cast(force_cluster_sync, State) ->
+    error_logger:info_msg("Syn(~p): Initiating full cluster FORCED registry sync for nodes: ~p~n", [node(), nodes()]),
+    do_sync_from_full_cluster(State),
     {noreply, State};
 
 handle_cast({sync_demonitor_and_kill_on_node, Name, Pid, Meta, MonitorRef, Kill}, State) ->
@@ -394,17 +393,9 @@ handle_info({nodedown, RemoteNode}, State) ->
     raw_purge_registry_entries_for_remote_node(RemoteNode),
     {noreply, State};
 
-handle_info(sync_full_cluster, State) ->
-    case length(nodes()) > 0 of
-        true ->
-            error_logger:info_msg("Syn(~p): Initiating full cluster registry sync for nodes: ~p~n", [node(), nodes()]);
-
-        _ ->
-            ok
-    end,
-    lists:foreach(fun(RemoteNode) ->
-        registry_automerge(RemoteNode, State)
-    end, nodes()),
+handle_info(sync_from_full_cluster, State) ->
+    error_logger:info_msg("Syn(~p): Initiating full cluster registry sync for nodes: ~p~n", [node(), nodes()]),
+    do_sync_from_full_cluster(State),
     {noreply, State};
 
 handle_info(sync_anti_entropy, State) ->
@@ -763,6 +754,12 @@ resolve_conflict(
             ),
             undefined
     end.
+
+-spec do_sync_from_full_cluster(#state{}) -> ok.
+do_sync_from_full_cluster(State) ->
+    lists:foreach(fun(RemoteNode) ->
+        registry_automerge(RemoteNode, State)
+    end, nodes()).
 
 -spec raw_purge_registry_entries_for_remote_node(Node :: atom()) -> ok.
 raw_purge_registry_entries_for_remote_node(Node) when Node =/= node() ->
