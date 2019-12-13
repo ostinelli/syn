@@ -672,7 +672,6 @@ resolve_tuple_in_automerge(Name, RemotePid, RemoteMeta, State) ->
                 {TablePid, KillOtherPid} ->
                     %% keep local
                     %% demonitor
-                    %% TODO: test demonitor
                     MonitorRef = rpc:call(node(RemotePid), syn_registry, find_monitor_for_pid, [RemotePid]),
                     sync_demonitor_and_kill_on_node(Name, RemotePid, RemoteMeta, MonitorRef, KillOtherPid),
                     %% remote data still on remote node, remove there
@@ -681,7 +680,6 @@ resolve_tuple_in_automerge(Name, RemotePid, RemoteMeta, State) ->
                 {RemotePid, KillOtherPid} ->
                     %% keep remote
                     %% demonitor
-                    %% TODO: test demonitor
                     MonitorRef = rpc:call(node(TablePid), syn_registry, find_monitor_for_pid, [TablePid]),
                     sync_demonitor_and_kill_on_node(Name, TablePid, TableMeta, MonitorRef, KillOtherPid),
                     %% overwrite remote data to local

@@ -57,7 +57,7 @@
     three_nodes_partial_netsplit_consistency/1,
     three_nodes_full_netsplit_consistency/1,
     three_nodes_start_syn_before_connecting_cluster_with_conflict/1,
-    three_nodes_start_syn_before_connecting_cluster_with_custom_conflict_resolution/1,
+    three_nodes_start_syn_before_connecting_cluster_with_custom_conflict_resolution_keep_remote/1,
     three_nodes_registration_race_condition_custom_conflict_resolution/1,
     three_nodes_anti_entropy/1,
     three_nodes_anti_entropy_manual/1,
@@ -133,7 +133,7 @@ groups() ->
             three_nodes_partial_netsplit_consistency,
             three_nodes_full_netsplit_consistency,
             three_nodes_start_syn_before_connecting_cluster_with_conflict,
-            three_nodes_start_syn_before_connecting_cluster_with_custom_conflict_resolution,
+            three_nodes_start_syn_before_connecting_cluster_with_custom_conflict_resolution_keep_remote,
             three_nodes_registration_race_condition_custom_conflict_resolution,
             three_nodes_anti_entropy,
             three_nodes_anti_entropy_manual,
@@ -916,7 +916,7 @@ three_nodes_start_syn_before_connecting_cluster_with_conflict(Config) ->
             ok = no_process_is_registered_with_conflicting_name
     end.
 
-three_nodes_start_syn_before_connecting_cluster_with_custom_conflict_resolution(Config) ->
+three_nodes_start_syn_before_connecting_cluster_with_custom_conflict_resolution_keep_remote(Config) ->
     ConflictingName = "COMMON",
     %% get slaves
     SlaveNode1 = proplists:get_value(slave_node_1, Config),
@@ -966,7 +966,12 @@ three_nodes_start_syn_before_connecting_cluster_with_custom_conflict_resolution(
     %% check that other processes are still alive because we didn't kill them
     true = is_process_alive(Pid0),
     true = rpc:call(SlaveNode1, erlang, is_process_alive, [Pid1]),
-    true = rpc:call(SlaveNode2, erlang, is_process_alive, [Pid2]).
+    true = rpc:call(SlaveNode2, erlang, is_process_alive, [Pid2]),
+    %% check that discarded processes are not monitored
+    {monitored_by, Monitors0} = erlang:process_info(Pid0, monitored_by),
+    0 = length(Monitors0),
+    {monitored_by, Monitors2} = rpc:call(SlaveNode2, erlang, process_info, [Pid2, monitored_by]),
+    0 = length(Monitors2).
 
 three_nodes_registration_race_condition_custom_conflict_resolution(Config) ->
     ConflictingName = "COMMON",
