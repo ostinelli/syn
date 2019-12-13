@@ -96,7 +96,7 @@ do_on_group_process_exit(GroupName, Pid, Meta, Reason, CustomEventHandler) ->
     {Pid1 :: pid(), Meta1 :: any()},
     {Pid2 :: pid(), Meta2 :: any()},
     CustomEventHandler :: module()
-) -> {PidToKeep :: pid() | undefined, PidToKill :: pid() | undefined}.
+) -> {PidToKeep :: pid() | undefined, KillOtherPid :: boolean() | undefined}.
 do_resolve_registry_conflict(Name, {Pid1, Meta1}, {Pid2, Meta2}, CustomEventHandler) ->
     case erlang:function_exported(CustomEventHandler, resolve_registry_conflict, 3) of
         true ->
