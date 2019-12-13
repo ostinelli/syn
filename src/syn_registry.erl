@@ -89,7 +89,8 @@ reregister(Name, Pid, Meta, RetryCount) when is_pid(Pid) ->
             case ?MODULE:register(Name, Pid, Meta) of
                 {error, taken} ->
                     %% race conditions, retry
-                    reregister(Name, Pid, Meta, RetryCount);
+                    timer:sleep(100),
+                    reregister(Name, Pid, Meta, RetryCount + 1);
 
                 Result ->
                     Result
@@ -675,12 +676,8 @@ resolve_conflict(
                 [node(), TablePid, RemotePid]
             ),
             %% callback: keeping local
-            CallbackIfLocal(),
-            %% kill?
-            case KillOther of
-                true -> syn_kill(RemotePid, Name, RemoteMeta);
-                _ -> undefined
-            end;
+            %% no process killing necessary because we kill local only if in a custom handler
+            CallbackIfLocal();
 
         RemotePid ->
             %% keep remote
@@ -689,8 +686,12 @@ resolve_conflict(
                 [node(), RemotePid, TablePid]
             ),
             %% keeping remote: overwrite remote data to local
-            %% no process killing necessary because we kill remote only if in a custom handler
-            add_to_local_table(Name, RemotePid, RemoteMeta, undefined);
+            add_to_local_table(Name, RemotePid, RemoteMeta, undefined),
+            %% kill?
+            case KillOther of
+                true -> syn_kill(Name, TablePid, TableMeta);
+                _ -> undefined
+            end;
 
         none ->
             error_logger:info_msg(
@@ -708,8 +709,8 @@ resolve_conflict(
             )
     end.
 
--spec syn_kill(PidToKill :: pid(), Name :: any(), Meta :: any()) -> true.
-syn_kill(PidToKill, Name, Meta) -> exit(PidToKill, {syn_resolve_kill, Name, Meta}).
+-spec syn_kill(Name :: any(), PidToKill :: pid(), Meta :: any()) -> true.
+syn_kill(Name, PidToKill, Meta) -> exit(PidToKill, {syn_resolve_kill, Name, Meta}).
 
 -spec raw_purge_registry_entries_for_remote_node(Node :: atom()) -> ok.
 raw_purge_registry_entries_for_remote_node(Node) when Node =/= node() ->

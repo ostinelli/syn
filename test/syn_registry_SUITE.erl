@@ -45,8 +45,8 @@
 -export([
     two_nodes_register_monitor_and_unregister/1,
     two_nodes_registry_count/1,
-    two_nodes_registration_race_condition_conflict_resolution_keep_local/1,
     two_nodes_registration_race_condition_conflict_resolution_keep_remote/1,
+    two_nodes_registration_race_condition_conflict_resolution_keep_local_with_custom_handler/1,
     two_nodes_registration_race_condition_conflict_resolution_when_process_died/1,
     two_nodes_registry_full_cluster_sync_on_boot_node_added_later/1,
     two_nodes_registry_full_cluster_sync_on_boot_syn_started_later/1,
@@ -119,8 +119,8 @@ groups() ->
         {two_nodes_process_registration, [shuffle], [
             two_nodes_register_monitor_and_unregister,
             two_nodes_registry_count,
-            two_nodes_registration_race_condition_conflict_resolution_keep_local,
             two_nodes_registration_race_condition_conflict_resolution_keep_remote,
+            two_nodes_registration_race_condition_conflict_resolution_keep_local_with_custom_handler,
             two_nodes_registration_race_condition_conflict_resolution_when_process_died,
             two_nodes_registry_full_cluster_sync_on_boot_node_added_later,
             two_nodes_registry_full_cluster_sync_on_boot_syn_started_later,
@@ -496,7 +496,7 @@ two_nodes_registry_count(Config) ->
     0 = syn:registry_count(node()),
     0 = syn:registry_count(SlaveNode).
 
-two_nodes_registration_race_condition_conflict_resolution_keep_local(Config) ->
+two_nodes_registration_race_condition_conflict_resolution_keep_remote(Config) ->
     ConflictingName = "COMMON",
     %% get slaves
     SlaveNode = proplists:get_value(slave_node, Config),
@@ -513,14 +513,13 @@ two_nodes_registration_race_condition_conflict_resolution_keep_local(Config) ->
     ok = rpc:call(SlaveNode, syn, register, [ConflictingName, Pid1, SlaveNode]),
     timer:sleep(1000),
     %% check metadata, resolution happens on master node
-    Node = node(),
-    {Pid0, Node} = syn:whereis(ConflictingName, with_meta),
-    {Pid0, Node} = rpc:call(SlaveNode, syn, whereis, [ConflictingName, with_meta]),
+    {Pid1, SlaveNode} = syn:whereis(ConflictingName, with_meta),
+    {Pid1, SlaveNode} = rpc:call(SlaveNode, syn, whereis, [ConflictingName, with_meta]),
     %% check that other processes are not alive because syn killed them
-    true = is_process_alive(Pid0),
-    false = rpc:call(SlaveNode, erlang, is_process_alive, [Pid1]).
+    false = is_process_alive(Pid0),
+    true = rpc:call(SlaveNode, erlang, is_process_alive, [Pid1]).
 
-two_nodes_registration_race_condition_conflict_resolution_keep_remote(Config) ->
+two_nodes_registration_race_condition_conflict_resolution_keep_local_with_custom_handler(Config) ->
     ConflictingName = "COMMON",
     %% get slaves
     SlaveNode = proplists:get_value(slave_node, Config),
@@ -535,13 +534,13 @@ two_nodes_registration_race_condition_conflict_resolution_keep_remote(Config) ->
     Pid0 = syn_test_suite_helper:start_process(),
     Pid1 = syn_test_suite_helper:start_process(SlaveNode),
     %% inject into syn to simulate concurrent registration
-    ok = syn_registry:add_to_local_table(ConflictingName, Pid0, node(), undefined),
+    ok = syn_registry:add_to_local_table(ConflictingName, Pid0, keep_this_one, undefined),
     %% register on slave node to trigger conflict resolution on master node
-    ok = rpc:call(SlaveNode, syn, register, [ConflictingName, Pid1, keep_this_one]),
+    ok = rpc:call(SlaveNode, syn, register, [ConflictingName, Pid1, SlaveNode]),
     timer:sleep(1000),
     %% check metadata, resolution happens on master node
-    {Pid1, keep_this_one} = syn:whereis(ConflictingName, with_meta),
-    {Pid1, keep_this_one} = rpc:call(SlaveNode, syn, whereis, [ConflictingName, with_meta]),
+    {Pid0, keep_this_one} = syn:whereis(ConflictingName, with_meta),
+    {Pid0, keep_this_one} = rpc:call(SlaveNode, syn, whereis, [ConflictingName, with_meta]),
     %% check that other processes are not alive because syn killed them
     true = is_process_alive(Pid0),
     true = rpc:call(SlaveNode, erlang, is_process_alive, [Pid1]).

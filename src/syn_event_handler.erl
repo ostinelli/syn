@@ -113,6 +113,6 @@ do_resolve_registry_conflict(Name, {Pid1, Meta1}, {Pid2, Meta2}, CustomEventHand
                 {undefined, false}
             end;
         _ ->
-            %% by default, keep pid in table
-            {Pid1, true}
+            %% by default, keep pid that generated the conflict
+            {Pid2, true}
     end.
