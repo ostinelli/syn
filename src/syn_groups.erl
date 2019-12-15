@@ -105,13 +105,9 @@ get_members(GroupName) ->
 
 -spec get_members(GroupName :: any(), with_meta) -> [{pid(), Meta :: any()}].
 get_members(GroupName, with_meta) ->
-    Guard = case is_tuple(GroupName) of
-        true -> {'=:=', '$1', {GroupName}};
-        _ -> {'=:=', '$1', GroupName}
-    end,
     lists:sort(ets:select(syn_groups_by_name, [{
-        {{'$1', '$2'}, '$3', '_', '_'},
-        [Guard],
+        {{GroupName, '$2'}, '$3', '_', '_'},
+        [],
         [{{'$2', '$3'}}]
     }])).
 
@@ -474,21 +470,21 @@ remove_from_local_table(GroupName, Pid) ->
 -spec find_groups_tuples_by_pid(Pid :: pid()) -> GroupTuples :: list(syn_groups_tuple()).
 find_groups_tuples_by_pid(Pid) when is_pid(Pid) ->
     ets:select(syn_groups_by_pid, [{
-        {{'$1', '$2'}, '$3', '_', '_'},
-        [{'=:=', '$1', Pid}],
-        [{{'$2', '$1', '$3'}}]
+        {{Pid, '$2'}, '$3', '_', '_'},
+        [],
+        [{{'$2', Pid, '$3'}}]
     }]).
 
 -spec find_groups_entry_by_name_and_pid(GroupName :: any(), Pid :: pid()) -> Entry :: syn_groups_entry() | undefined.
 find_groups_entry_by_name_and_pid(GroupName, Pid) ->
-    NameGuard = case is_tuple(GroupName) of
-        true -> {'=:=', '$1', {GroupName}};
-        _ -> {'=:=', '$1', GroupName}
+    MatchBody = case is_tuple(GroupName) of
+        true -> {{{GroupName}, Pid, '$3', '$4', '$5'}};
+        _ -> {{GroupName, Pid, '$3', '$4', '$5'}}
     end,
     case ets:select(syn_groups_by_name, [{
-        {{'$1', '$2'}, '$3', '$4', '$5'},
-        [{'andalso', NameGuard, {'=:=', '$2', Pid}}],
-        [{{'$1', '$2', '$3', '$4', '$5'}}]
+        {{GroupName, Pid}, '$3', '$4', '$5'},
+        [],
+        [MatchBody]
     }]) of
         [RegistryTuple] -> RegistryTuple;
         _ -> undefined
@@ -497,8 +493,8 @@ find_groups_entry_by_name_and_pid(GroupName, Pid) ->
 -spec find_monitor_for_pid(Pid :: pid()) -> reference() | undefined.
 find_monitor_for_pid(Pid) when is_pid(Pid) ->
     case ets:select(syn_groups_by_pid, [{
-        {{'$1', '_'}, '_', '$4', '_'},
-        [{'=:=', '$1', Pid}],
+        {{Pid, '_'}, '_', '$4', '_'},
+        [],
         ['$4']
     }], 1) of
         {[MonitorRef], _} -> MonitorRef;
@@ -508,8 +504,8 @@ find_monitor_for_pid(Pid) when is_pid(Pid) ->
 -spec get_groups_tuples_for_node(Node :: node()) -> [syn_groups_tuple()].
 get_groups_tuples_for_node(Node) ->
     ets:select(syn_groups_by_name, [{
-        {{'$1', '$2'}, '$3', '_', '$5'},
-        [{'=:=', '$5', Node}],
+        {{'$1', '$2'}, '$3', '_', Node},
+        [],
         [{{'$1', '$2', '$3'}}]
     }]).
 

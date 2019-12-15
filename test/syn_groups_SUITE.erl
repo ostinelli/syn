@@ -1035,6 +1035,7 @@ three_nodes_full_netsplit_consistency(Config) ->
     timer:sleep(2000),
     %% leave 0Changed
     ok = syn:leave(GroupName, Pid0Changed),
+    timer:sleep(250),
     %% retrieve local
     true = lists:sort([Pid0]) =:= lists:sort(syn:get_members(GroupName)),
     true = lists:sort([
