@@ -135,8 +135,8 @@ count() ->
 -spec count(Node :: node()) -> non_neg_integer().
 count(Node) ->
     ets:select_count(syn_registry_by_name, [{
-        {'_', '_', '_', '_', '$5'},
-        [{'=:=', '$5', Node}],
+        {'_', '_', '_', '_', Node},
+        [],
         [true]
     }]).
 
@@ -535,14 +535,14 @@ remove_from_local_table(Name, Pid) ->
 
 -spec find_registry_tuple_by_name(Name :: any()) -> RegistryTuple :: syn_registry_tuple() | undefined.
 find_registry_tuple_by_name(Name) ->
-    Guard = case is_tuple(Name) of
-        true -> {'=:=', '$1', {Name}};
-        _ -> {'=:=', '$1', Name}
+    MatchBody = case is_tuple(Name) of
+        true -> {{{Name}, '$2', '$3'}};
+        _ -> {{Name, '$2', '$3'}}
     end,
     case ets:select(syn_registry_by_name, [{
-        {'$1', '$2', '$3', '_', '_'},
-        [Guard],
-        [{{'$1', '$2', '$3'}}]
+        {Name, '$2', '$3', '_', '_'},
+        [],
+        [MatchBody]
     }]) of
         [RegistryTuple] -> RegistryTuple;
         _ -> undefined
@@ -550,13 +550,9 @@ find_registry_tuple_by_name(Name) ->
 
 -spec find_registry_entry_by_name(Name :: any()) -> Entry :: syn_registry_entry() | undefined.
 find_registry_entry_by_name(Name) ->
-    Guard = case is_tuple(Name) of
-        true -> {'=:=', '$1', {Name}};
-        _ -> {'=:=', '$1', Name}
-    end,
     case ets:select(syn_registry_by_name, [{
-        {'$1', '$2', '$3', '_', '_'},
-        [Guard],
+        {Name, '$2', '$3', '_', '_'},
+        [],
         ['$_']
     }]) of
         [RegistryTuple] -> RegistryTuple;
@@ -566,8 +562,8 @@ find_registry_entry_by_name(Name) ->
 -spec find_monitor_for_pid(Pid :: pid()) -> reference() | undefined.
 find_monitor_for_pid(Pid) when is_pid(Pid) ->
     case ets:select(syn_registry_by_pid, [{
-        {{'$1', '_'}, '_', '$4', '_'},
-        [{'=:=', '$1', Pid}],
+        {{Pid, '_'}, '_', '$4', '_'},
+        [],
         ['$4']
     }], 1) of
         {[MonitorRef], _} -> MonitorRef;
@@ -577,16 +573,16 @@ find_monitor_for_pid(Pid) when is_pid(Pid) ->
 -spec find_registry_tuples_by_pid(Pid :: pid()) -> Entries :: [syn_registry_tuple()].
 find_registry_tuples_by_pid(Pid) when is_pid(Pid) ->
     ets:select(syn_registry_by_pid, [{
-        {{'$1', '$2'}, '$3', '_', '_'},
-        [{'=:=', '$1', Pid}],
-        [{{'$2', '$1', '$3'}}]
+        {{Pid, '$2'}, '$3', '_', '_'},
+        [],
+        [{{'$2', Pid, '$3'}}]
     }]).
 
 -spec get_registry_tuples_for_node(Node :: node()) -> [syn_registry_tuple()].
 get_registry_tuples_for_node(Node) ->
     ets:select(syn_registry_by_name, [{
-        {'$1', '$2', '$3', '_', '$5'},
-        [{'=:=', '$5', Node}],
+        {'$1', '$2', '$3', '_', Node},
+        [],
         [{{'$1', '$2', '$3'}}]
     }]).
 
