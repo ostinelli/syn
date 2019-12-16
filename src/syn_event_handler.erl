@@ -103,8 +103,10 @@ do_resolve_registry_conflict(Name, {Pid1, Meta1, Time1}, {Pid2, Meta2, Time2}, C
             try CustomEventHandler:resolve_registry_conflict(Name, {Pid1, Meta1}, {Pid2, Meta2}) of
                 PidToKeep when is_pid(PidToKeep) ->
                     {PidToKeep, false};
+
                 _ ->
                     {undefined, false}
+
             catch Exception:Reason ->
                 error_logger:error_msg(
                     "Syn(~p): Error ~p in custom handler resolve_registry_conflict: ~p~n",
@@ -112,7 +114,14 @@ do_resolve_registry_conflict(Name, {Pid1, Meta1, Time1}, {Pid2, Meta2, Time2}, C
                 ),
                 {undefined, false}
             end;
+
         _ ->
-            %% by default, keep pid that generated the conflict & kill the one in the local table
-            {Pid2, true}
+            %% by default, keep pid registered more recently
+            %% this is a simple mechanism that can be imprecise, as system clocks are not perfectly aligned in a cluster
+            %% if something more elaborate is desired (such as vector clocks) use Meta to store data and a custom event handler
+            PidToKeep = case Time1 > Time2 of
+                true -> Pid1;
+                _ -> Pid2
+            end,
+            {PidToKeep, true}
     end.

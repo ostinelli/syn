@@ -464,7 +464,7 @@ register_on_node(Name, Pid, Meta) ->
             MRef
     end,
     %% add to table
-    Time = erlang:monotonic_time(),
+    Time = erlang:system_time(),
     add_to_local_table(Name, Pid, Meta, Time, MonitorRef),
     {ok, Time}.
 
