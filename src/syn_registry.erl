@@ -35,11 +35,11 @@
 -export([count/0, count/1]).
 
 %% sync API
--export([sync_register/4, sync_unregister/3]).
+-export([sync_register/5, sync_unregister/3]).
 -export([sync_demonitor_and_kill_on_node/5]).
 -export([sync_get_local_registry_tuples/1]).
 -export([force_cluster_sync/0]).
--export([add_to_local_table/4, remove_from_local_table/2]).
+-export([add_to_local_table/5, remove_from_local_table/2]).
 -export([find_monitor_for_pid/1]).
 
 %% gen_server callbacks
@@ -98,7 +98,7 @@ reregister(Name, Pid, Meta, RetryCount) when is_pid(Pid) ->
                     Result
             end;
 
-        {Name, _Pid, _Meta} ->
+        {Name, _, _, _} ->
             timer:sleep(100),
             reregister(Name, Pid, Meta, RetryCount + 1)
     end.
@@ -109,7 +109,7 @@ unregister(Name) ->
     case find_registry_tuple_by_name(Name) of
         undefined ->
             {error, undefined};
-        {Name, Pid, _Meta} ->
+        {Name, Pid, _, _} ->
             Node = node(Pid),
             gen_server:call({?MODULE, Node}, {unregister_on_node, Name})
     end.
@@ -118,14 +118,14 @@ unregister(Name) ->
 whereis(Name) ->
     case find_registry_tuple_by_name(Name) of
         undefined -> undefined;
-        {Name, Pid, _Meta} -> Pid
+        {Name, Pid, _, _} -> Pid
     end.
 
 -spec whereis(Name :: any(), with_meta) -> {pid(), Meta :: any()} | undefined.
 whereis(Name, with_meta) ->
     case find_registry_tuple_by_name(Name) of
         undefined -> undefined;
-        {Name, Pid, Meta} -> {Pid, Meta}
+        {Name, Pid, Meta, _} -> {Pid, Meta}
     end.
 
 -spec count() -> non_neg_integer().
@@ -135,14 +135,14 @@ count() ->
 -spec count(Node :: node()) -> non_neg_integer().
 count(Node) ->
     ets:select_count(syn_registry_by_name, [{
-        {'_', '_', '_', '_', Node},
+        {'_', '_', '_', '_', '_', Node},
         [],
         [true]
     }]).
 
--spec sync_register(RemoteNode :: node(), Name :: any(), RemotePid :: pid(), RemoteMeta :: any()) -> ok.
-sync_register(RemoteNode, Name, RemotePid, RemoteMeta) ->
-    gen_server:cast({?MODULE, RemoteNode}, {sync_register, Name, RemotePid, RemoteMeta}).
+-spec sync_register(RemoteNode :: node(), Name :: any(), RemotePid :: pid(), RemoteMeta :: any(), RemoteTime :: integer()) -> ok.
+sync_register(RemoteNode, Name, RemotePid, RemoteMeta, RemoteTime) ->
+    gen_server:cast({?MODULE, RemoteNode}, {sync_register, Name, RemotePid, RemoteMeta, RemoteTime}).
 
 -spec sync_unregister(RemoteNode :: node(), Name :: any(), Pid :: pid()) -> ok.
 sync_unregister(RemoteNode, Name, Pid) ->
@@ -222,16 +222,16 @@ handle_call({register_on_node, Name, Pid, Meta}, _From, State) ->
             %% check if name available
             case find_registry_tuple_by_name(Name) of
                 undefined ->
-                    register_on_node(Name, Pid, Meta),
+                    {ok, Time} = register_on_node(Name, Pid, Meta),
                     %% multicast
-                    multicast_register(Name, Pid, Meta),
+                    multicast_register(Name, Pid, Meta, Time),
                     %% return
                     {reply, ok, State};
 
-                {Name, Pid, _OldMeta} ->
-                    register_on_node(Name, Pid, Meta),
+                {Name, Pid, _, _} ->
+                    {ok, Time} = register_on_node(Name, Pid, Meta),
                     %% multicast
-                    multicast_register(Name, Pid, Meta),
+                    multicast_register(Name, Pid, Meta, Time),
                     %% return
                     {reply, ok, State};
 
@@ -265,27 +265,27 @@ handle_call(Request, From, State) ->
     {noreply, #state{}, Timeout :: non_neg_integer()} |
     {stop, Reason :: any(), #state{}}.
 
-handle_cast({sync_register, Name, RemotePid, RemoteMeta}, State) ->
+handle_cast({sync_register, Name, RemotePid, RemoteMeta, RemoteTime}, State) ->
     %% check for conflicts
     case find_registry_tuple_by_name(Name) of
         undefined ->
             %% no conflict
-            add_to_local_table(Name, RemotePid, RemoteMeta, undefined);
+            add_to_local_table(Name, RemotePid, RemoteMeta, RemoteTime, undefined);
 
-        {Name, RemotePid, _Meta} ->
+        {Name, RemotePid, _, _} ->
             %% same process, no conflict, overwrite
-            add_to_local_table(Name, RemotePid, RemoteMeta, undefined);
+            add_to_local_table(Name, RemotePid, RemoteMeta, RemoteTime, undefined);
 
-        {Name, TablePid, TableMeta} ->
+        {Name, TablePid, TableMeta, TableTime} ->
             %% different pid, we have a conflict
             global:trans({{?MODULE, {inconsistent_name, Name}}, self()},
                 fun() ->
                     error_logger:warning_msg(
                         "Syn(~p): REGISTRY INCONSISTENCY (name: ~p for ~p and ~p) ----> Received from remote node ~p~n",
-                        [node(), Name, {TablePid, TableMeta}, {RemotePid, RemoteMeta}, node(RemotePid)]
+                        [node(), Name, {TablePid, TableMeta, TableTime}, {RemotePid, RemoteMeta, RemoteTime}, node(RemotePid)]
                     ),
 
-                    case resolve_conflict(Name, {TablePid, TableMeta}, {RemotePid, RemoteMeta}, State) of
+                    case resolve_conflict(Name, {TablePid, TableMeta, TableTime}, {RemotePid, RemoteMeta, RemoteTime}, State) of
                         {TablePid, KillOtherPid} ->
                             %% keep local
                             %% demonitor
@@ -294,7 +294,7 @@ handle_cast({sync_register, Name, RemotePid, RemoteMeta}, State) ->
                             %% overwrite local data to all remote nodes, except TablePid's node
                             NodesExceptLocalAndTablePidNode = nodes() -- [node(TablePid)],
                             lists:foreach(fun(RNode) ->
-                                ok = rpc:call(RNode, syn_registry, add_to_local_table, [Name, TablePid, TableMeta, undefined])
+                                ok = rpc:call(RNode, syn_registry, add_to_local_table, [Name, TablePid, TableMeta, TableTime, undefined])
                             end, NodesExceptLocalAndTablePidNode);
 
                         {RemotePid, KillOtherPid} ->
@@ -305,7 +305,7 @@ handle_cast({sync_register, Name, RemotePid, RemoteMeta}, State) ->
                             %% overwrite remote data to all other nodes (including local), except RemotePid's node
                             NodesExceptRemoteNode = [node() | nodes()] -- [node(RemotePid)],
                             lists:foreach(fun(RNode) ->
-                                ok = rpc:call(RNode, syn_registry, add_to_local_table, [Name, RemotePid, RemoteMeta, undefined])
+                                ok = rpc:call(RNode, syn_registry, add_to_local_table, [Name, RemotePid, RemoteMeta, RemoteTime, undefined])
                             end, NodesExceptRemoteNode);
 
                         undefined ->
@@ -370,7 +370,7 @@ handle_info({'DOWN', _MonitorRef, process, Pid, Reason}, State) ->
             handle_process_down(undefined, Pid, undefined, Reason, State);
 
         Entries ->
-            lists:foreach(fun({Name, _Pid, Meta}) ->
+            lists:foreach(fun({Name, _Pid, Meta, _Time}) ->
                 %% handle
                 handle_process_down(Name, Pid, Meta, Reason, State),
                 %% remove from table
@@ -437,11 +437,11 @@ code_change(_OldVsn, State, _Extra) ->
 %% ===================================================================
 %% Internal
 %% ===================================================================
--spec multicast_register(Name :: any(), Pid :: pid(), Meta :: any()) -> pid().
-multicast_register(Name, Pid, Meta) ->
+-spec multicast_register(Name :: any(), Pid :: pid(), Meta :: any(), Time :: integer()) -> pid().
+multicast_register(Name, Pid, Meta, Time) ->
     spawn_link(fun() ->
         lists:foreach(fun(RemoteNode) ->
-            sync_register(RemoteNode, Name, Pid, Meta)
+            sync_register(RemoteNode, Name, Pid, Meta, Time)
         end, nodes())
     end).
 
@@ -453,7 +453,7 @@ multicast_unregister(Name, Pid) ->
         end, nodes())
     end).
 
--spec register_on_node(Name :: any(), Pid :: pid(), Meta :: any()) -> ok.
+-spec register_on_node(Name :: any(), Pid :: pid(), Meta :: any()) -> {ok, Time :: integer()}.
 register_on_node(Name, Pid, Meta) ->
     MonitorRef = case find_monitor_for_pid(Pid) of
         undefined ->
@@ -464,7 +464,9 @@ register_on_node(Name, Pid, Meta) ->
             MRef
     end,
     %% add to table
-    add_to_local_table(Name, Pid, Meta, MonitorRef).
+    Time = erlang:monotonic_time(),
+    add_to_local_table(Name, Pid, Meta, Time, MonitorRef),
+    {ok, Time}.
 
 -spec unregister_on_node(Name :: any()) -> {ok, RemovedPid :: pid()} | {error, Reason :: any()}.
 unregister_on_node(Name) ->
@@ -472,7 +474,7 @@ unregister_on_node(Name) ->
         undefined ->
             {error, undefined};
 
-        {Name, Pid, _Meta, MonitorRef, _Node} when MonitorRef =/= undefined ->
+        {Name, Pid, _Meta, _Clock, MonitorRef, _Node} when MonitorRef =/= undefined ->
             %% demonitor
             erlang:demonitor(MonitorRef, [flush]),
             %% remove from table
@@ -480,7 +482,7 @@ unregister_on_node(Name) ->
             %% return
             {ok, Pid};
 
-        {Name, Pid, _Meta, _MonitorRef, Node} = RegistryEntry when Node =:= node() ->
+        {Name, Pid, _Meta, _Clock, _MonitorRef, Node} = RegistryEntry when Node =:= node() ->
             error_logger:error_msg(
                 "Syn(~p): INTERNAL ERROR | Registry entry ~p has no monitor but it's running on node~n",
                 [node(), RegistryEntry]
@@ -500,19 +502,25 @@ unregister_on_node(Name) ->
             {error, remote_pid}
     end.
 
--spec add_to_local_table(Name :: any(), Pid :: pid(), Meta :: any(), MonitorRef :: undefined | reference()) -> ok.
-add_to_local_table(Name, Pid, Meta, MonitorRef) ->
+-spec add_to_local_table(
+    Name :: any(),
+    Pid :: pid(),
+    Meta :: any(),
+    Time :: integer(),
+    MonitorRef :: undefined | reference()
+) -> ok.
+add_to_local_table(Name, Pid, Meta, Time, MonitorRef) ->
     %% remove entry if previous exists
     case find_registry_tuple_by_name(Name) of
         undefined ->
             undefined;
 
-        {Name, OldPid, _OldMeta} ->
+        {Name, OldPid, _, _} ->
             ets:delete(syn_registry_by_pid, {OldPid, Name})
     end,
     %% overwrite & add
-    ets:insert(syn_registry_by_name, {Name, Pid, Meta, MonitorRef, node(Pid)}),
-    ets:insert(syn_registry_by_pid, {{Pid, Name}, Meta, MonitorRef, node(Pid)}),
+    ets:insert(syn_registry_by_name, {Name, Pid, Meta, Time, MonitorRef, node(Pid)}),
+    ets:insert(syn_registry_by_pid, {{Pid, Name}, Meta, Time, MonitorRef, node(Pid)}),
     ok.
 
 -spec remove_from_local_table(Name :: any(), Pid :: pid()) -> ok.
@@ -521,12 +529,12 @@ remove_from_local_table(Name, Pid) ->
         undefined ->
             ok;
 
-        {Name, Pid, _} ->
+        {Name, Pid, _, _} ->
             ets:delete(syn_registry_by_name, Name),
-            ets:match_delete(syn_registry_by_pid, {{Pid, Name}, '_', '_', '_'}),
+            ets:delete(syn_registry_by_pid, {Pid, Name}),
             ok;
 
-        {Name, TablePid, _} ->
+        {Name, TablePid, _, _} ->
             error_logger:info_msg(
                 "Syn(~p): Request to delete registry name ~p for pid ~p but locally have ~p, ignoring~n",
                 [node(), Name, Pid, TablePid]
@@ -536,11 +544,11 @@ remove_from_local_table(Name, Pid) ->
 -spec find_registry_tuple_by_name(Name :: any()) -> RegistryTuple :: syn_registry_tuple() | undefined.
 find_registry_tuple_by_name(Name) ->
     MatchBody = case is_tuple(Name) of
-        true -> {{{Name}, '$2', '$3'}};
-        _ -> {{Name, '$2', '$3'}}
+        true -> {{{Name}, '$2', '$3', '$4'}};
+        _ -> {{Name, '$2', '$3', '$4'}}
     end,
     case ets:select(syn_registry_by_name, [{
-        {Name, '$2', '$3', '_', '_'},
+        {Name, '$2', '$3', '$4', '_', '_'},
         [],
         [MatchBody]
     }]) of
@@ -551,7 +559,7 @@ find_registry_tuple_by_name(Name) ->
 -spec find_registry_entry_by_name(Name :: any()) -> Entry :: syn_registry_entry() | undefined.
 find_registry_entry_by_name(Name) ->
     case ets:select(syn_registry_by_name, [{
-        {Name, '$2', '$3', '_', '_'},
+        {Name, '$2', '$3', '_', '_', '_'},
         [],
         ['$_']
     }]) of
@@ -562,9 +570,9 @@ find_registry_entry_by_name(Name) ->
 -spec find_monitor_for_pid(Pid :: pid()) -> reference() | undefined.
 find_monitor_for_pid(Pid) when is_pid(Pid) ->
     case ets:select(syn_registry_by_pid, [{
-        {{Pid, '_'}, '_', '$4', '_'},
+        {{Pid, '_'}, '_', '_', '$5', '_'},
         [],
-        ['$4']
+        ['$5']
     }], 1) of
         {[MonitorRef], _} -> MonitorRef;
         _ -> undefined
@@ -573,17 +581,17 @@ find_monitor_for_pid(Pid) when is_pid(Pid) ->
 -spec find_registry_tuples_by_pid(Pid :: pid()) -> Entries :: [syn_registry_tuple()].
 find_registry_tuples_by_pid(Pid) when is_pid(Pid) ->
     ets:select(syn_registry_by_pid, [{
-        {{Pid, '$2'}, '$3', '_', '_'},
+        {{Pid, '$2'}, '$3', '$4', '_', '_'},
         [],
-        [{{'$2', Pid, '$3'}}]
+        [{{'$2', Pid, '$3', '$4'}}]
     }]).
 
 -spec get_registry_tuples_for_node(Node :: node()) -> [syn_registry_tuple()].
 get_registry_tuples_for_node(Node) ->
     ets:select(syn_registry_by_name, [{
-        {'$1', '$2', '$3', '_', Node},
+        {'$1', '$2', '$3', '$4', '_', Node},
         [],
-        [{{'$1', '$2', '$3'}}]
+        [{{'$1', '$2', '$3', '$4'}}]
     }]).
 
 -spec handle_process_down(Name :: any(), Pid :: pid(), Meta :: any(), Reason :: any(), #state{}) -> ok.
@@ -625,8 +633,8 @@ registry_automerge(RemoteNode, State) ->
                     %% ensure that registry doesn't have any joining node's entries (here again for race conditions)
                     raw_purge_registry_entries_for_remote_node(RemoteNode),
                     %% loop
-                    F = fun({Name, RemotePid, RemoteMeta}) ->
-                        resolve_tuple_in_automerge(Name, RemotePid, RemoteMeta, State)
+                    F = fun({Name, RemotePid, RemoteMeta, RemoteTime}) ->
+                        resolve_tuple_in_automerge(Name, RemotePid, RemoteMeta, RemoteTime, State)
                     end,
                     %% add to table
                     lists:foreach(F, Entries),
@@ -640,22 +648,23 @@ registry_automerge(RemoteNode, State) ->
     Name :: any(),
     RemotePid :: pid(),
     RemoteMeta :: any(),
+    RemoteTime :: integer(),
     #state{}
 ) -> any().
-resolve_tuple_in_automerge(Name, RemotePid, RemoteMeta, State) ->
+resolve_tuple_in_automerge(Name, RemotePid, RemoteMeta, RemoteTime, State) ->
     %% check if same name is registered
     case find_registry_tuple_by_name(Name) of
         undefined ->
             %% no conflict
-            add_to_local_table(Name, RemotePid, RemoteMeta, undefined);
+            add_to_local_table(Name, RemotePid, RemoteMeta, RemoteTime, undefined);
 
-        {Name, TablePid, TableMeta} ->
+        {Name, TablePid, TableMeta, TableTime} ->
             error_logger:warning_msg(
                 "Syn(~p): Conflicting name in auto merge for: ~p, processes are ~p, ~p~n",
-                [node(), Name, {TablePid, TableMeta}, {RemotePid, RemoteMeta}]
+                [node(), Name, {TablePid, TableMeta, TableTime}, {RemotePid, RemoteMeta, RemoteTime}]
             ),
 
-            case resolve_conflict(Name, {TablePid, TableMeta}, {RemotePid, RemoteMeta}, State) of
+            case resolve_conflict(Name, {TablePid, TableMeta, TableTime}, {RemotePid, RemoteMeta, RemoteTime}, State) of
                 {TablePid, KillOtherPid} ->
                     %% keep local
                     %% demonitor
@@ -670,7 +679,7 @@ resolve_tuple_in_automerge(Name, RemotePid, RemoteMeta, State) ->
                     MonitorRef = rpc:call(node(TablePid), syn_registry, find_monitor_for_pid, [TablePid]),
                     sync_demonitor_and_kill_on_node(Name, TablePid, TableMeta, MonitorRef, KillOtherPid),
                     %% overwrite remote data to local
-                    add_to_local_table(Name, RemotePid, RemoteMeta, undefined);
+                    add_to_local_table(Name, RemotePid, RemoteMeta, RemoteTime, undefined);
 
                 undefined ->
                     %% both are dead, remove from local & remote
@@ -687,8 +696,8 @@ resolve_tuple_in_automerge(Name, RemotePid, RemoteMeta, State) ->
 ) -> {PidToKeep :: pid(), KillOtherPid :: boolean() | undefined} | undefined.
 resolve_conflict(
     Name,
-    {TablePid, TableMeta},
-    {RemotePid, RemoteMeta},
+    {TablePid, TableMeta, TableTime},
+    {RemotePid, RemoteMeta, RemoteTime},
     #state{custom_event_handler = CustomEventHandler}
 ) ->
     TablePidAlive = rpc:call(node(TablePid), erlang, is_process_alive, [TablePid]),
@@ -700,8 +709,8 @@ resolve_conflict(
             %% call conflict resolution
             syn_event_handler:do_resolve_registry_conflict(
                 Name,
-                {TablePid, TableMeta},
-                {RemotePid, RemoteMeta},
+                {TablePid, TableMeta, TableTime},
+                {RemotePid, RemoteMeta, RemoteTime},
                 CustomEventHandler
             );
 
@@ -760,19 +769,19 @@ do_sync_from_full_cluster(State) ->
 -spec raw_purge_registry_entries_for_remote_node(Node :: atom()) -> ok.
 raw_purge_registry_entries_for_remote_node(Node) when Node =/= node() ->
     %% NB: no demonitoring is done, this is why it's raw
-    ets:match_delete(syn_registry_by_name, {'_', '_', '_', '_', Node}),
-    ets:match_delete(syn_registry_by_pid, {{'_', '_'}, '_', '_', Node}),
+    ets:match_delete(syn_registry_by_name, {'_', '_', '_', '_', '_', Node}),
+    ets:match_delete(syn_registry_by_pid, {{'_', '_'}, '_', '_', '_', Node}),
     ok.
 
 -spec rebuild_monitors() -> ok.
 rebuild_monitors() ->
     Entries = get_registry_tuples_for_node(node()),
-    lists:foreach(fun({Name, Pid, Meta}) ->
+    lists:foreach(fun({Name, Pid, Meta, Time}) ->
         case is_process_alive(Pid) of
             true ->
                 MonitorRef = erlang:monitor(process, Pid),
                 %% overwrite
-                add_to_local_table(Name, Pid, Meta, MonitorRef);
+                add_to_local_table(Name, Pid, Meta, Time, MonitorRef);
             _ ->
                 remove_from_local_table(Name, Pid)
         end

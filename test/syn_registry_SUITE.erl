@@ -512,7 +512,7 @@ two_nodes_registration_race_condition_conflict_resolution_keep_remote(Config) ->
     Pid0 = syn_test_suite_helper:start_process(),
     Pid1 = syn_test_suite_helper:start_process(SlaveNode),
     %% inject into syn to simulate concurrent registration
-    ok = syn_registry:add_to_local_table(ConflictingName, Pid0, node(), undefined),
+    ok = syn_registry:add_to_local_table(ConflictingName, Pid0, node(), erlang:monotonic_time() - 1000, undefined),
     %% register on slave node to trigger conflict resolution on master node
     ok = rpc:call(SlaveNode, syn, register, [ConflictingName, Pid1, SlaveNode]),
     timer:sleep(1000),
@@ -537,10 +537,10 @@ two_nodes_registration_race_condition_conflict_resolution_keep_remote_with_custo
     %% start processes
     Pid0 = syn_test_suite_helper:start_process(),
     Pid1 = syn_test_suite_helper:start_process(SlaveNode),
-    %% inject into syn to simulate concurrent registration
+    %% register
     ok = syn:register(ConflictingName, Pid0, node()),
-    %% trigger conflict resolution on master node
-    ok = syn_registry:sync_register(node(), ConflictingName, Pid1, keep_this_one),
+    %% trigger conflict resolution on master node with something less recent (which would be discarded without a custom handler)
+    ok = syn_registry:sync_register(node(), ConflictingName, Pid1, keep_this_one, erlang:monotonic_time() - 1000),
     timer:sleep(1000),
     %% check metadata, resolution happens on master node
     {Pid1, keep_this_one} = syn:whereis(ConflictingName, with_meta),
@@ -565,8 +565,8 @@ two_nodes_registration_race_condition_conflict_resolution_keep_local_with_custom
     %% start processes
     Pid0 = syn_test_suite_helper:start_process(),
     Pid1 = syn_test_suite_helper:start_process(SlaveNode),
-    %% inject into syn to simulate concurrent registration
-    ok = syn_registry:add_to_local_table(ConflictingName, Pid0, keep_this_one, undefined),
+    %% inject into syn to simulate concurrent registration with something more recent (which would be picked without a custom handler)
+    ok = syn_registry:add_to_local_table(ConflictingName, Pid0, keep_this_one, undefined, erlang:monotonic_time() + 1000),
     %% register on slave node to trigger conflict resolution on master node
     ok = rpc:call(SlaveNode, syn, register, [ConflictingName, Pid1, SlaveNode]),
     timer:sleep(1000),
@@ -595,7 +595,7 @@ two_nodes_registration_race_condition_conflict_resolution_when_process_died(Conf
     Pid0 = syn_test_suite_helper:start_process(),
     Pid1 = syn_test_suite_helper:start_process(SlaveNode),
     %% inject into syn to simulate concurrent registration
-    syn_registry:add_to_local_table(ConflictingName, Pid0, keep_this_one, undefined),
+    syn_registry:add_to_local_table(ConflictingName, Pid0, keep_this_one, 0, undefined),
     timer:sleep(250),
     %% kill process
     syn_test_suite_helper:kill_process(Pid0),
@@ -991,8 +991,8 @@ three_nodes_registration_race_condition_custom_conflict_resolution(Config) ->
     Pid0 = syn_test_suite_helper:start_process(),
     Pid1 = syn_test_suite_helper:start_process(SlaveNode1),
     Pid2 = syn_test_suite_helper:start_process(SlaveNode2),
-    %% inject into syn to simulate concurrent registration
-    ok = rpc:call(SlaveNode1, syn_registry, add_to_local_table, [ConflictingName, Pid1, keep_this_one, undefined]),
+    %% inject into syn to simulate concurrent registration with something less recent (which would be discarded without a custom handler)
+    ok = rpc:call(SlaveNode1, syn_registry, add_to_local_table, [ConflictingName, Pid1, keep_this_one, erlang:monotonic_time() - 1000, undefined]),
     %% register on master node to trigger conflict resolution
     ok = syn:register(ConflictingName, Pid0, node()),
     timer:sleep(1000),
@@ -1035,12 +1035,12 @@ three_nodes_anti_entropy(Config) ->
     Pid2Conflict = syn_test_suite_helper:start_process(SlaveNode2),
     timer:sleep(100),
     %% inject data to simulate latent conflicts
-    ok = syn_registry:add_to_local_table("pid0", Pid0, node(), undefined),
-    ok = rpc:call(SlaveNode1, syn_registry, add_to_local_table, ["pid1", Pid1, SlaveNode1, undefined]),
-    ok = rpc:call(SlaveNode2, syn_registry, add_to_local_table, ["pid2", Pid2, SlaveNode2, undefined]),
-    ok = syn_registry:add_to_local_table("conflict", Pid0Conflict, node(), undefined),
-    ok = rpc:call(SlaveNode1, syn_registry, add_to_local_table, ["conflict", Pid1Conflict, keep_this_one, undefined]),
-    ok = rpc:call(SlaveNode2, syn_registry, add_to_local_table, ["conflict", Pid2Conflict, SlaveNode2, undefined]),
+    ok = syn_registry:add_to_local_table("pid0", Pid0, node(), 0, undefined),
+    ok = rpc:call(SlaveNode1, syn_registry, add_to_local_table, ["pid1", Pid1, SlaveNode1, 0, undefined]),
+    ok = rpc:call(SlaveNode2, syn_registry, add_to_local_table, ["pid2", Pid2, SlaveNode2, 0, undefined]),
+    ok = syn_registry:add_to_local_table("conflict", Pid0Conflict, node(), erlang:monotonic_time() + 1000, undefined),
+    ok = rpc:call(SlaveNode1, syn_registry, add_to_local_table, ["conflict", Pid1Conflict, keep_this_one, erlang:monotonic_time(), undefined]),
+    ok = rpc:call(SlaveNode2, syn_registry, add_to_local_table, ["conflict", Pid2Conflict, SlaveNode2, erlang:monotonic_time() + 1000, undefined]),
     %% wait to let anti-entropy settle
     timer:sleep(5000),
     %% check
@@ -1080,12 +1080,12 @@ three_nodes_anti_entropy_manual(Config) ->
     Pid2Conflict = syn_test_suite_helper:start_process(SlaveNode2),
     timer:sleep(100),
     %% inject data to simulate latent conflicts
-    ok = syn_registry:add_to_local_table("pid0", Pid0, node(), undefined),
-    ok = rpc:call(SlaveNode1, syn_registry, add_to_local_table, ["pid1", Pid1, SlaveNode1, undefined]),
-    ok = rpc:call(SlaveNode2, syn_registry, add_to_local_table, ["pid2", Pid2, SlaveNode2, undefined]),
-    ok = syn_registry:add_to_local_table("conflict", Pid0Conflict, node(), undefined),
-    ok = rpc:call(SlaveNode1, syn_registry, add_to_local_table, ["conflict", Pid1Conflict, keep_this_one, undefined]),
-    ok = rpc:call(SlaveNode2, syn_registry, add_to_local_table, ["conflict", Pid2Conflict, SlaveNode2, undefined]),
+    ok = syn_registry:add_to_local_table("pid0", Pid0, node(), 0, undefined),
+    ok = rpc:call(SlaveNode1, syn_registry, add_to_local_table, ["pid1", Pid1, SlaveNode1, 0, undefined]),
+    ok = rpc:call(SlaveNode2, syn_registry, add_to_local_table, ["pid2", Pid2, SlaveNode2, 0, undefined]),
+    ok = syn_registry:add_to_local_table("conflict", Pid0Conflict, node(), erlang:monotonic_time() + 1000, undefined),
+    ok = rpc:call(SlaveNode1, syn_registry, add_to_local_table, ["conflict", Pid1Conflict, keep_this_one, erlang:monotonic_time(), undefined]),
+    ok = rpc:call(SlaveNode2, syn_registry, add_to_local_table, ["conflict", Pid2Conflict, SlaveNode2, erlang:monotonic_time() + 1000, undefined]),
     %% call anti entropy
     ok = syn:force_cluster_sync(registry),
     timer:sleep(1000),
@@ -1147,11 +1147,10 @@ three_nodes_resolve_conflict_on_all_nodes(Config) ->
     ok = rpc:call(SlaveNode2, syn, start, []),
     timer:sleep(100),
     %% start processes
-    Pid0 = syn_test_suite_helper:start_process(),
     Pid1 = syn_test_suite_helper:start_process(SlaveNode1),
     Pid2 = syn_test_suite_helper:start_process(SlaveNode2),
     timer:sleep(100),
-    %% register on slave 1 to begin conflict resolution
+    %% register on slave 1
     ok = rpc:call(SlaveNode1, syn, register, [CommonName, Pid1, SlaveNode1]),
     timer:sleep(500),
     %% check
@@ -1159,7 +1158,7 @@ three_nodes_resolve_conflict_on_all_nodes(Config) ->
     {Pid1, SlaveNode1} = rpc:call(SlaveNode1, syn, whereis, [CommonName, with_meta]),
     {Pid1, SlaveNode1} = rpc:call(SlaveNode2, syn, whereis, [CommonName, with_meta]),
     %% force a sync registration conflict on master node from slave 2
-    syn_registry:sync_register(node(), CommonName, Pid2, SlaveNode2),
+    syn_registry:sync_register(node(), CommonName, Pid2, SlaveNode2, erlang:monotonic_time() - 1000),
     timer:sleep(1000),
     %% check
     {Pid2, SlaveNode2} = syn:whereis(CommonName, with_meta),

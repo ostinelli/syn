@@ -34,12 +34,14 @@
 -type syn_registry_tuple() :: {
     Name :: any(),
     Pid :: pid(),
-    Meta :: any()
+    Meta :: any(),
+    Time :: integer()
 }.
 -type syn_groups_entry() :: {
     GroupName :: any(),
     Pid :: pid(),
     Meta :: any(),
+    Time :: integer(),
     MonitorRef :: undefined | reference(),
     Node :: node()
 }.
