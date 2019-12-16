@@ -1,8 +1,3 @@
-
-
-
-
-
 [![Build Status](https://travis-ci.org/ostinelli/syn.svg?branch=master)](https://travis-ci.org/ostinelli/syn) [![Hex pm](https://img.shields.io/hexpm/v/syn.svg)](https://hex.pm/packages/syn)
 
 
@@ -483,18 +478,21 @@ Called when a process in a group exits. It will be called only on the node where
 #### `resolve_registry_conflict/3`
 In case of net splits, a specific Name might get registered simultaneously on two different nodes. In this case, the cluster experiences a registry naming conflict.
 
-When this happens, Syn will resolve this Process Registry conflict by choosing a single process. By default, Syn will keep the process running on the remote node from where the conflict is being resolved on, and will kill the other process by sending a `kill` signal with `exit(Pid, {syn_resolve_kill, Name, Meta})`.
+When this happens, Syn will resolve this Process Registry conflict by choosing a single process. By default, Syn keeps track of the time a registration takes place with [`erlang:system_time/0`](http://erlang.org/doc/man/erlang.html#system_time-0), compares values between conflicting processes and:
 
-If this is not desired, you can set this callback to perform custom operations (such as a graceful shutdown).
+  * Keeps the one with the higher value (so the process that was registered more recently).
+  * Kills the other process by sending a `kill` signal with `exit(Pid, {syn_resolve_kill, Name, Meta})`.
 
-This method MUST return the `pid()` of the process that you wish to keep. The other process will be _not_ be killed, so you will have to decide what to do with it.
+This is a very simple mechanism that can be imprecise, as system clocks are not perfectly aligned in a cluster. If something more elaborate is desired (such as vector clocks), or if you do not want the discarded process to be killed (i.e. to perform a graceful shutdown), please consider storing data into the `Meta` field and use it to resolve conflicts in a custom event handler, by implementing this `resolve_registry_conflict/3` callback.
+
+If implemented, this method MUST return the `pid()` of the process that you wish to keep. The other process will be _not_ be killed, so you will have to decide what to do with it.
 
 > Important Note: the conflict resolution method SHOULD be defined in the same way across all nodes of the cluster. Having different conflict resolution options on different nodes can have unexpected results.
 
 ## Anti-Entropy
 Anti-entropy is a mechanism to force alignment between nodes. It isn't needed with Syn in most cases. However, despite Syn's best efforts and under rare conditions, depending on your cluster topology and other factors, it _might_ be possible that registry and groups get misaligned.
 
-> Anti-entropy in Syn is an experimental feature. As with every anti-entropy feature, it comes with a cost: during the forced syncing, the local tables will be rebuilt with data that gets sent from other nodes. This takes time, due to the sending of data across nodes and subsequent storage. As an example, a node that handles 1,000,000 local registry / groups processes will have to send data for ~80MB (depending on your metadata's size) to other nodes. During the syncing, Syn might time out some calls. Your mileage may vary, so it is recommended that you benchmark your use case.
+> Anti-entropy in Syn is an **experimental** feature. As with every anti-entropy feature, it comes with a cost: during the forced syncing, the local tables will be rebuilt with data that gets sent from other nodes. This takes time, due to the sending of data across nodes and subsequent storage. As an example, a node that handles 1,000,000 local registry / groups processes will have to send data for ~80MB (depending on your metadata's size) to other nodes. During the syncing, Syn might time out some calls. Your mileage may vary, so it is recommended that you benchmark your use case.
 
 ### Setup
 To activate anti-entropy you need to set in the environment variable `syn` the key `anti_entropy`. You're probably best off using an application configuration file. If you do not specify the `anti_entropy` key, the anti-entropy mechanism will be disabled by default.
@@ -530,7 +528,7 @@ You can force an anti-entropy sync on the whole cluster by calling the following
 syn:force_cluster_sync(registry | groups) -> ok.
 ```
 
-> As per the notes above, in normal conditions Syn doesn't need to be manually synced. This function will force a full mesh sync on all of the cluster. Use it as a last resort.
+> As per the notes above, in normal conditions Syn doesn't need to be manually synced. This function will force a full mesh sync on all of the cluster and is **experimental**. Use it as a last resort.
 
 ## Internals
 As of v2.1, Syn uses ETS for memory storage and doesn't have any external dependency. Syn has its own replication and net splits conflict resolution mechanisms.
