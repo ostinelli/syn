@@ -38,6 +38,7 @@
 -export([member/2]).
 -export([get_local_members/1, get_local_members/2]).
 -export([local_member/2]).
+-export([groups_count/0, groups_count/1]).
 -export([publish/2]).
 -export([publish_to_local/2]).
 -export([multi_call/2, multi_call/3, multi_call_reply/2]).
@@ -160,6 +161,14 @@ get_local_members(GroupName, with_meta) ->
 -spec local_member(GroupName :: any(), Pid :: pid()) -> boolean().
 local_member(GroupName, Pid) ->
     syn_groups:local_member(GroupName, Pid).
+
+-spec groups_count() -> non_neg_integer().
+groups_count() ->
+    syn_groups:count().
+
+-spec groups_count(Node :: atom()) -> non_neg_integer().
+groups_count(Node) ->
+    syn_groups:count(Node).
 
 -spec publish(GroupName :: any(), Message :: any()) -> {ok, RecipientCount :: non_neg_integer()}.
 publish(GroupName, Message) ->

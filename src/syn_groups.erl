@@ -34,6 +34,7 @@
 -export([member/2]).
 -export([get_local_members/1, get_local_members/2]).
 -export([local_member/2]).
+-export([count/0, count/1]).
 -export([publish/2]).
 -export([publish_to_local/2]).
 -export([multi_call/2, multi_call/3, multi_call_reply/2]).
@@ -145,6 +146,26 @@ local_member(Pid, GroupName) ->
         _ ->
             false
     end.
+
+-spec count() -> non_neg_integer().
+count() ->
+    Entries = ets:select(syn_groups_by_name, [{
+        {{'$1', '_'}, '_', '_',  '_'},
+        [],
+        ['$1']
+    }]),
+    Set = sets:from_list(Entries),
+    sets:size(Set).
+
+-spec count(Node :: node()) -> non_neg_integer().
+count(Node) ->
+    Entries = ets:select(syn_groups_by_name, [{
+        {{'$1', '_'}, '_', '_',  Node},
+        [],
+        ['$1']
+    }]),
+    Set = sets:from_list(Entries),
+    sets:size(Set).
 
 -spec publish(GroupName :: any(), Message :: any()) -> {ok, RecipientCount :: non_neg_integer()}.
 publish(GroupName, Message) ->

@@ -178,13 +178,13 @@ Types:
 
 > Force registering is specifically useful if you are force registering a process on a different node from where the process currently registered with `Name` is running on, as `force_register/2,3` will ensure that the registration succeeds and propagates properly. You may otherwise experience a `{error, taken}` response to the registration call if you were to sequentially `unregister/1` and `register/2,3` a process, due to race conditions. Note that the previously registered process will not be killed and will be demonitored, so that the `on_process_exit/4` callback will _not_ be called (even if implemented) when the process dies.
 
-To retrieve the count of total registered processes running in the cluster:
+To retrieve the total count of registered processes running in the cluster:
 
 ```erlang
 syn:registry_count() -> non_neg_integer().
 ```
 
-To retrieve the count of total registered processes running on a specific node:
+To retrieve the total count of registered processes running on a specific node:
 
 ```erlang
 syn:registry_count(Node) -> non_neg_integer().
@@ -192,7 +192,6 @@ syn:registry_count(Node) -> non_neg_integer().
 Types:
     Node = atom()
 ```
-
 
 ### Process Groups
 
@@ -361,6 +360,20 @@ Types:
 
 > `RecipientCount` is the count of the intended recipients.
 
+To retrieve the total count of groups in the cluster:
+
+```erlang
+syn:groups_count() -> non_neg_integer().
+```
+
+To retrieve the count of groups that have at least 1 process running on a specific node:
+
+```erlang
+syn:groups_count(Node) -> non_neg_integer().
+
+Types:
+    Node = atom()
+```
 
 ## Callbacks
 In Syn you can specify a custom callback module if you want to:
