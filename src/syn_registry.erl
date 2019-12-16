@@ -29,7 +29,7 @@
 %% API
 -export([start_link/0]).
 -export([register/2, register/3]).
--export([force_register/2, force_register/3]).
+-export([unregister_and_register/2, unregister_and_register/3]).
 -export([unregister/1]).
 -export([whereis/1, whereis/2]).
 -export([count/0, count/1]).
@@ -72,12 +72,12 @@ register(Name, Pid, Meta) when is_pid(Pid) ->
     Node = node(Pid),
     gen_server:call({?MODULE, Node}, {register_on_node, Name, Pid, Meta, false}).
 
--spec force_register(Name :: any(), Pid :: pid()) -> ok | {error, Reason :: any()}.
-force_register(Name, Pid) ->
-    force_register(Name, Pid, undefined).
+-spec unregister_and_register(Name :: any(), Pid :: pid()) -> ok | {error, Reason :: any()}.
+unregister_and_register(Name, Pid) ->
+    unregister_and_register(Name, Pid, undefined).
 
--spec force_register(Name :: any(), Pid :: pid(), Meta :: any()) -> ok | {error, Reason :: any()}.
-force_register(Name, Pid, Meta) when is_pid(Pid) ->
+-spec unregister_and_register(Name :: any(), Pid :: pid(), Meta :: any()) -> ok | {error, Reason :: any()}.
+unregister_and_register(Name, Pid, Meta) when is_pid(Pid) ->
     Node = node(Pid),
     gen_server:call({?MODULE, Node}, {register_on_node, Name, Pid, Meta, true}).
 

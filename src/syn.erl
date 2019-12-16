@@ -28,7 +28,7 @@
 %% API
 -export([start/0, stop/0]).
 -export([register/2, register/3]).
--export([force_register/2, force_register/3]).
+-export([unregister_and_register/2, unregister_and_register/3]).
 -export([unregister/1]).
 -export([whereis/1, whereis/2]).
 -export([registry_count/0, registry_count/1]).
@@ -68,13 +68,13 @@ register(Name, Pid) ->
 register(Name, Pid, Meta) ->
     syn_registry:register(Name, Pid, Meta).
 
--spec force_register(Name :: any(), Pid :: pid()) -> ok | {error, Reason :: any()}.
-force_register(Name, Pid) ->
-    syn_registry:force_register(Name, Pid).
+-spec unregister_and_register(Name :: any(), Pid :: pid()) -> ok | {error, Reason :: any()}.
+unregister_and_register(Name, Pid) ->
+    syn_registry:unregister_and_register(Name, Pid).
 
--spec force_register(Name :: any(), Pid :: pid(), Meta :: any()) -> ok | {error, Reason :: any()}.
-force_register(Name, Pid, Meta) ->
-    syn_registry:force_register(Name, Pid, Meta).
+-spec unregister_and_register(Name :: any(), Pid :: pid(), Meta :: any()) -> ok | {error, Reason :: any()}.
+unregister_and_register(Name, Pid, Meta) ->
+    syn_registry:unregister_and_register(Name, Pid, Meta).
 
 -spec unregister(Name :: any()) -> ok | {error, Reason :: any()}.
 unregister(Name) ->

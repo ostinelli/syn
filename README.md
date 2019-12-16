@@ -164,11 +164,11 @@ Types:
 To register a previously registered Name with a _different_ Pid:
 
 ```erlang
-syn:force_register(Name, Pid) ->
-    syn:force_register(Name, Pid, undefined).
+syn:unregister_and_register(Name, Pid) ->
+    syn:unregister_and_register(Name, Pid, undefined).
 ```
 ```erlang
-syn:force_register(Name, Pid, Meta) -> ok.
+syn:unregister_and_register(Name, Pid, Meta) -> ok.
 
 Types:
     Name = any()
@@ -176,7 +176,9 @@ Types:
     Meta = any()
 ```
 
-> Force registering is specifically useful if you are force registering a process on a different node from where the process currently registered with `Name` is running on, as `force_register/2,3` will ensure that the registration succeeds and propagates properly. You may otherwise experience a `{error, taken}` response to the registration call if you were to sequentially `unregister/1` and `register/2,3` a process, due to race conditions. Note that the previously registered process will not be killed and will be demonitored, so that the `on_process_exit/4` callback will _not_ be called (even if implemented) when the process dies.
+> Due to Syn being eventually consistent, if you were to sequentially `unregister/1` a name and `register/2,3` a process you might experience a `{error, taken}` response to the latter, since the unregistration may not have yet properly propagated when the registration call is made. This call ensures that the registration succeeds and propagates properly.
+>
+>Note that the previously registered process will not be killed and will be demonitored, so that the `on_process_exit/4` callback will _not_ be called (even if implemented) when the process dies.
 
 To retrieve the total count of registered processes running in the cluster:
 

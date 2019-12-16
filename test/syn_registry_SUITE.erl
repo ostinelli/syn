@@ -52,7 +52,7 @@
     two_nodes_registration_race_condition_conflict_resolution_when_process_died/1,
     two_nodes_registry_full_cluster_sync_on_boot_node_added_later/1,
     two_nodes_registry_full_cluster_sync_on_boot_syn_started_later/1,
-    two_nodes_force_register/1
+    two_nodes_unregister_and_register/1
 ]).
 -export([
     three_nodes_partial_netsplit_consistency/1,
@@ -129,7 +129,7 @@ groups() ->
             two_nodes_registration_race_condition_conflict_resolution_when_process_died,
             two_nodes_registry_full_cluster_sync_on_boot_node_added_later,
             two_nodes_registry_full_cluster_sync_on_boot_syn_started_later,
-            two_nodes_force_register
+            two_nodes_unregister_and_register
         ]},
         {three_nodes_process_registration, [shuffle], [
             three_nodes_partial_netsplit_consistency,
@@ -666,7 +666,7 @@ two_nodes_registry_full_cluster_sync_on_boot_syn_started_later(Config) ->
     Pid = syn:whereis(<<"proc">>),
     Pid = rpc:call(SlaveNode, syn, whereis, [<<"proc">>]).
 
-two_nodes_force_register(Config) ->
+two_nodes_unregister_and_register(Config) ->
     Name = "common name",
     %% get slave
     SlaveNode = proplists:get_value(slave_node, Config),
@@ -687,11 +687,11 @@ two_nodes_force_register(Config) ->
     {PidRemote, {pid_remote, TestPid}} = syn:whereis(Name, with_meta),
     {PidRemote, {pid_remote, TestPid}} = rpc:call(SlaveNode, syn, whereis, [Name, with_meta]),
     %% force
-    ok = syn:force_register(Name, PidLocal, {pid_local, TestPid}),
+    ok = syn:unregister_and_register(Name, PidLocal, {pid_local, TestPid}),
     timer:sleep(1000),
     {PidLocal, {pid_local, TestPid}} = syn:whereis(Name, with_meta),
     {PidLocal, {pid_local, TestPid}} = rpc:call(SlaveNode, syn, whereis, [Name, with_meta]),
-    ok = rpc:call(SlaveNode, syn, force_register, [Name, PidRemote, {pid_remote, TestPid}]),
+    ok = rpc:call(SlaveNode, syn, unregister_and_register, [Name, PidRemote, {pid_remote, TestPid}]),
     timer:sleep(1000),
     {PidRemote, {pid_remote, TestPid}} = syn:whereis(Name, with_meta),
     {PidRemote, {pid_remote, TestPid}} = rpc:call(SlaveNode, syn, whereis, [Name, with_meta]),
