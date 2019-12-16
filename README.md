@@ -161,15 +161,14 @@ Types:
 
 > You don't need to unregister names of processes that are about to die, since they are monitored by Syn and they will be removed automatically. If you manually unregister a process just before it dies, the callback on process exit (see here below) might not get called.
 
-To reregister a a previously registered Name with a different Pid:
+To register a previously registered Name with a _different_ Pid:
 
 ```erlang
-syn:reregister(Name, Pid) ->
-    syn:reregister(Name, Pid, undefined).
+syn:force_register(Name, Pid) ->
+    syn:force_register(Name, Pid, undefined).
 ```
-
 ```erlang
-syn:reregister(Name, Pid, Meta) -> ok.
+syn:force_register(Name, Pid, Meta) -> ok.
 
 Types:
     Name = any()
@@ -177,7 +176,7 @@ Types:
     Meta = any()
 ```
 
-> Re-registering is specifically useful if you are re-registering a process on a different node from where the process currently registered with Name is running on, as `reregister` will ensure that the registration succeeds.
+> Force registering is specifically useful if you are force registering a process on a different node from where the process currently registered with `Name` is running on, as `force_register/2,3` will ensure that the registration succeeds and propagates properly. You may otherwise experience a `{error, taken}` response to the registration call if you were to sequentially `unregister/1` and `register/2,3` a process, due to race conditions. Note that the previously registered process will not be killed and will be demonitored, so that the `on_process_exit/4` callback will _not_ be called (even if implemented) when the process dies.
 
 To retrieve the count of total registered processes running in the cluster:
 

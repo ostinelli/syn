@@ -52,7 +52,7 @@
     two_nodes_registration_race_condition_conflict_resolution_when_process_died/1,
     two_nodes_registry_full_cluster_sync_on_boot_node_added_later/1,
     two_nodes_registry_full_cluster_sync_on_boot_syn_started_later/1,
-    two_nodes_reregister/1
+    two_nodes_force_register/1
 ]).
 -export([
     three_nodes_partial_netsplit_consistency/1,
@@ -129,7 +129,7 @@ groups() ->
             two_nodes_registration_race_condition_conflict_resolution_when_process_died,
             two_nodes_registry_full_cluster_sync_on_boot_node_added_later,
             two_nodes_registry_full_cluster_sync_on_boot_syn_started_later,
-            two_nodes_reregister
+            two_nodes_force_register
         ]},
         {three_nodes_process_registration, [shuffle], [
             three_nodes_partial_netsplit_consistency,
@@ -566,7 +566,7 @@ two_nodes_registration_race_condition_conflict_resolution_keep_remote_with_custo
     %% register
     ok = syn:register(ConflictingName, Pid0, node()),
     %% trigger conflict resolution on master node with something less recent (which would be discarded without a custom handler)
-    ok = syn_registry:sync_register(node(), ConflictingName, Pid1, keep_this_one, erlang:system_time() - 1000000000),
+    ok = syn_registry:sync_register(node(), ConflictingName, Pid1, keep_this_one, erlang:system_time() - 1000000000, false),
     timer:sleep(1000),
     %% check metadata, resolution happens on master node
     {Pid1, keep_this_one} = syn:whereis(ConflictingName, with_meta),
@@ -574,8 +574,7 @@ two_nodes_registration_race_condition_conflict_resolution_keep_remote_with_custo
     true = is_process_alive(Pid0),
     true = rpc:call(SlaveNode, erlang, is_process_alive, [Pid1]),
     %% check that discarded process is not monitored
-    {monitored_by, Monitors} = erlang:process_info(Pid0, monitored_by),
-    0 = length(Monitors).
+    {monitored_by, []} = erlang:process_info(Pid0, monitored_by).
 
 two_nodes_registration_race_condition_conflict_resolution_keep_local_with_custom_handler(Config) ->
     ConflictingName = "COMMON",
@@ -603,8 +602,7 @@ two_nodes_registration_race_condition_conflict_resolution_keep_local_with_custom
     true = is_process_alive(Pid0),
     true = rpc:call(SlaveNode, erlang, is_process_alive, [Pid1]),
     %% check that discarded process is not monitored
-    {monitored_by, Monitors} = rpc:call(SlaveNode, erlang, process_info, [Pid1, monitored_by]),
-    0 = length(Monitors).
+    {monitored_by, []} = rpc:call(SlaveNode, erlang, process_info, [Pid1, monitored_by]).
 
 two_nodes_registration_race_condition_conflict_resolution_when_process_died(Config) ->
     ConflictingName = "COMMON",
@@ -668,10 +666,13 @@ two_nodes_registry_full_cluster_sync_on_boot_syn_started_later(Config) ->
     Pid = syn:whereis(<<"proc">>),
     Pid = rpc:call(SlaveNode, syn, whereis, [<<"proc">>]).
 
-two_nodes_reregister(Config) ->
+two_nodes_force_register(Config) ->
     Name = "common name",
     %% get slave
     SlaveNode = proplists:get_value(slave_node, Config),
+    %% use custom handler
+    syn_test_suite_helper:use_custom_handler(),
+    rpc:call(SlaveNode, syn_test_suite_helper, use_custom_handler, []),
     %% start
     ok = syn:start(),
     ok = rpc:call(SlaveNode, syn, start, []),
@@ -679,14 +680,23 @@ two_nodes_reregister(Config) ->
     %% start processes
     PidLocal = syn_test_suite_helper:start_process(),
     PidRemote = syn_test_suite_helper:start_process(SlaveNode),
-    ok = rpc:call(SlaveNode, syn, register, [Name, PidRemote]),
-    %% fast unreg-reg
-    ok = syn:reregister(Name, PidLocal),
+    %% register
+    TestPid = self(),
+    ok = rpc:call(SlaveNode, syn, register, [Name, PidRemote, {pid_remote, TestPid}]),
+    timer:sleep(250),
+    {PidRemote, {pid_remote, TestPid}} = syn:whereis(Name, with_meta),
+    {PidRemote, {pid_remote, TestPid}} = rpc:call(SlaveNode, syn, whereis, [Name, with_meta]),
+    %% force
+    ok = syn:force_register(Name, PidLocal, {pid_local, TestPid}),
     timer:sleep(1000),
-    PidLocal = syn:whereis(Name),
-    ok = rpc:call(SlaveNode, syn, reregister, [Name, PidRemote, some_meta]),
+    {PidLocal, {pid_local, TestPid}} = syn:whereis(Name, with_meta),
+    {PidLocal, {pid_local, TestPid}} = rpc:call(SlaveNode, syn, whereis, [Name, with_meta]),
+    ok = rpc:call(SlaveNode, syn, force_register, [Name, PidRemote, {pid_remote, TestPid}]),
     timer:sleep(1000),
-    {PidRemote, some_meta} = syn:whereis(Name, with_meta).
+    {PidRemote, {pid_remote, TestPid}} = syn:whereis(Name, with_meta),
+    {PidRemote, {pid_remote, TestPid}} = rpc:call(SlaveNode, syn, whereis, [Name, with_meta]),
+    %% check that overwritten process is not monitored
+    {monitored_by, []} = erlang:process_info(PidLocal, monitored_by).
 
 three_nodes_partial_netsplit_consistency(Config) ->
     %% get slaves
@@ -972,10 +982,8 @@ three_nodes_start_syn_before_connecting_cluster_with_custom_conflict_resolution_
     true = rpc:call(SlaveNode1, erlang, is_process_alive, [Pid1]),
     true = rpc:call(SlaveNode2, erlang, is_process_alive, [Pid2]),
     %% check that discarded processes are not monitored
-    {monitored_by, Monitors0} = erlang:process_info(Pid0, monitored_by),
-    0 = length(Monitors0),
-    {monitored_by, Monitors2} = rpc:call(SlaveNode2, erlang, process_info, [Pid2, monitored_by]),
-    0 = length(Monitors2).
+    {monitored_by, []} = erlang:process_info(Pid0, monitored_by),
+    {monitored_by, []} = rpc:call(SlaveNode2, erlang, process_info, [Pid2, monitored_by]).
 
 three_nodes_registration_race_condition_custom_conflict_resolution(Config) ->
     ConflictingName = "COMMON",
@@ -1162,7 +1170,7 @@ three_nodes_resolve_conflict_on_all_nodes(Config) ->
     {Pid1, SlaveNode1} = rpc:call(SlaveNode1, syn, whereis, [CommonName, with_meta]),
     {Pid1, SlaveNode1} = rpc:call(SlaveNode2, syn, whereis, [CommonName, with_meta]),
     %% force a sync registration conflict on master node from slave 2
-    syn_registry:sync_register(node(), CommonName, Pid2, SlaveNode2, erlang:system_time() + 1000000000),
+    syn_registry:sync_register(node(), CommonName, Pid2, SlaveNode2, erlang:system_time() + 1000000000, false),
     timer:sleep(1000),
     %% check
     {Pid2, SlaveNode2} = syn:whereis(CommonName, with_meta),
