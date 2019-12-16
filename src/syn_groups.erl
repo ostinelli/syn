@@ -97,19 +97,19 @@ leave(GroupName, Pid) ->
 
 -spec get_members(Name :: any()) -> [pid()].
 get_members(GroupName) ->
-    lists:sort(ets:select(syn_groups_by_name, [{
+    ets:select(syn_groups_by_name, [{
         {{GroupName, '$2'}, '_', '_', '_'},
         [],
         ['$2']
-    }])).
+    }]).
 
 -spec get_members(GroupName :: any(), with_meta) -> [{pid(), Meta :: any()}].
 get_members(GroupName, with_meta) ->
-    lists:sort(ets:select(syn_groups_by_name, [{
+    ets:select(syn_groups_by_name, [{
         {{GroupName, '$2'}, '$3', '_', '_'},
         [],
         [{{'$2', '$3'}}]
-    }])).
+    }]).
 
 -spec member(Pid :: pid(), GroupName :: any()) -> boolean().
 member(Pid, GroupName) ->
@@ -121,20 +121,20 @@ member(Pid, GroupName) ->
 -spec get_local_members(Name :: any()) -> [pid()].
 get_local_members(GroupName) ->
     Node = node(),
-    lists:sort(ets:select(syn_groups_by_name, [{
+    ets:select(syn_groups_by_name, [{
         {{GroupName, '$2'}, '_', '_', Node},
         [],
         ['$2']
-    }])).
+    }]).
 
 -spec get_local_members(GroupName :: any(), with_meta) -> [{pid(), Meta :: any()}].
 get_local_members(GroupName, with_meta) ->
     Node = node(),
-    lists:sort(ets:select(syn_groups_by_name, [{
+    ets:select(syn_groups_by_name, [{
         {{GroupName, '$2'}, '$3', '_', Node},
         [],
         [{{'$2', '$3'}}]
-    }])).
+    }]).
 
 -spec local_member(Pid :: pid(), GroupName :: any()) -> boolean().
 local_member(Pid, GroupName) ->
