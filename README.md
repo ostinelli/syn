@@ -365,8 +365,8 @@ Types:
 ## Callbacks
 In Syn you can specify a custom callback module if you want to:
 
-  * Receive and handle the event of a registered process' exit.
-  * Customize the method to resolve registry naming conflict in case of net splits.
+  * Receive and handle the event of a registered / joined process' exit.
+  * Customize the method to resolve registry naming conflict in case of net splits or race conditions.
 
 ### Setup
 The callback module can be set in the environment variable `syn`, with the `event_handler` key. You're probably best off using an application configuration file.
@@ -475,14 +475,14 @@ Called when a registered process exits. It will be called only on the node where
 Called when a process in a group exits. It will be called only on the node where the process was running. If a process was part of _n_ groups, this callback will be called _n_ times (1 per joined group).
 
 #### `resolve_registry_conflict/3`
-In case of net splits, a specific Name might get registered simultaneously on two different nodes. In this case, the cluster experiences a registry naming conflict.
+In case of net splits or race conditions, a specific Name might get registered simultaneously on two different nodes. In this case, the cluster experiences a registry naming conflict.
 
 When this happens, Syn will resolve this Process Registry conflict by choosing a single process. By default, Syn keeps track of the time a registration takes place with [`erlang:system_time/0`](http://erlang.org/doc/man/erlang.html#system_time-0), compares values between conflicting processes and:
 
-  * Keeps the one with the higher value (so the process that was registered more recently).
+  * Keeps the one with the higher value (the process that was registered more recently).
   * Kills the other process by sending a `kill` signal with `exit(Pid, {syn_resolve_kill, Name, Meta})`.
 
-This is a very simple mechanism that can be imprecise, as system clocks are not perfectly aligned in a cluster. If something more elaborate is desired (such as vector clocks), or if you do not want the discarded process to be killed (i.e. to perform a graceful shutdown), please consider storing data into the `Meta` field and use it to resolve conflicts in a custom event handler, by implementing this `resolve_registry_conflict/3` callback.
+This is a very simple mechanism that can be imprecise, as system clocks are not perfectly aligned in a cluster. If something more elaborate is desired (such as vector clocks), or if you do not want the discarded process to be killed (i.e. to perform a graceful shutdown), you MAY specify a custom handler that implements this `resolve_registry_conflict/3` callback. To this effect, you may also store additional data to resolve conflicts in the `Meta` field, since it will be passed into the callback for both of the conflicting processes.
 
 If implemented, this method MUST return the `pid()` of the process that you wish to keep. The other process will be _not_ be killed, so you will have to decide what to do with it.
 
@@ -530,7 +530,7 @@ syn:force_cluster_sync(registry | groups) -> ok.
 > As per the notes above, in normal conditions Syn doesn't need to be manually synced. This function will force a full mesh sync on all of the cluster and is **experimental**. Use it as a last resort.
 
 ## Internals
-As of v2.1, Syn uses ETS for memory storage and doesn't have any external dependency. Syn has its own replication and net splits conflict resolution mechanisms.
+As of v2.1, Syn uses ETS for memory storage and doesn't have any external dependency. Syn has its own replication and naming conflict resolution mechanisms.
 
 ## Contributing
 So you want to contribute? That's great! Please follow the guidelines below. It will make it easier to get merged in.
