@@ -140,7 +140,8 @@ count(Node) ->
         [true]
     }]).
 
--spec sync_register(RemoteNode :: node(), Name :: any(), RemotePid :: pid(), RemoteMeta :: any(), RemoteTime :: integer()) -> ok.
+-spec sync_register(RemoteNode :: node(), Name :: any(), RemotePid :: pid(), RemoteMeta :: any(), RemoteTime :: integer()) ->
+    ok.
 sync_register(RemoteNode, Name, RemotePid, RemoteMeta, RemoteTime) ->
     gen_server:cast({?MODULE, RemoteNode}, {sync_register, Name, RemotePid, RemoteMeta, RemoteTime}).
 
@@ -294,7 +295,10 @@ handle_cast({sync_register, Name, RemotePid, RemoteMeta, RemoteTime}, State) ->
                             %% overwrite local data to all remote nodes, except TablePid's node
                             NodesExceptLocalAndTablePidNode = nodes() -- [node(TablePid)],
                             lists:foreach(fun(RNode) ->
-                                ok = rpc:call(RNode, syn_registry, add_to_local_table, [Name, TablePid, TableMeta, TableTime, undefined])
+                                ok = rpc:call(RNode,
+                                    syn_registry, add_to_local_table,
+                                    [Name, TablePid, TableMeta, TableTime, undefined]
+                                )
                             end, NodesExceptLocalAndTablePidNode);
 
                         {RemotePid, KillOtherPid} ->
@@ -305,7 +309,10 @@ handle_cast({sync_register, Name, RemotePid, RemoteMeta, RemoteTime}, State) ->
                             %% overwrite remote data to all other nodes (including local), except RemotePid's node
                             NodesExceptRemoteNode = [node() | nodes()] -- [node(RemotePid)],
                             lists:foreach(fun(RNode) ->
-                                ok = rpc:call(RNode, syn_registry, add_to_local_table, [Name, RemotePid, RemoteMeta, RemoteTime, undefined])
+                                ok = rpc:call(RNode,
+                                    syn_registry, add_to_local_table,
+                                    [Name, RemotePid, RemoteMeta, RemoteTime, undefined]
+                                )
                             end, NodesExceptRemoteNode);
 
                         undefined ->
@@ -623,7 +630,10 @@ registry_automerge(RemoteNode, State) ->
             %% get registry tuples from remote node
             case rpc:call(RemoteNode, ?MODULE, sync_get_local_registry_tuples, [node()]) of
                 {badrpc, _} ->
-                    error_logger:info_msg("Syn(~p): REGISTRY AUTOMERGE <---- Syn not ready on remote node ~p, postponing~n", [node(), RemoteNode]);
+                    error_logger:info_msg(
+                        "Syn(~p): REGISTRY AUTOMERGE <---- Syn not ready on remote node ~p, postponing~n",
+                        [node(), RemoteNode]
+                    );
 
                 Entries ->
                     error_logger:info_msg(
@@ -690,8 +700,8 @@ resolve_tuple_in_automerge(Name, RemotePid, RemoteMeta, RemoteTime, State) ->
 
 -spec resolve_conflict(
     Name :: any(),
-    {TablePid :: pid(), TableMeta :: any()},
-    {RemotePid :: pid(), RemoteMeta :: any()},
+    {TablePid :: pid(), TableMeta :: any(), TableTime :: integer()},
+    {RemotePid :: pid(), RemoteMeta :: any(), RemoteTime :: integer()},
     #state{}
 ) -> {PidToKeep :: pid(), KillOtherPid :: boolean() | undefined} | undefined.
 resolve_conflict(

@@ -28,6 +28,7 @@
     Name :: any(),
     Pid :: pid(),
     Meta :: any(),
+    Time :: integer(),
     MonitorRef :: undefined | reference(),
     Node :: node()
 }.
@@ -41,7 +42,6 @@
     GroupName :: any(),
     Pid :: pid(),
     Meta :: any(),
-    Time :: integer(),
     MonitorRef :: undefined | reference(),
     Node :: node()
 }.
