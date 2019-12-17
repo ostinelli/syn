@@ -195,6 +195,8 @@ Types:
     Node = atom()
 ```
 
+> This is a non-optimized call, use for debugging / monitoring purposes only.
+
 ### Process Groups
 
 > There's no need to manually create / delete Process Groups, Syn will take care of managing those for you.
@@ -368,6 +370,8 @@ To retrieve the total count of groups in the cluster:
 syn:groups_count() -> non_neg_integer().
 ```
 
+> This is a non-optimized call, use for debugging / monitoring purposes only.
+
 To retrieve the count of groups that have at least 1 process running on a specific node:
 
 ```erlang
@@ -376,6 +380,8 @@ syn:groups_count(Node) -> non_neg_integer().
 Types:
     Node = atom()
 ```
+
+> This is a non-optimized call, use for debugging / monitoring purposes only.
 
 ## Callbacks
 In Syn you can specify a custom callback module if you want to:
