@@ -679,22 +679,34 @@ two_nodes_unregister_and_register(Config) ->
     timer:sleep(100),
     %% start processes
     PidLocal = syn_test_suite_helper:start_process(),
+    PidLocal2 = syn_test_suite_helper:start_process(),
     PidRemote = syn_test_suite_helper:start_process(SlaveNode),
     %% register
-    TestPid = self(),
-    ok = rpc:call(SlaveNode, syn, register, [Name, PidRemote, {pid_remote, TestPid}]),
+    ok = rpc:call(SlaveNode, syn, register, [Name, PidRemote, SlaveNode]),
     timer:sleep(250),
-    {PidRemote, {pid_remote, TestPid}} = syn:whereis(Name, with_meta),
-    {PidRemote, {pid_remote, TestPid}} = rpc:call(SlaveNode, syn, whereis, [Name, with_meta]),
-    %% force
-    ok = syn:unregister_and_register(Name, PidLocal, {pid_local, TestPid}),
+    {PidRemote, SlaveNode} = syn:whereis(Name, with_meta),
+    {PidRemote, SlaveNode} = rpc:call(SlaveNode, syn, whereis, [Name, with_meta]),
+    %% un/register local over remote
+    Node = node(),
+    ok = syn:unregister_and_register(Name, PidLocal, Node),
     timer:sleep(1000),
-    {PidLocal, {pid_local, TestPid}} = syn:whereis(Name, with_meta),
-    {PidLocal, {pid_local, TestPid}} = rpc:call(SlaveNode, syn, whereis, [Name, with_meta]),
-    ok = rpc:call(SlaveNode, syn, unregister_and_register, [Name, PidRemote, {pid_remote, TestPid}]),
+    {PidLocal, Node} = syn:whereis(Name, with_meta),
+    {PidLocal, Node} = rpc:call(SlaveNode, syn, whereis, [Name, with_meta]),
+    ok = rpc:call(SlaveNode, syn, unregister_and_register, [Name, PidRemote, {SlaveNode, 2}]),
     timer:sleep(1000),
-    {PidRemote, {pid_remote, TestPid}} = syn:whereis(Name, with_meta),
-    {PidRemote, {pid_remote, TestPid}} = rpc:call(SlaveNode, syn, whereis, [Name, with_meta]),
+    {PidRemote, {SlaveNode, 2}} = syn:whereis(Name, with_meta),
+    {PidRemote, {SlaveNode, 2}} = rpc:call(SlaveNode, syn, whereis, [Name, with_meta]),
+    %% check that overwritten process is not monitored
+    {monitored_by, []} = erlang:process_info(PidLocal, monitored_by),
+    %% register local
+    ok = syn:unregister_and_register(Name, PidLocal, Node),
+    %% check a monitor exists
+    {monitored_by, [_MonitoringPid]} = erlang:process_info(PidLocal, monitored_by),
+    %% un/register local over local
+    ok = syn:unregister_and_register(Name, PidLocal2, {Node, 2}),
+    timer:sleep(1000),
+    {PidLocal2, {Node, 2}} = syn:whereis(Name, with_meta),
+    {PidLocal2, {Node, 2}} = rpc:call(SlaveNode, syn, whereis, [Name, with_meta]),
     %% check that overwritten process is not monitored
     {monitored_by, []} = erlang:process_info(PidLocal, monitored_by).
 

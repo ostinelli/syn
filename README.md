@@ -180,13 +180,13 @@ Types:
 >
 >Note that the previously registered process will not be killed and will be demonitored, so that the `on_process_exit/4` callback will _not_ be called (even if implemented) when the process dies.
 
-To retrieve the total count of registered processes running in the cluster:
+To retrieve the total count of registered names:
 
 ```erlang
 syn:registry_count() -> non_neg_integer().
 ```
 
-To retrieve the total count of registered processes running on a specific node:
+To retrieve the total count of registered names of processes running on a specific node:
 
 ```erlang
 syn:registry_count(Node) -> non_neg_integer().

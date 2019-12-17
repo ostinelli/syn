@@ -223,10 +223,11 @@ handle_call({register_on_node, Name, Pid, Meta, Force}, _From, State) ->
                     %% return
                     {reply, ok, State};
 
-                {Name, _, _, _} ->
+                {Name, TablePid, _, _} ->
                     %% same name, different pid
                     case Force of
                         true ->
+                            demonitor_if_local(TablePid),
                             %% force register
                             {ok, Time} = register_on_node(Name, Pid, Meta),
                             %% multicast
@@ -277,15 +278,7 @@ handle_cast({sync_register, Name, RemotePid, RemoteMeta, RemoteTime, Force}, Sta
             add_to_local_table(Name, RemotePid, RemoteMeta, RemoteTime, undefined);
 
         {Name, TablePid, _, _} when Force =:= true ->
-            case node(TablePid) =:= node() of
-                true ->
-                    %% demonitor
-                    MonitorRef = syn_registry:find_monitor_for_pid(TablePid),
-                    catch erlang:demonitor(MonitorRef, [flush]);
-
-                _ ->
-                    ok
-            end,
+            demonitor_if_local(TablePid),
             %% overwrite
             add_to_local_table(Name, RemotePid, RemoteMeta, RemoteTime, undefined);
 
@@ -818,3 +811,16 @@ set_timer_for_anti_entropy(#state{
     IntervalMs = round(AntiEntropyIntervalMs + rand:uniform() * AntiEntropyIntervalMaxDeviationMs),
     {ok, _} = timer:send_after(IntervalMs, self(), sync_anti_entropy),
     ok.
+
+-spec demonitor_if_local(pid()) -> ok.
+demonitor_if_local(Pid) ->
+    case node(Pid) =:= node() of
+        true ->
+            %% demonitor
+            MonitorRef = syn_registry:find_monitor_for_pid(Pid),
+            catch erlang:demonitor(MonitorRef, [flush]),
+            ok;
+
+        _ ->
+            ok
+    end.
