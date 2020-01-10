@@ -498,14 +498,10 @@ find_groups_tuples_by_pid(Pid) when is_pid(Pid) ->
 
 -spec find_groups_entry_by_name_and_pid(GroupName :: any(), Pid :: pid()) -> Entry :: syn_groups_entry() | undefined.
 find_groups_entry_by_name_and_pid(GroupName, Pid) ->
-    MatchBody = case is_tuple(GroupName) of
-        true -> {{{GroupName}, Pid, '$3', '$4', '$5'}};
-        _ -> {{GroupName, Pid, '$3', '$4', '$5'}}
-    end,
     case ets:select(syn_groups_by_name, [{
         {{GroupName, Pid}, '$3', '$4', '$5'},
         [],
-        [MatchBody]
+        [{{{const, GroupName}, Pid, '$3', '$4', '$5'}}]
     }]) of
         [RegistryTuple] -> RegistryTuple;
         _ -> undefined

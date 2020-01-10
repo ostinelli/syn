@@ -555,14 +555,10 @@ remove_from_local_table(Name, Pid) ->
 
 -spec find_registry_tuple_by_name(Name :: any()) -> RegistryTuple :: syn_registry_tuple() | undefined.
 find_registry_tuple_by_name(Name) ->
-    MatchBody = case is_tuple(Name) of
-        true -> {{{Name}, '$2', '$3', '$4'}};
-        _ -> {{Name, '$2', '$3', '$4'}}
-    end,
     case ets:select(syn_registry_by_name, [{
         {Name, '$2', '$3', '$4', '_', '_'},
         [],
-        [MatchBody]
+        [{{{const, Name}, '$2', '$3', '$4'}}]
     }]) of
         [RegistryTuple] -> RegistryTuple;
         _ -> undefined
