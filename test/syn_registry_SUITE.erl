@@ -759,7 +759,7 @@ three_nodes_partial_netsplit_consistency(Config) ->
     Pid2 = rpc:call(SlaveNode2, syn, whereis, [<<"proc2">>]),
     %% disconnect slave 2 from main (slave 1 can still see slave 2)
     syn_test_suite_helper:disconnect_node(SlaveNode2),
-    timer:sleep(500),
+    timer:sleep(1000),
     %% retrieve
     Pid0 = syn:whereis(<<"proc0">>),
     Pid0Changed = syn:whereis(<<"proc0-changed">>),
@@ -846,7 +846,7 @@ three_nodes_full_netsplit_consistency(Config) ->
     Pid2 = rpc:call(SlaveNode2, syn, whereis, [<<"proc2">>]),
     %% disconnect slave 2 from main (slave 1 can still see slave 2)
     syn_test_suite_helper:disconnect_node(SlaveNode2),
-    timer:sleep(500),
+    timer:sleep(1000),
     %% retrieve
     Pid0 = syn:whereis(<<"proc0">>),
     Pid0Changed = syn:whereis(<<"proc0-changed">>),
