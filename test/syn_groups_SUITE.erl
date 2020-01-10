@@ -309,7 +309,6 @@ single_node_groups_count(_Config) ->
     Pid = syn_test_suite_helper:start_process(),
     Pid2 = syn_test_suite_helper:start_process(),
     Pid3 = syn_test_suite_helper:start_process(),
-    PidUnjoined = syn_test_suite_helper:start_process(),
     %% join
     ok = syn:join({"group-1"}, Pid),
     ok = syn:join({"group-1"}, Pid2),

@@ -1141,7 +1141,6 @@ three_nodes_concurrent_registration_unregistration(Config) ->
     %% start processes
     Pid0 = syn_test_suite_helper:start_process(),
     Pid1 = syn_test_suite_helper:start_process(SlaveNode1),
-    Pid2 = syn_test_suite_helper:start_process(SlaveNode2),
     timer:sleep(100),
     %% register on 0
     ok = syn:register(CommonName, Pid0, node()),
