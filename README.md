@@ -48,29 +48,19 @@ defp deps do
 end
 ```
 
-Ensure that `syn` is started with your application, for example by adding it to the list of your application's `extra_applications`:
-
-```elixir
-def application do
-  [
-    extra_applications: [:logger, :syn]
-  ]
-end
-```
-
 ### For Erlang
 If you're using [rebar3](https://github.com/erlang/rebar3), add `syn` as a dependency in your project's `rebar.config` file:
 
 ```erlang
 {deps, [
-  {syn, {git, "git://github.com/ostinelli/syn.git", {tag, "2.1.0"}}}
+  {syn, {git, "git://github.com/ostinelli/syn.git", {tag, "2.1.1"}}}
 ]}.
 ```
 Or, if you're using [Hex.pm](https://hex.pm/) as package manager (with the [rebar3_hex](https://github.com/hexpm/rebar3_hex) plugin):
 
 ```erlang
 {deps, [
-  {syn, "2.1.0"}
+  {syn, "2.1.1"}
 ]}.
 ```
 
