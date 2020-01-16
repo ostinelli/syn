@@ -105,7 +105,7 @@ get_anti_entropy_settings(Module) ->
     {stop, Reason :: any()}.
 init([]) ->
     %% create ETS tables
-    %% entries have structure {Name, Pid, Meta, Clock, MonitorRef, Node}
+    %% entries have structure {{Name, Pid}, Meta, Clock, MonitorRef, Node}
     ets:new(syn_registry_by_name, [ordered_set, public, named_table, {read_concurrency, true}, {write_concurrency, true}]),
     %% entries have format {{Pid, Name}, Meta, Clock, MonitorRef, Node}
     ets:new(syn_registry_by_pid, [ordered_set, public, named_table, {read_concurrency, true}, {write_concurrency, true}]),
