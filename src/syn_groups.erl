@@ -45,6 +45,9 @@
 -export([force_cluster_sync/0]).
 -export([remove_from_local_table/2]).
 
+%% internal
+-export([multicast_loop/0]).
+
 %% tests
 -ifdef(TEST).
 -export([add_to_local_table/4]).
@@ -60,7 +63,8 @@
 -record(state, {
     custom_event_handler :: undefined | module(),
     anti_entropy_interval_ms :: undefined | non_neg_integer(),
-    anti_entropy_interval_max_deviation_ms :: undefined | non_neg_integer()
+    anti_entropy_interval_max_deviation_ms :: undefined | non_neg_integer(),
+    multicast_pid :: undefined | pid()
 }).
 
 %% macros
@@ -240,6 +244,8 @@ init([]) ->
     ok = net_kernel:monitor_nodes(true),
     %% rebuild
     rebuild_monitors(),
+    %% start multicast process
+    MulticastPid = spawn_link(?MODULE, multicast_loop, []),
     %% get handler
     CustomEventHandler = syn_backbone:get_event_handler_module(),
     %% get anti-entropy interval
@@ -248,7 +254,8 @@ init([]) ->
     State = #state{
         custom_event_handler = CustomEventHandler,
         anti_entropy_interval_ms = AntiEntropyIntervalMs,
-        anti_entropy_interval_max_deviation_ms = AntiEntropyIntervalMaxDeviationMs
+        anti_entropy_interval_max_deviation_ms = AntiEntropyIntervalMaxDeviationMs,
+        multicast_pid = MulticastPid
     },
     %% send message to initiate full cluster sync
     timer:send_after(0, self(), sync_from_full_cluster),
@@ -274,7 +281,7 @@ handle_call({join_on_node, GroupName, Pid, Meta}, _From, State) ->
         true ->
             join_on_node(GroupName, Pid, Meta),
             %% multicast
-            multicast_join(GroupName, Pid, Meta),
+            multicast_join(GroupName, Pid, Meta, State),
             %% return
             {reply, ok, State};
         _ ->
@@ -285,7 +292,7 @@ handle_call({leave_on_node, GroupName, Pid}, _From, State) ->
     case leave_on_node(GroupName, Pid) of
         ok ->
             %% multicast
-            multicast_leave(GroupName, Pid),
+            multicast_leave(GroupName, Pid, State),
             %% return
             {reply, ok, State};
         {error, Reason} ->
@@ -347,7 +354,7 @@ handle_info({'DOWN', _MonitorRef, process, Pid, Reason}, State) ->
                 %% handle
                 handle_process_down(GroupName, Pid, Meta, Reason, State),
                 %% multicast
-                multicast_leave(GroupName, Pid)
+                multicast_leave(GroupName, Pid, State)
             end, GroupTuples)
     end,
     %% return
@@ -394,8 +401,11 @@ handle_info(Info, State) ->
 %% Terminate
 %% ----------------------------------------------------------------------------------------------------------
 -spec terminate(Reason :: any(), #state{}) -> terminated.
-terminate(Reason, _State) ->
+terminate(Reason, #state{
+    multicast_pid = MulticastPid
+}) ->
     error_logger:info_msg("Syn(~p): Terminating with reason: ~p~n", [node(), Reason]),
+    MulticastPid ! terminate,
     terminated.
 
 %% ----------------------------------------------------------------------------------------------------------
@@ -408,21 +418,17 @@ code_change(_OldVsn, State, _Extra) ->
 %% ===================================================================
 %% Internal
 %% ===================================================================
--spec multicast_join(GroupName :: any(), Pid :: pid(), Meta :: any()) -> pid().
-multicast_join(GroupName, Pid, Meta) ->
-    spawn_link(fun() ->
-        lists:foreach(fun(RemoteNode) ->
-            sync_join(RemoteNode, GroupName, Pid, Meta)
-        end, nodes())
-    end).
+-spec multicast_join(GroupName :: any(), Pid :: pid(), Meta :: any(), #state{}) -> pid().
+multicast_join(GroupName, Pid, Meta, #state{
+    multicast_pid = MulticastPid
+}) ->
+    MulticastPid ! {multicast_join, GroupName, Pid, Meta}.
 
--spec multicast_leave(GroupName :: any(), Pid :: pid()) -> pid().
-multicast_leave(GroupName, Pid) ->
-    spawn_link(fun() ->
-        lists:foreach(fun(RemoteNode) ->
-            sync_leave(RemoteNode, GroupName, Pid)
-        end, nodes())
-    end).
+-spec multicast_leave(GroupName :: any(), Pid :: pid(), #state{}) -> pid().
+multicast_leave(GroupName, Pid, #state{
+    multicast_pid = MulticastPid
+}) ->
+    MulticastPid ! {multicast_leave, GroupName, Pid}.
 
 -spec join_on_node(GroupName :: any(), Pid :: pid(), Meta :: any()) -> ok.
 join_on_node(GroupName, Pid, Meta) ->
@@ -633,7 +639,7 @@ rebuild_monitors() ->
             true ->
                 join_on_node(GroupName, Pid, Meta);
             _ ->
-                multicast_leave(GroupName, Pid)
+                remove_from_local_table(GroupName, Pid)
         end
     end, GroupTuples).
 
@@ -646,3 +652,22 @@ set_timer_for_anti_entropy(#state{
     IntervalMs = round(AntiEntropyIntervalMs + rand:uniform() * AntiEntropyIntervalMaxDeviationMs),
     {ok, _} = timer:send_after(IntervalMs, self(), sync_anti_entropy),
     ok.
+
+-spec multicast_loop() -> terminated.
+multicast_loop() ->
+    receive
+        {multicast_join, GroupName, Pid, Meta} ->
+            lists:foreach(fun(RemoteNode) ->
+                sync_join(RemoteNode, GroupName, Pid, Meta)
+            end, nodes()),
+            multicast_loop();
+
+        {multicast_leave, GroupName, Pid} ->
+            lists:foreach(fun(RemoteNode) ->
+                sync_leave(RemoteNode, GroupName, Pid)
+            end, nodes()),
+            multicast_loop();
+
+        terminate ->
+            terminated
+    end.
