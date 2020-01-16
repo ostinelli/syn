@@ -65,14 +65,14 @@
     CustomEventHandler :: module()
 ) -> any().
 do_on_process_exit(Name, Pid, Meta, Reason, CustomEventHandler) ->
-    spawn(fun() ->
-        case erlang:function_exported(CustomEventHandler, on_process_exit, 4) of
-            true ->
-                CustomEventHandler:on_process_exit(Name, Pid, Meta, Reason);
-            _ ->
-                ok
-        end
-    end).
+    case erlang:function_exported(CustomEventHandler, on_process_exit, 4) of
+        true ->
+            spawn(fun() ->
+                CustomEventHandler:on_process_exit(Name, Pid, Meta, Reason)
+            end);
+        _ ->
+            ok
+    end.
 
 -spec do_on_group_process_exit(
     GroupName :: any(),
@@ -82,14 +82,15 @@ do_on_process_exit(Name, Pid, Meta, Reason, CustomEventHandler) ->
     CustomEventHandler :: module()
 ) -> any().
 do_on_group_process_exit(GroupName, Pid, Meta, Reason, CustomEventHandler) ->
-    spawn(fun() ->
-        case erlang:function_exported(CustomEventHandler, on_group_process_exit, 4) of
-            true ->
-                CustomEventHandler:on_group_process_exit(GroupName, Pid, Meta, Reason);
-            _ ->
-                ok
-        end
-    end).
+
+    case erlang:function_exported(CustomEventHandler, on_group_process_exit, 4) of
+        true ->
+            spawn(fun() ->
+                CustomEventHandler:on_group_process_exit(GroupName, Pid, Meta, Reason)
+            end);
+        _ ->
+            ok
+    end.
 
 -spec do_resolve_registry_conflict(
     Name :: any(),
