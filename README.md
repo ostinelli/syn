@@ -254,6 +254,15 @@ Types:
     GroupName = any()
 ```
 
+To get a list of the existing groups:
+
+```erlang
+syn:get_group_names() -> [GroupName].
+
+Types:
+    GroupName = any()
+```
+
 To publish a message to all group members:
 
 ```erlang

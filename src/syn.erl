@@ -35,6 +35,7 @@
 -export([join/2, join/3]).
 -export([leave/2]).
 -export([get_members/1, get_members/2]).
+-export([get_group_names/0]).
 -export([member/2]).
 -export([get_local_members/1, get_local_members/2]).
 -export([local_member/2]).
@@ -145,6 +146,10 @@ get_members(GroupName) ->
 -spec get_members(GroupName :: any(), with_meta) -> [{pid(), Meta :: any()}].
 get_members(GroupName, with_meta) ->
     syn_groups:get_members(GroupName, with_meta).
+
+-spec get_group_names() -> [GroupName :: any()].
+get_group_names() ->
+    syn_groups:get_group_names().
 
 -spec member(GroupName :: any(), Pid :: pid()) -> boolean().
 member(GroupName, Pid) ->

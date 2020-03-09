@@ -37,6 +37,7 @@
     single_node_join_and_leave/1,
     single_node_join_errors/1,
     single_node_groups_count/1,
+    single_node_group_names/1,
     single_node_publish/1,
     single_node_multicall/1,
     single_node_multicall_with_custom_timeout/1,
@@ -47,6 +48,7 @@
     two_nodes_join_monitor_and_unregister/1,
     two_nodes_local_members/1,
     two_nodes_groups_count/1,
+    two_nodes_group_names/1,
     two_nodes_publish/1,
     two_nodes_local_publish/1,
     two_nodes_multicall/1,
@@ -100,6 +102,7 @@ groups() ->
             single_node_join_and_leave,
             single_node_join_errors,
             single_node_groups_count,
+            single_node_group_names,
             single_node_publish,
             single_node_multicall,
             single_node_multicall_with_custom_timeout,
@@ -110,6 +113,7 @@ groups() ->
             two_nodes_join_monitor_and_unregister,
             two_nodes_local_members,
             two_nodes_groups_count,
+            two_nodes_group_names,
             two_nodes_publish,
             two_nodes_local_publish,
             two_nodes_multicall,
@@ -325,6 +329,31 @@ single_node_groups_count(_Config) ->
     %% count
     0 = syn:groups_count(),
     0 = syn:groups_count(node()).
+
+single_node_group_names(_Config) ->
+    %% start
+    ok = syn:start(),
+    %% start processes
+    Pid = syn_test_suite_helper:start_process(),
+    Pid2 = syn_test_suite_helper:start_process(),
+    Pid3 = syn_test_suite_helper:start_process(),
+    %% join
+    ok = syn:join({"group-1"}, Pid),
+    ok = syn:join({"group-1"}, Pid2),
+    ok = syn:join({"group-1"}, Pid3),
+    ok = syn:join({"group-2"}, Pid2),
+    %% names
+    GroupNames = syn:get_group_names(),
+    2 = length(GroupNames),
+    true = lists:member({"group-1"}, GroupNames),
+    true = lists:member({"group-2"}, GroupNames),
+    %% kill & unregister
+    ok = syn:leave({"group-1"}, Pid),
+    syn_test_suite_helper:kill_process(Pid2),
+    syn_test_suite_helper:kill_process(Pid3),
+    timer:sleep(100),
+    %% count
+    [] = syn:get_group_names().
 
 single_node_publish(_Config) ->
     GroupName = "my group",
@@ -645,6 +674,37 @@ two_nodes_groups_count(Config) ->
     0 = syn:groups_count(),
     0 = syn:groups_count(node()),
     0 = syn:groups_count(SlaveNode).
+
+two_nodes_group_names(Config) ->
+    %% get slave
+    SlaveNode = proplists:get_value(slave_node, Config),
+    %% start
+    ok = syn:start(),
+    ok = rpc:call(SlaveNode, syn, start, []),
+    timer:sleep(100),
+    %% start processes
+    LocalPid = syn_test_suite_helper:start_process(),
+    RemotePid = syn_test_suite_helper:start_process(SlaveNode),
+    RemotePidRegRemote = syn_test_suite_helper:start_process(SlaveNode),
+    _PidUnjoined = syn_test_suite_helper:start_process(),
+    %% join
+    ok = syn:join(<<"local group">>, LocalPid),
+    ok = syn:join(<<"remote group">>, RemotePid),
+    ok = rpc:call(SlaveNode, syn, join, [<<"remote group join_remote">>, RemotePidRegRemote]),
+    timer:sleep(500),
+    %% names
+    GroupNames = syn:get_group_names(),
+    3 = length(GroupNames),
+    true = lists:member(<<"local group">>, GroupNames),
+    true = lists:member(<<"remote group">>, GroupNames),
+    true = lists:member(<<"remote group join_remote">>, GroupNames),
+    %% kill & unregister processes
+    syn_test_suite_helper:kill_process(LocalPid),
+    ok = syn:leave(<<"remote group">>, RemotePid),
+    syn_test_suite_helper:kill_process(RemotePidRegRemote),
+    timer:sleep(100),
+    %% names
+    [] = syn:get_group_names().
 
 two_nodes_publish(Config) ->
     GroupName = "my group",
