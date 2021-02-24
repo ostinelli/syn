@@ -490,7 +490,7 @@ remove_from_local_table(GroupName, Pid) ->
 
         _ ->
             ets:match_delete(syn_groups_by_name, {{GroupName, Pid}, '_', '_', '_'}),
-            ets:match_delete(syn_groups_by_name, {{Pid, GroupName}, '_', '_', '_'}),
+            ets:match_delete(syn_groups_by_pid, {{Pid, GroupName}, '_', '_', '_'}),
             ok
     end.
 
