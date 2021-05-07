@@ -466,13 +466,13 @@ code_change(_OldVsn, State, _Extra) ->
     Time :: integer(),
     Force :: boolean(),
     #state{}
-) -> pid().
+) -> any().
 multicast_register(Name, Pid, Meta, Time, Force, #state{
     multicast_pid = MulticastPid
 }) ->
     MulticastPid ! {multicast_register, Name, Pid, Meta, Time, Force}.
 
--spec multicast_unregister(Name :: any(), Pid :: pid(), #state{}) -> pid().
+-spec multicast_unregister(Name :: any(), Pid :: pid(), #state{}) -> any().
 multicast_unregister(Name, Pid, #state{
     multicast_pid = MulticastPid
 }) ->

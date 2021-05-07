@@ -25,8 +25,10 @@
 %% ==========================================================================================================
 %% types
 -type syn_registry_entry() :: {
-    Name :: any(),
-    Pid :: pid(),
+    {
+        Name :: any(),
+        Pid :: pid()
+    },
     Meta :: any(),
     Time :: integer(),
     MonitorRef :: undefined | reference(),

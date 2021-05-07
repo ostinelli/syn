@@ -429,13 +429,13 @@ code_change(_OldVsn, State, _Extra) ->
 %% ===================================================================
 %% Internal
 %% ===================================================================
--spec multicast_join(GroupName :: any(), Pid :: pid(), Meta :: any(), #state{}) -> pid().
+-spec multicast_join(GroupName :: any(), Pid :: pid(), Meta :: any(), #state{}) -> any().
 multicast_join(GroupName, Pid, Meta, #state{
     multicast_pid = MulticastPid
 }) ->
     MulticastPid ! {multicast_join, GroupName, Pid, Meta}.
 
--spec multicast_leave(GroupName :: any(), Pid :: pid(), #state{}) -> pid().
+-spec multicast_leave(GroupName :: any(), Pid :: pid(), #state{}) -> any().
 multicast_leave(GroupName, Pid, #state{
     multicast_pid = MulticastPid
 }) ->
