@@ -116,8 +116,8 @@ get_members(GroupName, with_meta) ->
         [{{'$2', '$3'}}]
     }]).
 
--spec member(Pid :: pid(), GroupName :: any()) -> boolean().
-member(Pid, GroupName) ->
+-spec member(GroupName :: any(), Pid :: pid()) -> boolean().
+member(GroupName, Pid) ->
     case find_groups_entry_by_name_and_pid(GroupName, Pid) of
         undefined -> false;
         _ -> true
@@ -141,8 +141,8 @@ get_local_members(GroupName, with_meta) ->
         [{{'$2', '$3'}}]
     }]).
 
--spec local_member(Pid :: pid(), GroupName :: any()) -> boolean().
-local_member(Pid, GroupName) ->
+-spec local_member(GroupName :: any(), Pid :: pid()) -> boolean().
+local_member(GroupName, Pid) ->
     case find_groups_entry_by_name_and_pid(GroupName, Pid) of
         {GroupName, Pid, _Meta, _MonitorRef, Node} when Node =:= node() ->
             true;

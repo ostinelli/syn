@@ -221,17 +221,17 @@ single_node_join_and_monitor(_Config) ->
     %% retrieve
     [] = syn:get_members(GroupName),
     [] = syn:get_members(GroupName, with_meta),
-    false = syn:member(Pid, GroupName),
-    false = syn:member(PidWithMeta, GroupName),
-    false = syn:member(PidOther, GroupName),
+    false = syn:member(GroupName, Pid),
+    false = syn:member(GroupName, PidWithMeta),
+    false = syn:member(GroupName, PidOther),
     %% join
     ok = syn:join(GroupName, Pid),
     ok = syn:join(GroupName, PidWithMeta, {with, meta}),
     ok = syn:join("other-group", PidOther),
     %% retrieve
-    true = syn:member(Pid, GroupName),
-    true = syn:member(PidWithMeta, GroupName),
-    false = syn:member(PidOther, GroupName),
+    true = syn:member(GroupName, Pid),
+    true = syn:member(GroupName, PidWithMeta),
+    false = syn:member(GroupName, PidOther),
     true = lists:sort([Pid, PidWithMeta]) =:= lists:sort(syn:get_members(GroupName)),
     true = lists:sort([{Pid, undefined}, {PidWithMeta, {with, meta}}])
         =:= lists:sort(syn:get_members(GroupName, with_meta)),
@@ -247,8 +247,8 @@ single_node_join_and_monitor(_Config) ->
     %% retrieve
     [] = syn:get_members(GroupName),
     [] = syn:get_members(GroupName, with_meta),
-    false = syn:member(Pid, GroupName),
-    false = syn:member(PidWithMeta, GroupName).
+    false = syn:member(GroupName, Pid),
+    false = syn:member(GroupName, PidWithMeta).
 
 single_node_join_and_leave(_Config) ->
     GroupName = "my group",
@@ -260,14 +260,14 @@ single_node_join_and_leave(_Config) ->
     %% retrieve
     [] = syn:get_members(GroupName),
     [] = syn:get_members(GroupName, with_meta),
-    false = syn:member(Pid, GroupName),
-    false = syn:member(PidWithMeta, GroupName),
+    false = syn:member(GroupName, Pid),
+    false = syn:member(GroupName, PidWithMeta),
     %% join
     ok = syn:join(GroupName, Pid),
     ok = syn:join(GroupName, PidWithMeta, {with, meta}),
     %% retrieve
-    true = syn:member(Pid, GroupName),
-    true = syn:member(PidWithMeta, GroupName),
+    true = syn:member(GroupName, Pid),
+    true = syn:member(GroupName, PidWithMeta),
     true = lists:sort([Pid, PidWithMeta]) =:= lists:sort(syn:get_members(GroupName)),
     true = lists:sort([{Pid, undefined}, {PidWithMeta, {with, meta}}])
         =:= lists:sort(syn:get_members(GroupName, with_meta)),
@@ -278,8 +278,8 @@ single_node_join_and_leave(_Config) ->
     %% retrieve
     [] = syn:get_members(GroupName),
     [] = syn:get_members(GroupName, with_meta),
-    false = syn:member(Pid, GroupName),
-    false = syn:member(PidWithMeta, GroupName).
+    false = syn:member(GroupName, Pid),
+    false = syn:member(GroupName, PidWithMeta).
 
 single_node_join_errors(_Config) ->
     GroupName = "my group",
@@ -291,8 +291,8 @@ single_node_join_errors(_Config) ->
     %% join
     ok = syn:join(GroupName, Pid),
     ok = syn:join(GroupName, Pid2),
-    true = syn:member(Pid, GroupName),
-    true = syn:member(Pid2, GroupName),
+    true = syn:member(GroupName, Pid),
+    true = syn:member(GroupName, Pid2),
     %% leave
     ok = syn:leave(GroupName, Pid),
     {error, not_in_group} = syn:leave(GroupName, Pid),
@@ -344,8 +344,8 @@ single_node_publish(_Config) ->
     %% join
     ok = syn:join(GroupName, Pid),
     ok = syn:join(GroupName, Pid2),
-    true = syn:member(Pid, GroupName),
-    true = syn:member(Pid2, GroupName),
+    true = syn:member(GroupName, Pid),
+    true = syn:member(GroupName, Pid2),
     %% send
     {ok, 2} = syn:publish(GroupName, Message),
     %% check
@@ -471,13 +471,13 @@ single_node_monitor_after_group_crash(_Config) ->
     exit(whereis(syn_groups), kill),
     timer:sleep(200),
     %% retrieve
-    true = syn:member(Pid, GroupName),
+    true = syn:member(GroupName, Pid),
     [Pid] = syn:get_members(GroupName),
     %% kill process
     syn_test_suite_helper:kill_process(Pid),
     timer:sleep(200),
     %% retrieve
-    false = syn:member(Pid, GroupName),
+    false = syn:member(GroupName, Pid),
     [] = syn:get_members(GroupName).
 
 two_nodes_join_monitor_and_unregister(Config) ->
@@ -497,16 +497,16 @@ two_nodes_join_monitor_and_unregister(Config) ->
     [] = syn:get_members("group-1"),
     [] = syn:get_members(GroupName),
     [] = syn:get_members(GroupName, with_meta),
-    false = syn:member(LocalPid, GroupName),
-    false = syn:member(RemotePid, GroupName),
-    false = syn:member(RemotePidJoinRemote, GroupName),
-    false = syn:member(OtherPid, GroupName),
+    false = syn:member(GroupName, LocalPid),
+    false = syn:member(GroupName, RemotePid),
+    false = syn:member(GroupName, RemotePidJoinRemote),
+    false = syn:member(GroupName, OtherPid),
     [] = rpc:call(SlaveNode, syn, get_members, [GroupName]),
     [] = rpc:call(SlaveNode, syn, get_members, [GroupName, with_meta]),
-    false = rpc:call(SlaveNode, syn, member, [LocalPid, GroupName]),
-    false = rpc:call(SlaveNode, syn, member, [RemotePid, GroupName]),
-    false = rpc:call(SlaveNode, syn, member, [RemotePidJoinRemote, GroupName]),
-    false = rpc:call(SlaveNode, syn, member, [OtherPid, GroupName]),
+    false = rpc:call(SlaveNode, syn, member, [GroupName, LocalPid]),
+    false = rpc:call(SlaveNode, syn, member, [GroupName, RemotePid]),
+    false = rpc:call(SlaveNode, syn, member, [GroupName, RemotePidJoinRemote]),
+    false = rpc:call(SlaveNode, syn, member, [GroupName, OtherPid]),
     %% join
     ok = syn:join(GroupName, LocalPid),
     ok = syn:join(GroupName, RemotePid, {with_meta}),
@@ -517,19 +517,19 @@ two_nodes_join_monitor_and_unregister(Config) ->
     true = lists:sort([LocalPid, RemotePid, RemotePidJoinRemote]) =:= lists:sort(syn:get_members(GroupName)),
     true = lists:sort([{LocalPid, undefined}, {RemotePid, {with_meta}}, {RemotePidJoinRemote, undefined}])
         =:= lists:sort(syn:get_members(GroupName, with_meta)),
-    true = syn:member(LocalPid, GroupName),
-    true = syn:member(RemotePid, GroupName),
-    true = syn:member(RemotePidJoinRemote, GroupName),
-    false = syn:member(OtherPid, GroupName),
+    true = syn:member(GroupName, LocalPid),
+    true = syn:member(GroupName, RemotePid),
+    true = syn:member(GroupName, RemotePidJoinRemote),
+    false = syn:member(GroupName, OtherPid),
     %% retrieve remote
     true = lists:sort([LocalPid, RemotePid, RemotePidJoinRemote])
         =:= lists:sort(rpc:call(SlaveNode, syn, get_members, [GroupName])),
     true = lists:sort([{LocalPid, undefined}, {RemotePid, {with_meta}}, {RemotePidJoinRemote, undefined}])
         =:= lists:sort(rpc:call(SlaveNode, syn, get_members, [GroupName, with_meta])),
-    true = rpc:call(SlaveNode, syn, member, [LocalPid, GroupName]),
-    true = rpc:call(SlaveNode, syn, member, [RemotePid, GroupName]),
-    true = rpc:call(SlaveNode, syn, member, [RemotePidJoinRemote, GroupName]),
-    false = rpc:call(SlaveNode, syn, member, [OtherPid, GroupName]),
+    true = rpc:call(SlaveNode, syn, member, [GroupName, LocalPid]),
+    true = rpc:call(SlaveNode, syn, member, [GroupName, RemotePid]),
+    true = rpc:call(SlaveNode, syn, member, [GroupName, RemotePidJoinRemote]),
+    false = rpc:call(SlaveNode, syn, member, [GroupName, OtherPid]),
     %% leave & kill
     ok = rpc:call(SlaveNode, syn, leave, [GroupName, LocalPid]),
     ok = syn:leave(GroupName, RemotePid),
@@ -540,16 +540,16 @@ two_nodes_join_monitor_and_unregister(Config) ->
     [] = syn:get_members("group-1"),
     [] = syn:get_members(GroupName),
     [] = syn:get_members(GroupName, with_meta),
-    false = syn:member(LocalPid, GroupName),
-    false = syn:member(RemotePid, GroupName),
-    false = syn:member(RemotePidJoinRemote, GroupName),
-    false = syn:member(OtherPid, GroupName),
+    false = syn:member(GroupName, LocalPid),
+    false = syn:member(GroupName, RemotePid),
+    false = syn:member(GroupName, RemotePidJoinRemote),
+    false = syn:member(GroupName, OtherPid),
     [] = rpc:call(SlaveNode, syn, get_members, [GroupName]),
     [] = rpc:call(SlaveNode, syn, get_members, [GroupName, with_meta]),
-    false = rpc:call(SlaveNode, syn, member, [LocalPid, GroupName]),
-    false = rpc:call(SlaveNode, syn, member, [RemotePid, GroupName]),
-    false = rpc:call(SlaveNode, syn, member, [RemotePidJoinRemote, GroupName]),
-    false = rpc:call(SlaveNode, syn, member, [OtherPid, GroupName]).
+    false = rpc:call(SlaveNode, syn, member, [GroupName, LocalPid]),
+    false = rpc:call(SlaveNode, syn, member, [GroupName, RemotePid]),
+    false = rpc:call(SlaveNode, syn, member, [GroupName, RemotePidJoinRemote]),
+    false = rpc:call(SlaveNode, syn, member, [GroupName, OtherPid]).
 
 two_nodes_local_members(Config) ->
     GroupName = "my group",
@@ -567,17 +567,17 @@ two_nodes_local_members(Config) ->
     %% local members
     [] = syn:get_local_members(GroupName),
     [] = syn:get_local_members(GroupName, with_meta),
-    false = syn:local_member(LocalPid, GroupName),
-    false = syn:local_member(RemotePid, GroupName),
-    false = syn:local_member(RemotePidJoinRemote, GroupName),
-    false = syn:local_member(OtherPid, GroupName),
+    false = syn:local_member(GroupName, LocalPid),
+    false = syn:local_member(GroupName, RemotePid),
+    false = syn:local_member(GroupName, RemotePidJoinRemote),
+    false = syn:local_member(GroupName, OtherPid),
     %% remote members
     [] = rpc:call(SlaveNode, syn, get_local_members, [GroupName]),
     [] = rpc:call(SlaveNode, syn, get_local_members, [GroupName, with_meta]),
-    false = rpc:call(SlaveNode, syn, local_member, [LocalPid, GroupName]),
-    false = rpc:call(SlaveNode, syn, local_member, [RemotePid, GroupName]),
-    false = rpc:call(SlaveNode, syn, local_member, [RemotePidJoinRemote, GroupName]),
-    false = rpc:call(SlaveNode, syn, local_member, [OtherPid, GroupName]),
+    false = rpc:call(SlaveNode, syn, local_member, [GroupName, LocalPid]),
+    false = rpc:call(SlaveNode, syn, local_member, [GroupName, RemotePid]),
+    false = rpc:call(SlaveNode, syn, local_member, [GroupName, RemotePidJoinRemote]),
+    false = rpc:call(SlaveNode, syn, local_member, [GroupName, OtherPid]),
     %% join
     ok = syn:join(GroupName, LocalPid),
     ok = syn:join(GroupName, RemotePid, {meta, 2}),
@@ -588,20 +588,20 @@ two_nodes_local_members(Config) ->
     [LocalPid] = syn:get_local_members(GroupName),
     [{LocalPid, undefined}] = syn:get_local_members(GroupName, with_meta),
     [OtherPid] = syn:get_local_members({"other-group"}),
-    true = syn:local_member(LocalPid, GroupName),
-    false = syn:local_member(RemotePid, GroupName),
-    false = syn:local_member(RemotePidJoinRemote, GroupName),
-    false = syn:local_member(OtherPid, GroupName),
-    true = syn:local_member(OtherPid, {"other-group"}),
+    true = syn:local_member(GroupName, LocalPid),
+    false = syn:local_member(GroupName, RemotePid),
+    false = syn:local_member(GroupName, RemotePidJoinRemote),
+    false = syn:local_member(GroupName, OtherPid),
+    true = syn:local_member({"other-group"}, OtherPid),
     %% remote members
     true = lists:sort([RemotePid, RemotePidJoinRemote])
         =:= lists:sort(rpc:call(SlaveNode, syn, get_local_members, [GroupName])),
     true = lists:sort([{RemotePid, {meta, 2}}, {RemotePidJoinRemote, undefined}])
         =:= lists:sort(rpc:call(SlaveNode, syn, get_local_members, [GroupName, with_meta])),
-    false = rpc:call(SlaveNode, syn, local_member, [LocalPid, GroupName]),
-    true = rpc:call(SlaveNode, syn, local_member, [RemotePid, GroupName]),
-    true = rpc:call(SlaveNode, syn, local_member, [RemotePidJoinRemote, GroupName]),
-    false = rpc:call(SlaveNode, syn, local_member, [OtherPid, GroupName]),
+    false = rpc:call(SlaveNode, syn, local_member, [GroupName, LocalPid]),
+    true = rpc:call(SlaveNode, syn, local_member, [GroupName, RemotePid]),
+    true = rpc:call(SlaveNode, syn, local_member, [GroupName, RemotePidJoinRemote]),
+    false = rpc:call(SlaveNode, syn, local_member, [GroupName, OtherPid]),
     %% leave & kill
     ok = rpc:call(SlaveNode, syn, leave, [GroupName, LocalPid]),
     ok = syn:leave(GroupName, RemotePid),
@@ -848,24 +848,24 @@ three_nodes_partial_netsplit_consistency(Config) ->
     [] = syn:get_members("group-1"),
     [] = syn:get_members(GroupName),
     [] = syn:get_members(GroupName, with_meta),
-    false = syn:member(Pid0, GroupName),
-    false = syn:member(Pid0Changed, GroupName),
-    false = syn:member(Pid1, GroupName),
-    false = syn:member(Pid2, GroupName),
+    false = syn:member(GroupName, Pid0),
+    false = syn:member(GroupName, Pid0Changed),
+    false = syn:member(GroupName, Pid1),
+    false = syn:member(GroupName, Pid2),
     %% retrieve slave 1
     [] = rpc:call(SlaveNode1, syn, get_members, [GroupName]),
     [] = rpc:call(SlaveNode1, syn, get_members, [GroupName, with_meta]),
-    false = rpc:call(SlaveNode1, syn, member, [Pid0, GroupName]),
-    false = rpc:call(SlaveNode1, syn, member, [Pid0Changed, GroupName]),
-    false = rpc:call(SlaveNode1, syn, member, [Pid1, GroupName]),
-    false = rpc:call(SlaveNode1, syn, member, [Pid2, GroupName]),
+    false = rpc:call(SlaveNode1, syn, member, [GroupName, Pid0]),
+    false = rpc:call(SlaveNode1, syn, member, [GroupName, Pid0Changed]),
+    false = rpc:call(SlaveNode1, syn, member, [GroupName, Pid1]),
+    false = rpc:call(SlaveNode1, syn, member, [GroupName, Pid2]),
     %% retrieve slave 2
     [] = rpc:call(SlaveNode2, syn, get_members, [GroupName]),
     [] = rpc:call(SlaveNode2, syn, get_members, [GroupName, with_meta]),
-    false = rpc:call(SlaveNode2, syn, member, [Pid0, GroupName]),
-    false = rpc:call(SlaveNode2, syn, member, [Pid0Changed, GroupName]),
-    false = rpc:call(SlaveNode2, syn, member, [Pid1, GroupName]),
-    false = rpc:call(SlaveNode2, syn, member, [Pid2, GroupName]),
+    false = rpc:call(SlaveNode2, syn, member, [GroupName, Pid0]),
+    false = rpc:call(SlaveNode2, syn, member, [GroupName, Pid0Changed]),
+    false = rpc:call(SlaveNode2, syn, member, [GroupName, Pid1]),
+    false = rpc:call(SlaveNode2, syn, member, [GroupName, Pid2]),
     %% join
     ok = syn:join(GroupName, Pid0),
     ok = syn:join(GroupName, Pid0Changed, {meta, changed}),
@@ -881,11 +881,11 @@ three_nodes_partial_netsplit_consistency(Config) ->
         {Pid1, undefined},
         {Pid2, {meta, 2}}
     ]) =:= lists:sort(syn:get_members(GroupName, with_meta)),
-    true = syn:member(Pid0, GroupName),
-    true = syn:member(Pid0Changed, GroupName),
-    true = syn:member(Pid1, GroupName),
-    true = syn:member(Pid2, GroupName),
-    false = syn:member(OtherPid, GroupName),
+    true = syn:member(GroupName, Pid0),
+    true = syn:member(GroupName, Pid0Changed),
+    true = syn:member(GroupName, Pid1),
+    true = syn:member(GroupName, Pid2),
+    false = syn:member(GroupName, OtherPid),
     %% retrieve slave 1
     true = lists:sort([Pid0, Pid0Changed, Pid1, Pid2])
         =:= lists:sort(rpc:call(SlaveNode1, syn, get_members, [GroupName])),
@@ -895,11 +895,11 @@ three_nodes_partial_netsplit_consistency(Config) ->
         {Pid1, undefined},
         {Pid2, {meta, 2}}
     ]) =:= lists:sort(rpc:call(SlaveNode1, syn, get_members, [GroupName, with_meta])),
-    true = rpc:call(SlaveNode1, syn, member, [Pid0, GroupName]),
-    true = rpc:call(SlaveNode1, syn, member, [Pid0Changed, GroupName]),
-    true = rpc:call(SlaveNode1, syn, member, [Pid1, GroupName]),
-    true = rpc:call(SlaveNode1, syn, member, [Pid2, GroupName]),
-    false = rpc:call(SlaveNode1, syn, member, [OtherPid, GroupName]),
+    true = rpc:call(SlaveNode1, syn, member, [GroupName, Pid0]),
+    true = rpc:call(SlaveNode1, syn, member, [GroupName, Pid0Changed]),
+    true = rpc:call(SlaveNode1, syn, member, [GroupName, Pid1]),
+    true = rpc:call(SlaveNode1, syn, member, [GroupName, Pid2]),
+    false = rpc:call(SlaveNode1, syn, member, [GroupName, OtherPid]),
     %% retrieve slave 2
     true = lists:sort([Pid0, Pid0Changed, Pid1, Pid2])
         =:= lists:sort(rpc:call(SlaveNode2, syn, get_members, [GroupName])),
@@ -909,11 +909,11 @@ three_nodes_partial_netsplit_consistency(Config) ->
         {Pid1, undefined},
         {Pid2, {meta, 2}}
     ]) =:= lists:sort(rpc:call(SlaveNode2, syn, get_members, [GroupName, with_meta])),
-    true = rpc:call(SlaveNode2, syn, member, [Pid0, GroupName]),
-    true = rpc:call(SlaveNode2, syn, member, [Pid0Changed, GroupName]),
-    true = rpc:call(SlaveNode2, syn, member, [Pid1, GroupName]),
-    true = rpc:call(SlaveNode2, syn, member, [Pid2, GroupName]),
-    false = rpc:call(SlaveNode2, syn, member, [OtherPid, GroupName]),
+    true = rpc:call(SlaveNode2, syn, member, [GroupName, Pid0]),
+    true = rpc:call(SlaveNode2, syn, member, [GroupName, Pid0Changed]),
+    true = rpc:call(SlaveNode2, syn, member, [GroupName, Pid1]),
+    true = rpc:call(SlaveNode2, syn, member, [GroupName, Pid2]),
+    false = rpc:call(SlaveNode2, syn, member, [GroupName, OtherPid]),
     %% disconnect slave 2 from main (slave 1 can still see slave 2)
     syn_test_suite_helper:disconnect_node(SlaveNode2),
     timer:sleep(500),
@@ -924,11 +924,11 @@ three_nodes_partial_netsplit_consistency(Config) ->
         {Pid0Changed, {meta, changed}},
         {Pid1, undefined}
     ]) =:= lists:sort(syn:get_members(GroupName, with_meta)),
-    true = syn:member(Pid0, GroupName),
-    true = syn:member(Pid0Changed, GroupName),
-    true = syn:member(Pid1, GroupName),
-    false = syn:member(Pid2, GroupName),
-    false = syn:member(OtherPid, GroupName),
+    true = syn:member(GroupName, Pid0),
+    true = syn:member(GroupName, Pid0Changed),
+    true = syn:member(GroupName, Pid1),
+    false = syn:member(GroupName, Pid2),
+    false = syn:member(GroupName, OtherPid),
     %% retrieve slave 1
     true = lists:sort([Pid0, Pid0Changed, Pid1, Pid2])
         =:= lists:sort(rpc:call(SlaveNode1, syn, get_members, [GroupName])),
@@ -938,11 +938,11 @@ three_nodes_partial_netsplit_consistency(Config) ->
         {Pid1, undefined},
         {Pid2, {meta, 2}}
     ]) =:= lists:sort(rpc:call(SlaveNode1, syn, get_members, [GroupName, with_meta])),
-    true = rpc:call(SlaveNode1, syn, member, [Pid0, GroupName]),
-    true = rpc:call(SlaveNode1, syn, member, [Pid0Changed, GroupName]),
-    true = rpc:call(SlaveNode1, syn, member, [Pid1, GroupName]),
-    true = rpc:call(SlaveNode1, syn, member, [Pid2, GroupName]),
-    false = rpc:call(SlaveNode1, syn, member, [OtherPid, GroupName]),
+    true = rpc:call(SlaveNode1, syn, member, [GroupName, Pid0]),
+    true = rpc:call(SlaveNode1, syn, member, [GroupName, Pid0Changed]),
+    true = rpc:call(SlaveNode1, syn, member, [GroupName, Pid1]),
+    true = rpc:call(SlaveNode1, syn, member, [GroupName, Pid2]),
+    false = rpc:call(SlaveNode1, syn, member, [GroupName, OtherPid]),
     %% disconnect slave 1
     syn_test_suite_helper:disconnect_node(SlaveNode1),
     timer:sleep(500),
@@ -953,11 +953,11 @@ three_nodes_partial_netsplit_consistency(Config) ->
     true = lists:sort([
         {Pid0, undefined}
     ]) =:= lists:sort(syn:get_members(GroupName, with_meta)),
-    true = syn:member(Pid0, GroupName),
-    false = syn:member(Pid0Changed, GroupName),
-    false = syn:member(Pid1, GroupName),
-    false = syn:member(Pid2, GroupName),
-    false = syn:member(OtherPid, GroupName),
+    true = syn:member(GroupName, Pid0),
+    false = syn:member(GroupName, Pid0Changed),
+    false = syn:member(GroupName, Pid1),
+    false = syn:member(GroupName, Pid2),
+    false = syn:member(GroupName, OtherPid),
     %% reconnect all
     syn_test_suite_helper:connect_node(SlaveNode1),
     syn_test_suite_helper:connect_node(SlaveNode2),
@@ -969,11 +969,11 @@ three_nodes_partial_netsplit_consistency(Config) ->
         {Pid1, undefined},
         {Pid2, {meta, 2}}
     ]) =:= lists:sort(syn:get_members(GroupName, with_meta)),
-    true = syn:member(Pid0, GroupName),
-    false = syn:member(Pid0Changed, GroupName),
-    true = syn:member(Pid1, GroupName),
-    true = syn:member(Pid2, GroupName),
-    false = syn:member(OtherPid, GroupName),
+    true = syn:member(GroupName, Pid0),
+    false = syn:member(GroupName, Pid0Changed),
+    true = syn:member(GroupName, Pid1),
+    true = syn:member(GroupName, Pid2),
+    false = syn:member(GroupName, OtherPid),
     %% retrieve slave 1
     true = lists:sort([Pid0, Pid1, Pid2])
         =:= lists:sort(rpc:call(SlaveNode1, syn, get_members, [GroupName])),
@@ -982,11 +982,11 @@ three_nodes_partial_netsplit_consistency(Config) ->
         {Pid1, undefined},
         {Pid2, {meta, 2}}
     ]) =:= lists:sort(rpc:call(SlaveNode1, syn, get_members, [GroupName, with_meta])),
-    true = rpc:call(SlaveNode1, syn, member, [Pid0, GroupName]),
-    false = rpc:call(SlaveNode1, syn, member, [Pid0Changed, GroupName]),
-    true = rpc:call(SlaveNode1, syn, member, [Pid1, GroupName]),
-    true = rpc:call(SlaveNode1, syn, member, [Pid2, GroupName]),
-    false = rpc:call(SlaveNode1, syn, member, [OtherPid, GroupName]),
+    true = rpc:call(SlaveNode1, syn, member, [GroupName, Pid0]),
+    false = rpc:call(SlaveNode1, syn, member, [GroupName, Pid0Changed]),
+    true = rpc:call(SlaveNode1, syn, member, [GroupName, Pid1]),
+    true = rpc:call(SlaveNode1, syn, member, [GroupName, Pid2]),
+    false = rpc:call(SlaveNode1, syn, member, [GroupName, OtherPid]),
     %% retrieve slave 2
     true = lists:sort([Pid0, Pid1, Pid2])
         =:= lists:sort(rpc:call(SlaveNode2, syn, get_members, [GroupName])),
@@ -995,11 +995,11 @@ three_nodes_partial_netsplit_consistency(Config) ->
         {Pid1, undefined},
         {Pid2, {meta, 2}}
     ]) =:= lists:sort(rpc:call(SlaveNode2, syn, get_members, [GroupName, with_meta])),
-    true = rpc:call(SlaveNode2, syn, member, [Pid0, GroupName]),
-    false = rpc:call(SlaveNode2, syn, member, [Pid0Changed, GroupName]),
-    true = rpc:call(SlaveNode2, syn, member, [Pid1, GroupName]),
-    true = rpc:call(SlaveNode2, syn, member, [Pid2, GroupName]),
-    false = rpc:call(SlaveNode2, syn, member, [OtherPid, GroupName]).
+    true = rpc:call(SlaveNode2, syn, member, [GroupName, Pid0]),
+    false = rpc:call(SlaveNode2, syn, member, [GroupName, Pid0Changed]),
+    true = rpc:call(SlaveNode2, syn, member, [GroupName, Pid1]),
+    true = rpc:call(SlaveNode2, syn, member, [GroupName, Pid2]),
+    false = rpc:call(SlaveNode2, syn, member, [GroupName, OtherPid]).
 
 three_nodes_full_netsplit_consistency(Config) ->
     GroupName = "my group",
@@ -1022,24 +1022,24 @@ three_nodes_full_netsplit_consistency(Config) ->
     [] = syn:get_members("group-1"),
     [] = syn:get_members(GroupName),
     [] = syn:get_members(GroupName, with_meta),
-    false = syn:member(Pid0, GroupName),
-    false = syn:member(Pid0Changed, GroupName),
-    false = syn:member(Pid1, GroupName),
-    false = syn:member(Pid2, GroupName),
+    false = syn:member(GroupName, Pid0),
+    false = syn:member(GroupName, Pid0Changed),
+    false = syn:member(GroupName, Pid1),
+    false = syn:member(GroupName, Pid2),
     %% retrieve slave 1
     [] = rpc:call(SlaveNode1, syn, get_members, [GroupName]),
     [] = rpc:call(SlaveNode1, syn, get_members, [GroupName, with_meta]),
-    false = rpc:call(SlaveNode1, syn, member, [Pid0, GroupName]),
-    false = rpc:call(SlaveNode1, syn, member, [Pid0Changed, GroupName]),
-    false = rpc:call(SlaveNode1, syn, member, [Pid1, GroupName]),
-    false = rpc:call(SlaveNode1, syn, member, [Pid2, GroupName]),
+    false = rpc:call(SlaveNode1, syn, member, [GroupName, Pid0]),
+    false = rpc:call(SlaveNode1, syn, member, [GroupName, Pid0Changed]),
+    false = rpc:call(SlaveNode1, syn, member, [GroupName, Pid1]),
+    false = rpc:call(SlaveNode1, syn, member, [GroupName, Pid2]),
     %% retrieve slave 2
     [] = rpc:call(SlaveNode2, syn, get_members, [GroupName]),
     [] = rpc:call(SlaveNode2, syn, get_members, [GroupName, with_meta]),
-    false = rpc:call(SlaveNode2, syn, member, [Pid0, GroupName]),
-    false = rpc:call(SlaveNode2, syn, member, [Pid0Changed, GroupName]),
-    false = rpc:call(SlaveNode2, syn, member, [Pid1, GroupName]),
-    false = rpc:call(SlaveNode2, syn, member, [Pid2, GroupName]),
+    false = rpc:call(SlaveNode2, syn, member, [GroupName, Pid0]),
+    false = rpc:call(SlaveNode2, syn, member, [GroupName, Pid0Changed]),
+    false = rpc:call(SlaveNode2, syn, member, [GroupName, Pid1]),
+    false = rpc:call(SlaveNode2, syn, member, [GroupName, Pid2]),
     %% join
     ok = syn:join(GroupName, Pid0),
     ok = syn:join(GroupName, Pid0Changed, {meta, changed}),
@@ -1055,11 +1055,11 @@ three_nodes_full_netsplit_consistency(Config) ->
         {Pid1, undefined},
         {Pid2, {meta, 2}}
     ]) =:= lists:sort(syn:get_members(GroupName, with_meta)),
-    true = syn:member(Pid0, GroupName),
-    true = syn:member(Pid0Changed, GroupName),
-    true = syn:member(Pid1, GroupName),
-    true = syn:member(Pid2, GroupName),
-    false = syn:member(OtherPid, GroupName),
+    true = syn:member(GroupName, Pid0),
+    true = syn:member(GroupName, Pid0Changed),
+    true = syn:member(GroupName, Pid1),
+    true = syn:member(GroupName, Pid2),
+    false = syn:member(GroupName, OtherPid),
     %% retrieve slave 1
     true = lists:sort([Pid0, Pid0Changed, Pid1, Pid2])
         =:= lists:sort(rpc:call(SlaveNode1, syn, get_members, [GroupName])),
@@ -1069,11 +1069,11 @@ three_nodes_full_netsplit_consistency(Config) ->
         {Pid1, undefined},
         {Pid2, {meta, 2}}
     ]) =:= lists:sort(rpc:call(SlaveNode1, syn, get_members, [GroupName, with_meta])),
-    true = rpc:call(SlaveNode1, syn, member, [Pid0, GroupName]),
-    true = rpc:call(SlaveNode1, syn, member, [Pid0Changed, GroupName]),
-    true = rpc:call(SlaveNode1, syn, member, [Pid1, GroupName]),
-    true = rpc:call(SlaveNode1, syn, member, [Pid2, GroupName]),
-    false = rpc:call(SlaveNode1, syn, member, [OtherPid, GroupName]),
+    true = rpc:call(SlaveNode1, syn, member, [GroupName, Pid0]),
+    true = rpc:call(SlaveNode1, syn, member, [GroupName, Pid0Changed]),
+    true = rpc:call(SlaveNode1, syn, member, [GroupName, Pid1]),
+    true = rpc:call(SlaveNode1, syn, member, [GroupName, Pid2]),
+    false = rpc:call(SlaveNode1, syn, member, [GroupName, OtherPid]),
     %% retrieve slave 2
     true = lists:sort([Pid0, Pid0Changed, Pid1, Pid2])
         =:= lists:sort(rpc:call(SlaveNode2, syn, get_members, [GroupName])),
@@ -1083,11 +1083,11 @@ three_nodes_full_netsplit_consistency(Config) ->
         {Pid1, undefined},
         {Pid2, {meta, 2}}
     ]) =:= lists:sort(rpc:call(SlaveNode2, syn, get_members, [GroupName, with_meta])),
-    true = rpc:call(SlaveNode2, syn, member, [Pid0, GroupName]),
-    true = rpc:call(SlaveNode2, syn, member, [Pid0Changed, GroupName]),
-    true = rpc:call(SlaveNode2, syn, member, [Pid1, GroupName]),
-    true = rpc:call(SlaveNode2, syn, member, [Pid2, GroupName]),
-    false = rpc:call(SlaveNode2, syn, member, [OtherPid, GroupName]),
+    true = rpc:call(SlaveNode2, syn, member, [GroupName, Pid0]),
+    true = rpc:call(SlaveNode2, syn, member, [GroupName, Pid0Changed]),
+    true = rpc:call(SlaveNode2, syn, member, [GroupName, Pid1]),
+    true = rpc:call(SlaveNode2, syn, member, [GroupName, Pid2]),
+    false = rpc:call(SlaveNode2, syn, member, [GroupName, OtherPid]),
     %% disconnect everyone
     rpc:call(SlaveNode1, syn_test_suite_helper, disconnect_node, [SlaveNode2]),
     syn_test_suite_helper:disconnect_node(SlaveNode1),
@@ -1101,11 +1101,11 @@ three_nodes_full_netsplit_consistency(Config) ->
     true = lists:sort([
         {Pid0, undefined}
     ]) =:= lists:sort(syn:get_members(GroupName, with_meta)),
-    true = syn:member(Pid0, GroupName),
-    false = syn:member(Pid0Changed, GroupName),
-    false = syn:member(Pid1, GroupName),
-    false = syn:member(Pid2, GroupName),
-    false = syn:member(OtherPid, GroupName),
+    true = syn:member(GroupName, Pid0),
+    false = syn:member(GroupName, Pid0Changed),
+    false = syn:member(GroupName, Pid1),
+    false = syn:member(GroupName, Pid2),
+    false = syn:member(GroupName, OtherPid),
     %% reconnect all
     syn_test_suite_helper:connect_node(SlaveNode1),
     syn_test_suite_helper:connect_node(SlaveNode2),
@@ -1118,11 +1118,11 @@ three_nodes_full_netsplit_consistency(Config) ->
         {Pid1, undefined},
         {Pid2, {meta, 2}}
     ]) =:= lists:sort(syn:get_members(GroupName, with_meta)),
-    true = syn:member(Pid0, GroupName),
-    false = syn:member(Pid0Changed, GroupName),
-    true = syn:member(Pid1, GroupName),
-    true = syn:member(Pid2, GroupName),
-    false = syn:member(OtherPid, GroupName),
+    true = syn:member(GroupName, Pid0),
+    false = syn:member(GroupName, Pid0Changed),
+    true = syn:member(GroupName, Pid1),
+    true = syn:member(GroupName, Pid2),
+    false = syn:member(GroupName, OtherPid),
     %% retrieve slave 1
     true = lists:sort([Pid0, Pid1, Pid2])
         =:= lists:sort(rpc:call(SlaveNode1, syn, get_members, [GroupName])),
@@ -1131,11 +1131,11 @@ three_nodes_full_netsplit_consistency(Config) ->
         {Pid1, undefined},
         {Pid2, {meta, 2}}
     ]) =:= lists:sort(rpc:call(SlaveNode1, syn, get_members, [GroupName, with_meta])),
-    true = rpc:call(SlaveNode1, syn, member, [Pid0, GroupName]),
-    false = rpc:call(SlaveNode1, syn, member, [Pid0Changed, GroupName]),
-    true = rpc:call(SlaveNode1, syn, member, [Pid1, GroupName]),
-    true = rpc:call(SlaveNode1, syn, member, [Pid2, GroupName]),
-    false = rpc:call(SlaveNode1, syn, member, [OtherPid, GroupName]),
+    true = rpc:call(SlaveNode1, syn, member, [GroupName, Pid0]),
+    false = rpc:call(SlaveNode1, syn, member, [GroupName, Pid0Changed]),
+    true = rpc:call(SlaveNode1, syn, member, [GroupName, Pid1]),
+    true = rpc:call(SlaveNode1, syn, member, [GroupName, Pid2]),
+    false = rpc:call(SlaveNode1, syn, member, [GroupName, OtherPid]),
     %% retrieve slave 2
     true = lists:sort([Pid0, Pid1, Pid2])
         =:= lists:sort(rpc:call(SlaveNode2, syn, get_members, [GroupName])),
@@ -1144,11 +1144,11 @@ three_nodes_full_netsplit_consistency(Config) ->
         {Pid1, undefined},
         {Pid2, {meta, 2}}
     ]) =:= lists:sort(rpc:call(SlaveNode2, syn, get_members, [GroupName, with_meta])),
-    true = rpc:call(SlaveNode2, syn, member, [Pid0, GroupName]),
-    false = rpc:call(SlaveNode2, syn, member, [Pid0Changed, GroupName]),
-    true = rpc:call(SlaveNode2, syn, member, [Pid1, GroupName]),
-    true = rpc:call(SlaveNode2, syn, member, [Pid2, GroupName]),
-    false = rpc:call(SlaveNode2, syn, member, [OtherPid, GroupName]).
+    true = rpc:call(SlaveNode2, syn, member, [GroupName, Pid0]),
+    false = rpc:call(SlaveNode2, syn, member, [GroupName, Pid0Changed]),
+    true = rpc:call(SlaveNode2, syn, member, [GroupName, Pid1]),
+    true = rpc:call(SlaveNode2, syn, member, [GroupName, Pid2]),
+    false = rpc:call(SlaveNode2, syn, member, [GroupName, OtherPid]).
 
 three_nodes_anti_entropy(Config) ->
     %% get slaves

@@ -247,7 +247,7 @@ Types:
 To know if a process is a member of a group:
 
 ```erlang
-syn:member(Pid, GroupName) -> boolean().
+syn:member(GroupName, Pid) -> boolean().
 
 Types:
     Pid = pid()
@@ -334,7 +334,7 @@ Types:
 To know if a process is a local member of a group:
 
 ```erlang
-syn:local_member(Pid, GroupName) -> boolean().
+syn:local_member(GroupName, Pid) -> boolean().
 
 Types:
     Pid = pid()
