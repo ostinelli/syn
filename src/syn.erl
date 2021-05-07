@@ -151,9 +151,9 @@ get_members(GroupName, with_meta) ->
 get_group_names() ->
     syn_groups:get_group_names().
 
--spec member(GroupName :: any(), Pid :: pid()) -> boolean().
-member(GroupName, Pid) ->
-    syn_groups:member(GroupName, Pid).
+-spec member(Pid :: pid(), GroupName :: any()) -> boolean().
+member(Pid, GroupName) ->
+    syn_groups:member(Pid, GroupName).
 
 -spec get_local_members(GroupName :: any()) -> [pid()].
 get_local_members(GroupName) ->
@@ -163,9 +163,9 @@ get_local_members(GroupName) ->
 get_local_members(GroupName, with_meta) ->
     syn_groups:get_local_members(GroupName, with_meta).
 
--spec local_member(GroupName :: any(), Pid :: pid()) -> boolean().
-local_member(GroupName, Pid) ->
-    syn_groups:local_member(GroupName, Pid).
+-spec local_member(Pid :: pid(), GroupName :: any()) -> boolean().
+local_member(Pid, GroupName) ->
+    syn_groups:local_member(Pid, GroupName).
 
 -spec groups_count() -> non_neg_integer().
 groups_count() ->
