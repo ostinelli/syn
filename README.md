@@ -512,9 +512,10 @@ In `config.exs` you can specify your anti-entropy settings:
 
 ```elixir
 config :syn,
-  anti_entropy:
-    registry: [interval: 300, interval_max_deviation: 60]
+  anti_entropy: [
+    registry: [interval: 300, interval_max_deviation: 60],
     groups: [interval: 300, interval_max_deviation: 60]
+  ]
 ```
 
 #### Erlang
