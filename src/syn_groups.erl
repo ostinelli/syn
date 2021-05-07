@@ -31,6 +31,7 @@
 -export([join/2, join/3]).
 -export([leave/2]).
 -export([get_members/1, get_members/2]).
+-export([get_group_names/0]).
 -export([member/2]).
 -export([get_local_members/1, get_local_members/2]).
 -export([local_member/2]).
@@ -115,6 +116,16 @@ get_members(GroupName, with_meta) ->
         [],
         [{{'$2', '$3'}}]
     }]).
+
+-spec get_group_names() -> [GroupName :: any()].
+get_group_names() ->
+    Groups = ets:select(syn_groups_by_name, [{
+      {{'$1', '_'}, '_', '_', '_'},
+      [],
+      ['$1']
+    }]),
+    Set = sets:from_list(Groups),
+    sets:to_list(Set).
 
 -spec member(Pid :: pid(), GroupName :: any()) -> boolean().
 member(Pid, GroupName) ->
