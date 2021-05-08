@@ -1,7 +1,7 @@
 {application, syn,
     [
         {description, "A global Process Registry and Process Group manager."},
-        {vsn, "2.1.1"},
+        {vsn, "2.1.2"},
         {registered, [
             syn_backbone,
             syn_groups,
