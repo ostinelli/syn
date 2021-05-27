@@ -500,8 +500,8 @@ unregister_on_node(Name) ->
             {error, undefined};
 
         {{Name, Pid}, _Meta, _Clock, MonitorRef, _Node} when MonitorRef =/= undefined ->
-            %% demonitor
-            erlang:demonitor(MonitorRef, [flush]),
+            %% demonitor if it is last name to unregister for the Pid
+            maybe_demonitor(Pid),
             %% remove from table
             remove_from_local_table(Name, Pid),
             %% return
@@ -525,6 +525,22 @@ unregister_on_node(Name) ->
                 [node(), RegistryEntry]
             ),
             {error, remote_pid}
+    end.
+
+-spec maybe_demonitor(Pid :: pid()) -> ok.
+maybe_demonitor(Pid) ->
+    %% try to get two items to check if it only one item left
+    case ets:select(syn_registry_by_pid, [{
+        {{Pid, '_'}, '_', '_', '$5', '_'},
+        [],
+        ['$5']
+    }], 2) of
+        {[MonitorRef], _} ->
+            erlang:demonitor(MonitorRef, [flush]),
+            ok;
+
+        _ ->
+            ok
     end.
 
 -spec add_to_local_table(
