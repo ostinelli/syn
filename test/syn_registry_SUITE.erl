@@ -35,6 +35,7 @@
 -export([
     single_node_register_and_monitor/1,
     single_node_register_and_unregister/1,
+    single_node_register_unregister_and_kill_process/1,
     single_node_registration_errors/1,
     single_node_registry_count/1,
     single_node_register_gen_server/1,
@@ -112,6 +113,7 @@ groups() ->
         {single_node_process_registration, [shuffle], [
             single_node_register_and_monitor,
             single_node_register_and_unregister,
+            single_node_register_unregister_and_kill_process,
             single_node_registration_errors,
             single_node_registry_count,
             single_node_register_gen_server,
@@ -282,6 +284,25 @@ single_node_register_and_unregister(_Config) ->
     %% retrieve
     undefined = syn:whereis(<<"my proc">>),
     undefined = syn:whereis(<<"my proc 2">>).
+
+single_node_register_unregister_and_kill_process(_Config) ->
+    %% start
+    ok = syn:start(),
+    %% start process
+    Pid = syn_test_suite_helper:start_process(),
+    %% register
+    ok = syn:register(<<"synonym_to_unregister">>, Pid),
+    ok = syn:register(<<"synonym_to_keep">>, Pid),
+    %% unregister
+    ok = syn:unregister(<<"synonym_to_unregister">>),
+    %% retrieve
+    undefined = syn:whereis(<<"synonym_to_unregister">>),
+    Pid = syn:whereis(<<"synonym_to_keep">>),
+    %% kill process
+    true = syn_test_suite_helper:kill_process(Pid),
+    timer:sleep(100),
+    %% retrieve
+    undefined = syn:whereis(<<"synonym_to_keep">>).
 
 single_node_registration_errors(_Config) ->
     %% start
