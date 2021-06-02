@@ -3,8 +3,6 @@ language: erlang
 otp_release:
   - 23.3.1
   - 22.3.4
-  - 21.3.8.1
-  - 20.3.8
 
 branches:
   only:
