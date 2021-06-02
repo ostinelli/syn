@@ -500,7 +500,7 @@ unregister_on_node(Name) ->
             {error, undefined};
 
         {{Name, Pid}, _Meta, _Clock, MonitorRef, _Node} when MonitorRef =/= undefined ->
-            %% demonitor if it is last name to unregister for the Pid
+            %% demonitor if the process is not registered under other names
             maybe_demonitor(Pid),
             %% remove from table
             remove_from_local_table(Name, Pid),
@@ -529,16 +529,17 @@ unregister_on_node(Name) ->
 
 -spec maybe_demonitor(Pid :: pid()) -> ok.
 maybe_demonitor(Pid) ->
-    %% try to get two items to check if it only one item left
+    %% try to retrieve 2 items
+    %% if only 1 is returned it means that no other aliases exist for the Pid
     case ets:select(syn_registry_by_pid, [{
         {{Pid, '_'}, '_', '_', '$5', '_'},
         [],
         ['$5']
     }], 2) of
         {[MonitorRef], _} ->
+            %% no other aliases, demonitor
             erlang:demonitor(MonitorRef, [flush]),
             ok;
-
         _ ->
             ok
     end.
