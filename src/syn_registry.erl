@@ -800,6 +800,8 @@ raw_purge_registry_entries_for_remote_node(Node) when Node =/= node() ->
     %% NB: no demonitoring is done, this is why it's raw
     ets:match_delete(syn_registry_by_name, {{'_', '_'}, '_', '_', '_', Node}),
     ets:match_delete(syn_registry_by_pid, {{'_', '_'}, '_', '_', '_', Node}),
+    ok;
+raw_purge_registry_entries_for_remote_node(_Node) ->
     ok.
 
 -spec rebuild_monitors() -> ok.
