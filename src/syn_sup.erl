@@ -49,9 +49,32 @@ start_link() ->
 -spec init([]) ->
     {ok, {{supervisor:strategy(), non_neg_integer(), pos_integer()}, [supervisor:child_spec()]}}.
 init([]) ->
-    Children = [
-        ?CHILD(syn_backbone, worker),
-        ?CHILD(syn_groups, worker),
-        ?CHILD(syn_registry, worker)
-    ],
+    SynInstances = application:get_env(syn, syn_shards, 1),
+    Children = [child_spec(syn_backbone)] ++
+        lists:foldl(fun(I, Acc) ->
+            [
+                child_spec(syn_groups, I),
+                child_spec(syn_registry, I)
+            ] ++ Acc
+        end, [], lists:seq(1, SynInstances)
+    ),
     {ok, {{one_for_one, 10, 10}, Children}}.
+
+child_spec(Module) ->
+    #{
+        id => Module,
+        start => {Module, start_link, []},
+        type => worker,
+        restart => permanent,
+        modules => [Module]
+    }.
+
+child_spec(Module, I) ->
+    ProcessName = syn_backbone:get_process_name(Module, I),
+    #{
+        id => ProcessName,
+        start => {Module, start_link, [ProcessName, I]},
+        type => worker,
+        restart => permanent,
+        modules => [Module]
+    }.

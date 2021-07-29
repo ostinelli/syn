@@ -35,9 +35,13 @@
 -export([use_custom_handler/0]).
 -export([use_anti_entropy/2]).
 -export([send_error_logger_to_disk/0]).
+-export([kill_sharded/1]).
+-export([start_syn/0, start_syn/1]).
 
 %% internal
 -export([process_main/0]).
+
+-define(SYN_DEFAULT_SHARDS_NUM, 4).
 
 %% ===================================================================
 %% API
@@ -79,6 +83,13 @@ clean_after_test() ->
         rpc:call(Node, application, unset_env, [syn, anti_entropy])
     end, Nodes).
 
+start_syn() ->
+    start_syn(?SYN_DEFAULT_SHARDS_NUM).
+
+start_syn(SynShards) ->
+    application:set_env(syn, syn_shards, SynShards),
+    syn:start().
+
 start_process() ->
     Pid = spawn(fun process_main/0),
     Pid.
@@ -115,6 +126,14 @@ use_anti_entropy(groups, Interval) ->
 
 send_error_logger_to_disk() ->
     error_logger:logfile({open, atom_to_list(node())}).
+
+kill_sharded(Module) ->
+    SynInstances = application:get_env(syn, syn_shards, 1),
+    lists:foreach(fun (I) ->
+        Name = syn_backbone:get_process_name(Module, I),
+        exit(whereis(Name), kill)
+        end, lists:seq(1, SynInstances)
+    ).
 
 %% ===================================================================
 %% Internal

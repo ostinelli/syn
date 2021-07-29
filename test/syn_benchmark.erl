@@ -63,7 +63,7 @@ start() ->
 
     %% start syn everywhere
     lists:foreach(fun(Node) ->
-        ok = rpc:call(Node, syn, start, [])
+        ok = rpc:call(Node, syn_test_suite_helper, start_syn, [])
     end, Nodes),
     timer:sleep(1000),
 

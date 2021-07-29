@@ -30,6 +30,9 @@
 -export([start_link/0]).
 -export([get_event_handler_module/0]).
 -export([get_anti_entropy_settings/1]).
+-export([ets_names/1]).
+-export([get_shard/1]).
+-export([get_ets/2, get_procname_ets/2, get_process_name/2]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
@@ -91,6 +94,38 @@ get_anti_entropy_settings(Module) ->
             end
     end.
 
+get_process_name(Module, Id) when is_atom(Module) andalso is_integer(Id) ->
+    IB = integer_to_binary(Id),
+    ModuleBin = atom_to_binary(Module, latin1),
+    binary_to_atom(<<ModuleBin/binary, "_", IB/binary>>, latin1).
+
+ets_names(Id) ->
+    IdB = integer_to_binary(Id),
+    #{
+        syn_registry_by_name => binary_to_atom(<<"syn_registry_by_name_", IdB/binary>>, latin1),
+        syn_groups_by_name => binary_to_atom(<<"syn_groups_by_name_", IdB/binary>>, latin1)
+    }.
+
+get_shard(Key) ->
+    {ShardingMod, ShardingFun} = application:get_env(syn, sharding_fun, {erlang, phash2}),
+    SynShards = application:get_env(syn, syn_shards, 1),
+    erlang:apply(ShardingMod, ShardingFun, [Key, SynShards]) + 1.  % processes start from 1..
+
+
+get_ets(Key, Name) when Name =:= syn_groups_by_name orelse Name =:= syn_registry_by_name ->
+    ShardId = get_shard(Key),
+    maps:get(Name, ets_names(ShardId)).
+
+get_procname_ets(Key, Name) when Name =:= syn_groups orelse Name =:= syn_registry ->
+    ShardId = get_shard(Key),
+    EtsPrefix = case Name of
+         syn_groups -> syn_groups_by_name;
+         syn_registry -> syn_registry_by_name
+    end,
+    Ets = maps:get(EtsPrefix, ets_names(ShardId)),
+    ProcessName = syn_backbone:get_process_name(Name, ShardId),
+    {ProcessName, Ets}.
+
 %% ===================================================================
 %% Callbacks
 %% ===================================================================
@@ -104,15 +139,24 @@ get_anti_entropy_settings(Module) ->
     ignore |
     {stop, Reason :: any()}.
 init([]) ->
+    SynInstances = application:get_env(syn, syn_shards, 1),
     %% create ETS tables
-    %% entries have structure {{Name, Pid}, Meta, Clock, MonitorRef, Node}
-    ets:new(syn_registry_by_name, [ordered_set, public, named_table, {read_concurrency, true}, {write_concurrency, true}]),
-    %% entries have format {{Pid, Name}, Meta, Clock, MonitorRef, Node}
+    %% entries have format {{SynRegistryProcessName, Pid, Name}, Meta, Clock, MonitorRef, Node}
     ets:new(syn_registry_by_pid, [ordered_set, public, named_table, {read_concurrency, true}, {write_concurrency, true}]),
-    %% entries have format {{GroupName, Pid}, Meta, MonitorRef, Node}
-    ets:new(syn_groups_by_name, [ordered_set, public, named_table, {read_concurrency, true}, {write_concurrency, true}]),
-    %% entries have format {{Pid, GroupName}, Meta, MonitorRef, Node}
+    %% entries have format {{Pid, GroupName, SynGroupsProcessName}, Meta, MonitorRef, Node}
     ets:new(syn_groups_by_pid, [ordered_set, public, named_table, {read_concurrency, true}, {write_concurrency, true}]),
+    lists:foreach(fun (Id) ->
+        EtsNames = syn_backbone:ets_names(Id),
+        ets:new(
+            maps:get(syn_registry_by_name, EtsNames),
+            [ordered_set, public, named_table, {read_concurrency, true}, {write_concurrency, true}]
+        ),
+        %% entries have format {{GroupName, Pid}, Meta, MonitorRef, Node}
+        ets:new(
+            maps:get(syn_groups_by_name, EtsNames),
+            [ordered_set, public, named_table, {read_concurrency, true}, {write_concurrency, true}]
+        )
+    end, lists:seq(1, SynInstances)),
     %% init
     {ok, #state{}}.
 
@@ -162,10 +206,14 @@ handle_info(Info, State) ->
 terminate(Reason, _State) ->
     error_logger:info_msg("Syn(~p): Terminating with reason: ~p~n", [node(), Reason]),
     %% delete ETS tables
-    ets:delete(syn_registry_by_name),
     ets:delete(syn_registry_by_pid),
-    ets:delete(syn_groups_by_name),
     ets:delete(syn_groups_by_pid),
+    SynInstances = application:get_env(syn, syn_shards, 1),
+    lists:foreach(fun(Id) ->
+        EtsNames = syn_backbone:ets_names(Id),
+        ets:delete(maps:get(syn_groups_by_name, EtsNames)),
+        ets:delete(maps:get(syn_registry_by_name, EtsNames))
+    end, lists:seq(1, SynInstances)),
     %% return
     terminated.
 

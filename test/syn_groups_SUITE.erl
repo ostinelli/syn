@@ -217,7 +217,7 @@ end_per_testcase(_, _Config) ->
 single_node_join_and_monitor(_Config) ->
     GroupName = "my group",
     %% start
-    ok = syn:start(),
+    ok = syn_test_suite_helper:start_syn(),
     %% start processes
     Pid = syn_test_suite_helper:start_process(),
     PidWithMeta = syn_test_suite_helper:start_process(),
@@ -257,7 +257,7 @@ single_node_join_and_monitor(_Config) ->
 single_node_join_and_leave(_Config) ->
     GroupName = "my group",
     %% start
-    ok = syn:start(),
+    ok = syn_test_suite_helper:start_syn(),
     %% start processes
     Pid = syn_test_suite_helper:start_process(),
     PidWithMeta = syn_test_suite_helper:start_process(),
@@ -288,7 +288,7 @@ single_node_join_and_leave(_Config) ->
 single_node_join_errors(_Config) ->
     GroupName = "my group",
     %% start
-    ok = syn:start(),
+    ok = syn_test_suite_helper:start_syn(),
     %% start processes
     Pid = syn_test_suite_helper:start_process(),
     Pid2 = syn_test_suite_helper:start_process(),
@@ -308,7 +308,7 @@ single_node_join_errors(_Config) ->
 
 single_node_groups_count(_Config) ->
     %% start
-    ok = syn:start(),
+    ok = syn_test_suite_helper:start_syn(),
     %% start processes
     Pid = syn_test_suite_helper:start_process(),
     Pid2 = syn_test_suite_helper:start_process(),
@@ -332,7 +332,7 @@ single_node_groups_count(_Config) ->
 
 single_node_group_names(_Config) ->
     %% start
-    ok = syn:start(),
+    ok = syn_test_suite_helper:start_syn(),
     %% start processes
     Pid = syn_test_suite_helper:start_process(),
     Pid2 = syn_test_suite_helper:start_process(),
@@ -359,7 +359,7 @@ single_node_publish(_Config) ->
     GroupName = "my group",
     Message = {test, message},
     %% start
-    ok = syn:start(),
+    ok = syn_test_suite_helper:start_syn(),
     %% start processes
     ResultPid = self(),
     F = fun() ->
@@ -392,7 +392,7 @@ single_node_publish(_Config) ->
 single_node_multicall(_Config) ->
     GroupName = <<"my group">>,
     %% start
-    ok = syn:start(),
+    ok = syn_test_suite_helper:start_syn(),
     %% start processes
     F = fun() ->
         receive
@@ -419,7 +419,7 @@ single_node_multicall(_Config) ->
 single_node_multicall_with_custom_timeout(_Config) ->
     GroupName = <<"my group">>,
     %% start
-    ok = syn:start(),
+    ok = syn_test_suite_helper:start_syn(),
     %% start processes
     F1 = fun() ->
         receive
@@ -451,7 +451,7 @@ single_node_callback_on_process_exit(_Config) ->
     %% use custom handler
     syn_test_suite_helper:use_custom_handler(),
     %% start
-    ok = syn:start(),
+    ok = syn_test_suite_helper:start_syn(),
     %% start processes
     Pid = syn_test_suite_helper:start_process(),
     Pid2 = syn_test_suite_helper:start_process(),
@@ -491,13 +491,13 @@ single_node_callback_on_process_exit(_Config) ->
 single_node_monitor_after_group_crash(_Config) ->
     GroupName = "my group",
     %% start
-    ok = syn:start(),
+    ok = syn_test_suite_helper:start_syn(),
     %% start processes
     Pid = syn_test_suite_helper:start_process(),
     %% join
     ok = syn:join(GroupName, Pid),
     %% kill groups
-    exit(whereis(syn_groups), kill),
+    syn_test_suite_helper:kill_sharded(syn_groups),
     timer:sleep(200),
     %% retrieve
     true = syn:member(Pid, GroupName),
@@ -514,8 +514,8 @@ two_nodes_join_monitor_and_unregister(Config) ->
     %% get slave
     SlaveNode = proplists:get_value(slave_node, Config),
     %% start
-    ok = syn:start(),
-    ok = rpc:call(SlaveNode, syn, start, []),
+    ok = syn_test_suite_helper:start_syn(),
+    ok = rpc:call(SlaveNode, syn_test_suite_helper, start_syn, []),
     timer:sleep(100),
     %% start processes
     LocalPid = syn_test_suite_helper:start_process(),
@@ -585,8 +585,8 @@ two_nodes_local_members(Config) ->
     %% get slave
     SlaveNode = proplists:get_value(slave_node, Config),
     %% start
-    ok = syn:start(),
-    ok = rpc:call(SlaveNode, syn, start, []),
+    ok = syn_test_suite_helper:start_syn(),
+    ok = rpc:call(SlaveNode, syn_test_suite_helper, start_syn, []),
     timer:sleep(100),
     %% start processes
     LocalPid = syn_test_suite_helper:start_process(),
@@ -648,8 +648,8 @@ two_nodes_groups_count(Config) ->
     %% get slave
     SlaveNode = proplists:get_value(slave_node, Config),
     %% start
-    ok = syn:start(),
-    ok = rpc:call(SlaveNode, syn, start, []),
+    ok = syn_test_suite_helper:start_syn(),
+    ok = rpc:call(SlaveNode, syn_test_suite_helper, start_syn, []),
     timer:sleep(100),
     %% start processes
     LocalPid = syn_test_suite_helper:start_process(),
@@ -679,8 +679,8 @@ two_nodes_group_names(Config) ->
     %% get slave
     SlaveNode = proplists:get_value(slave_node, Config),
     %% start
-    ok = syn:start(),
-    ok = rpc:call(SlaveNode, syn, start, []),
+    ok = syn_test_suite_helper:start_syn(),
+    ok = rpc:call(SlaveNode, syn_test_suite_helper, start_syn, []),
     timer:sleep(100),
     %% start processes
     LocalPid = syn_test_suite_helper:start_process(),
@@ -712,8 +712,8 @@ two_nodes_publish(Config) ->
     %% get slave
     SlaveNode = proplists:get_value(slave_node, Config),
     %% start
-    ok = syn:start(),
-    ok = rpc:call(SlaveNode, syn, start, []),
+    ok = syn_test_suite_helper:start_syn(),
+    ok = rpc:call(SlaveNode, syn_test_suite_helper, start_syn, []),
     timer:sleep(100),
     %% start processes
     ResultPid = self(),
@@ -769,8 +769,8 @@ two_nodes_local_publish(Config) ->
     %% get slave
     SlaveNode = proplists:get_value(slave_node, Config),
     %% start
-    ok = syn:start(),
-    ok = rpc:call(SlaveNode, syn, start, []),
+    ok = syn_test_suite_helper:start_syn(),
+    ok = rpc:call(SlaveNode, syn_test_suite_helper, start_syn, []),
     timer:sleep(100),
     %% start processes
     ResultPid = self(),
@@ -827,8 +827,8 @@ two_nodes_multicall(Config) ->
     %% get slave
     SlaveNode = proplists:get_value(slave_node, Config),
     %% start
-    ok = syn:start(),
-    ok = rpc:call(SlaveNode, syn, start, []),
+    ok = syn_test_suite_helper:start_syn(),
+    ok = rpc:call(SlaveNode, syn_test_suite_helper, start_syn, []),
     timer:sleep(100),
     %% start processes
     F = fun() ->
@@ -858,14 +858,14 @@ two_nodes_groups_full_cluster_sync_on_boot_node_added_later(_Config) ->
     %% stop slave
     syn_test_suite_helper:stop_slave(syn_slave),
     %% start syn on local node
-    ok = syn:start(),
+    ok = syn_test_suite_helper:start_syn(),
     %% start process
     Pid = syn_test_suite_helper:start_process(),
     %% register
     ok = syn:join(<<"group">>, Pid),
     %% start remote node and syn
     {ok, SlaveNode} = syn_test_suite_helper:start_slave(syn_slave),
-    ok = rpc:call(SlaveNode, syn, start, []),
+    ok = rpc:call(SlaveNode, syn_test_suite_helper, start_syn, []),
     timer:sleep(1000),
     %% check
     [Pid] = syn:get_members(<<"group">>),
@@ -875,13 +875,13 @@ two_nodes_groups_full_cluster_sync_on_boot_syn_started_later(Config) ->
     %% get slaves
     SlaveNode = proplists:get_value(slave_node, Config),
     %% start syn on local node
-    ok = syn:start(),
+    ok = syn_test_suite_helper:start_syn(),
     %% start process
     Pid = syn_test_suite_helper:start_process(),
     %% register
     ok = syn:join(<<"group">>, Pid),
     %% start ib remote syn
-    ok = rpc:call(SlaveNode, syn, start, []),
+    ok = rpc:call(SlaveNode, syn_test_suite_helper, start_syn, []),
     timer:sleep(500),
     %% check
     [Pid] = syn:get_members(<<"group">>),
@@ -893,9 +893,9 @@ three_nodes_partial_netsplit_consistency(Config) ->
     SlaveNode1 = proplists:get_value(slave_node_1, Config),
     SlaveNode2 = proplists:get_value(slave_node_2, Config),
     %% start syn on nodes
-    ok = syn:start(),
-    ok = rpc:call(SlaveNode1, syn, start, []),
-    ok = rpc:call(SlaveNode2, syn, start, []),
+    ok = syn_test_suite_helper:start_syn(),
+    ok = rpc:call(SlaveNode1, syn_test_suite_helper, start_syn, []),
+    ok = rpc:call(SlaveNode2, syn_test_suite_helper, start_syn, []),
     timer:sleep(100),
     %% start processes
     Pid0 = syn_test_suite_helper:start_process(),
@@ -1067,9 +1067,9 @@ three_nodes_full_netsplit_consistency(Config) ->
     SlaveNode1 = proplists:get_value(slave_node_1, Config),
     SlaveNode2 = proplists:get_value(slave_node_2, Config),
     %% start syn on nodes
-    ok = syn:start(),
-    ok = rpc:call(SlaveNode1, syn, start, []),
-    ok = rpc:call(SlaveNode2, syn, start, []),
+    ok = syn_test_suite_helper:start_syn(),
+    ok = rpc:call(SlaveNode1, syn_test_suite_helper, start_syn, []),
+    ok = rpc:call(SlaveNode2, syn_test_suite_helper, start_syn, []),
     timer:sleep(100),
     %% start processes
     Pid0 = syn_test_suite_helper:start_process(),
@@ -1219,9 +1219,9 @@ three_nodes_anti_entropy(Config) ->
     rpc:call(SlaveNode1, syn_test_suite_helper, use_anti_entropy, [groups, 0.25]),
     rpc:call(SlaveNode2, syn_test_suite_helper, use_anti_entropy, [groups, 0.25]),
     %% start syn on nodes
-    ok = syn:start(),
-    ok = rpc:call(SlaveNode1, syn, start, []),
-    ok = rpc:call(SlaveNode2, syn, start, []),
+    ok = syn_test_suite_helper:start_syn(),
+    ok = rpc:call(SlaveNode1, syn_test_suite_helper, start_syn, []),
+    ok = rpc:call(SlaveNode2, syn_test_suite_helper, start_syn, []),
     timer:sleep(100),
     %% start processes
     Pid0 = syn_test_suite_helper:start_process(),
@@ -1253,9 +1253,9 @@ three_nodes_anti_entropy_manual(Config) ->
     SlaveNode1 = proplists:get_value(slave_node_1, Config),
     SlaveNode2 = proplists:get_value(slave_node_2, Config),
     %% start syn on nodes
-    ok = syn:start(),
-    ok = rpc:call(SlaveNode1, syn, start, []),
-    ok = rpc:call(SlaveNode2, syn, start, []),
+    ok = syn_test_suite_helper:start_syn(),
+    ok = rpc:call(SlaveNode1, syn_test_suite_helper, start_syn, []),
+    ok = rpc:call(SlaveNode2, syn_test_suite_helper, start_syn, []),
     timer:sleep(100),
     %% start processes
     Pid0 = syn_test_suite_helper:start_process(),
