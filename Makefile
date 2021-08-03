@@ -38,14 +38,6 @@ else
 	-pa `rebar3 as test path`
 endif
 
-bench: compile_test
-	@erl -pa `rebar3 as test path` \
-	-pa `rebar3 as test path`/../test \
-	-name syn_bench_master@127.0.0.1 \
-	+K true \
-	-noshell \
-	-eval 'syn_benchmark:start().'
-
 travis:
 	@$(PROJECT_DIR)/rebar3 as test compile
 	ct_run -dir $(PROJECT_DIR)/test -logdir $(PROJECT_DIR)/test/results \
