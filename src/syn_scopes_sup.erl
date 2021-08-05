@@ -23,7 +23,7 @@
 %% OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 %% THE SOFTWARE.
 %% ==========================================================================================================
--module(syn_sup).
+-module(syn_scopes_sup).
 -behaviour(supervisor).
 
 %% API
@@ -45,21 +45,22 @@ start_link() ->
 -spec init([]) ->
     {ok, {{supervisor:strategy(), non_neg_integer(), pos_integer()}, [supervisor:child_spec()]}}.
 init([]) ->
+    %% start default scopes
     Children = [
-        child_spec(syn_scopes_sup, supervisor),
-        child_spec(syn_backbone, worker)
+        scope_child_spec(syn_registry, default),
+        scope_child_spec(syn_groups, default)
     ],
     {ok, {{one_for_one, 10, 10}, Children}}.
 
 %% ===================================================================
 %% Internals
 %% ===================================================================
--spec child_spec(module(), worker | supervisor) -> supervisor:child_spec().
-child_spec(Module, Type) ->
+-spec scope_child_spec(module(), Scope :: atom()) -> supervisor:child_spec().
+scope_child_spec(Module, Scope) ->
     #{
-        id => Module,
-        start => {Module, start_link, []},
-        type => Type,
+        id => {Module, Scope},
+        start => {Module, start_link, [Scope]},
+        type => worker,
         shutdown => 10000,
         restart => permanent,
         modules => [Module]

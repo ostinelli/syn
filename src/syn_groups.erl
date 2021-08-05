@@ -27,7 +27,7 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/0]).
+-export([start_link/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
@@ -41,10 +41,11 @@
 %% ===================================================================
 %% API
 %% ===================================================================
--spec start_link() -> {ok, pid()} | {error, any()}.
-start_link() ->
-    Options = [],
-    gen_server:start_link({local, ?MODULE}, ?MODULE, [], Options).
+-spec start_link(Scope :: atom()) -> {ok, pid()} | {error, any()}.
+start_link(Scope) when is_atom(Scope) ->
+    Args = [],
+    ProcessName = get_process_name(Scope),
+    gen_server:start_link({local, ProcessName}, ?MODULE, Args, []).
 
 %% ===================================================================
 %% Callbacks
@@ -119,3 +120,8 @@ code_change(_OldVsn, State, _Extra) ->
 %% ===================================================================
 %% Internal
 %% ===================================================================
+-spec get_process_name(Scope :: atom()) -> atom().
+get_process_name(Scope) ->
+    ModuleBin = atom_to_binary(?MODULE),
+    ScopeBin = atom_to_binary(Scope),
+    binary_to_atom(<<ModuleBin/binary, "_", ScopeBin/binary>>).
