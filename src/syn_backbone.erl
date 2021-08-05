@@ -59,15 +59,16 @@ start_link() ->
     ignore |
     {stop, Reason :: any()}.
 init([]) ->
-    %% create ETS tables
+    %% create default ETS tables
+
     %% entries have structure {{Name, Pid}, Meta, Clock, MonitorRef, Node}
-    ets:new(syn_registry_by_name, [ordered_set, public, named_table, {read_concurrency, true}, {write_concurrency, true}]),
+    ets:new(syn_registry_by_name_default, [ordered_set, public, named_table, {read_concurrency, true}, {write_concurrency, true}]),
     %% entries have format {{Pid, Name}, Meta, Clock, MonitorRef, Node}
-    ets:new(syn_registry_by_pid, [ordered_set, public, named_table, {read_concurrency, true}, {write_concurrency, true}]),
+    ets:new(syn_registry_by_pid_default, [ordered_set, public, named_table, {read_concurrency, true}, {write_concurrency, true}]),
     %% entries have format {{GroupName, Pid}, Meta, MonitorRef, Node}
-    ets:new(syn_groups_by_name, [ordered_set, public, named_table, {read_concurrency, true}, {write_concurrency, true}]),
+    ets:new(syn_groups_by_name_default, [ordered_set, public, named_table, {read_concurrency, true}, {write_concurrency, true}]),
     %% entries have format {{Pid, GroupName}, Meta, MonitorRef, Node}
-    ets:new(syn_groups_by_pid, [ordered_set, public, named_table, {read_concurrency, true}, {write_concurrency, true}]),
+    ets:new(syn_groups_by_pid_default, [ordered_set, public, named_table, {read_concurrency, true}, {write_concurrency, true}]),
     %% init
     {ok, #state{}}.
 
@@ -117,10 +118,10 @@ handle_info(Info, State) ->
 terminate(Reason, _State) ->
     error_logger:info_msg("Syn(~p): Terminating with reason: ~p~n", [node(), Reason]),
     %% delete ETS tables
-    ets:delete(syn_registry_by_name),
-    ets:delete(syn_registry_by_pid),
-    ets:delete(syn_groups_by_name),
-    ets:delete(syn_groups_by_pid),
+    ets:delete(syn_registry_by_name_default),
+    ets:delete(syn_registry_by_pid_default),
+    ets:delete(syn_groups_by_name_default),
+    ets:delete(syn_groups_by_pid_default),
     %% return
     terminated.
 

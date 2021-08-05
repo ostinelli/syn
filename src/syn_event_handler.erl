@@ -3,7 +3,10 @@
 %%
 %% The MIT License (MIT)
 %%
-%% Copyright (c) 2015-2021 Roberto Ostinelli <roberto@ostinelli.net> and Neato Robotics, Inc.
+%% Copyright (c) 2019-2021 Roberto Ostinelli <roberto@ostinelli.net> and Neato Robotics, Inc.
+%%
+%% Portions of code from Ulf Wiger's unsplit server module:
+%% <https://github.com/uwiger/unsplit/blob/master/src/unsplit_server.erl>
 %%
 %% Permission is hereby granted, free of charge, to any person obtaining a copy
 %% of this software and associated documentation files (the "Software"), to deal
@@ -23,36 +26,37 @@
 %% OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 %% THE SOFTWARE.
 %% ==========================================================================================================
-%% types
--type syn_cluster_api_version() :: {
-    ApiCall :: atom(),
-    Version :: atom()
-}.
--type syn_registry_entry() :: {
-    {
-        Name :: any(),
-        Pid :: pid()
-    },
-    Meta :: any(),
-    Time :: integer(),
-    MonitorRef :: undefined | reference(),
-    Node :: node()
-}.
--type syn_registry_tuple() :: {
+-module(syn_event_handler).
+
+-export([on_process_unregistered/5]).
+
+-callback on_process_unregistered(
+    Scope :: atom(),
     Name :: any(),
     Pid :: pid(),
     Meta :: any(),
-    Time :: integer()
-}.
--type syn_groups_entry() :: {
-    GroupName :: any(),
+    Reason :: any()
+) -> any().
+
+-optional_callbacks([on_process_unregistered/5]).
+
+%% ===================================================================
+%% API
+%% ===================================================================
+-spec on_process_unregistered(
+    Scope :: atom(),
+    Name :: any(),
     Pid :: pid(),
     Meta :: any(),
-    MonitorRef :: undefined | reference(),
-    Node :: node()
-}.
--type syn_groups_tuple() :: {
-    GroupName :: any(),
-    Pid :: pid(),
-    Meta :: any()
-}.
+    Reason :: any()
+) -> any().
+on_process_unregistered(Scope, Name, Pid, Meta, Reason) ->
+    CustomEventHandler = undefined,
+    case erlang:function_exported(CustomEventHandler, on_process_unregistered, 5) of
+        true ->
+            spawn(fun() ->
+                CustomEventHandler:on_process_unregistered(Scope, Name, Pid, Meta, Reason)
+            end);
+        _ ->
+            ok
+    end.

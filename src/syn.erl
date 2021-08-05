@@ -27,6 +27,9 @@
 
 %% API
 -export([start/0, stop/0]).
+-export([register/2, register/3]).
+-export([lookup/1]).
+-export([unregister/1]).
 
 %% ===================================================================
 %% API
@@ -39,3 +42,20 @@ start() ->
 -spec stop() -> ok | {error, Reason :: any()}.
 stop() ->
     application:stop(syn).
+
+%% ----- \/ registry -------------------------------------------------
+-spec register(Name :: any(), Pid :: pid()) -> ok | {error, Reason :: any()}.
+register(Name, Pid) ->
+    syn_registry:register(Name, Pid).
+
+-spec register(Name :: any(), Pid :: pid(), Meta :: any()) -> ok | {error, Reason :: any()}.
+register(Name, Pid, Meta) ->
+    syn_registry:register(Name, Pid, Meta).
+
+-spec lookup(Name :: any()) -> {pid(), Meta :: term()} | undefined.
+lookup(Name) ->
+    syn_registry:lookup(Name).
+
+-spec unregister(Name :: any()) -> ok | {error, Reason :: any()}.
+unregister(Name) ->
+    syn_registry:unregister(Name).
