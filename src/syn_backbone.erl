@@ -3,7 +3,7 @@
 %%
 %% The MIT License (MIT)
 %%
-%% Copyright (c) 2015-2019 Roberto Ostinelli <roberto@ostinelli.net> and Neato Robotics, Inc.
+%% Copyright (c) 2015-2021 Roberto Ostinelli <roberto@ostinelli.net> and Neato Robotics, Inc.
 %%
 %% Permission is hereby granted, free of charge, to any person obtaining a copy
 %% of this software and associated documentation files (the "Software"), to deal
@@ -28,15 +28,9 @@
 
 %% API
 -export([start_link/0]).
--export([get_event_handler_module/0]).
--export([get_anti_entropy_settings/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
-
-%% macros
--define(DEFAULT_EVENT_HANDLER_MODULE, syn_event_handler).
--define(DEFAULT_ANTI_ENTROPY_MAX_DEVIATION_MS, 60000).
 
 %% records
 -record(state, {}).
@@ -51,45 +45,6 @@
 start_link() ->
     Options = [],
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], Options).
-
--spec get_event_handler_module() -> module().
-get_event_handler_module() ->
-    %% get handler
-    CustomEventHandler = application:get_env(syn, event_handler, ?DEFAULT_EVENT_HANDLER_MODULE),
-    %% ensure that is it loaded (not using code:ensure_loaded/1 to support embedded mode)
-    catch CustomEventHandler:module_info(exports),
-    %% return
-    CustomEventHandler.
-
--spec get_anti_entropy_settings(Module :: registry | groups) ->
-    {IntervalMs :: non_neg_integer() | undefined, IntervalMaxDeviationMs :: non_neg_integer() | undefined}.
-get_anti_entropy_settings(Module) ->
-    case application:get_env(syn, anti_entropy, undefined) of
-        undefined ->
-            {undefined, undefined};
-
-        AntiEntropySettings ->
-            case proplists:get_value(Module, AntiEntropySettings) of
-                undefined ->
-                    {undefined, undefined};
-
-                ModSettings ->
-                    case proplists:get_value(interval, ModSettings) of
-                        undefined ->
-                            {undefined, undefined};
-
-                        I ->
-                            IntervalMs = I * 1000,
-                            IntervalMaxDeviationMs = proplists:get_value(
-                                interval_max_deviation,
-                                ModSettings,
-                                ?DEFAULT_ANTI_ENTROPY_MAX_DEVIATION_MS
-                            ) * 1000,
-                            %% return
-                            {IntervalMs, IntervalMaxDeviationMs}
-                    end
-            end
-    end.
 
 %% ===================================================================
 %% Callbacks
