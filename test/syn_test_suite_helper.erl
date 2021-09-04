@@ -87,8 +87,10 @@ start_process(Node, Loop) ->
     Pid = spawn(Node, Loop),
     Pid.
 
-kill_process(Pid) ->
-    exit(Pid, kill).
+kill_process(Pid) when is_pid(Pid) ->
+    exit(Pid, kill);
+kill_process(RegisteredName) when is_atom(RegisteredName) ->
+    exit(whereis(RegisteredName), kill).
 
 wait_cluster_connected(Nodes) ->
     wait_cluster_connected(Nodes, os:system_time(millisecond)).

@@ -52,12 +52,12 @@
 %% ===================================================================
 -spec start_link(Scope :: atom()) -> {ok, pid()} | {error, any()}.
 start_link(Scope) when is_atom(Scope) ->
-    ProcessName = get_process_name(Scope),
+    ProcessName = get_process_name_for(Scope),
     Args = [Scope, ProcessName],
     gen_server:start_link({local, ProcessName}, ?MODULE, Args, []).
 
 get_nodes(Scope) ->
-    ProcessName = get_process_name(Scope),
+    ProcessName = get_process_name_for(Scope),
     gen_server:call(ProcessName, get_nodes).
 
 %% ===================================================================
@@ -78,7 +78,7 @@ sync(RemoteNode, ProcessName) ->
 %% ----------------------------------------------------------------------------------------------------------
 -spec init([term()]) ->
     {ok, #state{}} |
-    {ok, #state{}, Timeout :: pos_integer()} |
+    {ok, #state{}, Timeout :: non_neg_integer()} |
     ignore |
     {stop, Reason :: any()}.
 init([Scope, ProcessName]) ->
@@ -97,9 +97,9 @@ init([Scope, ProcessName]) ->
 %% ----------------------------------------------------------------------------------------------------------
 -spec handle_call(Request :: any(), From :: any(), #state{}) ->
     {reply, Reply :: any(), #state{}} |
-    {reply, Reply :: any(), #state{}, Timeout :: pos_integer()} |
+    {reply, Reply :: any(), #state{}, Timeout :: non_neg_integer()} |
     {noreply, #state{}} |
-    {noreply, #state{}, Timeout :: pos_integer()} |
+    {noreply, #state{}, Timeout :: non_neg_integer()} |
     {stop, Reason :: any(), Reply :: any(), #state{}} |
     {stop, Reason :: any(), #state{}}.
 handle_call(get_nodes, _From, #state{
@@ -116,7 +116,7 @@ handle_call(Request, From, State) ->
 %% ----------------------------------------------------------------------------------------------------------
 -spec handle_cast(Msg :: any(), #state{}) ->
     {noreply, #state{}} |
-    {noreply, #state{}, Timeout :: pos_integer()} |
+    {noreply, #state{}, Timeout :: non_neg_integer()} |
     {stop, Reason :: any(), #state{}}.
 handle_cast({announce, RemoteScopePid}, #state{
     scope = Scope,
@@ -132,7 +132,7 @@ handle_cast({announce, RemoteScopePid}, #state{
         true ->
             %% already known, ignore
             {noreply, State};
-        
+
         false ->
             %% monitor & announce
             _MRef = monitor(process, RemoteScopePid),
@@ -168,7 +168,7 @@ handle_cast(Msg, State) ->
 %% ----------------------------------------------------------------------------------------------------------
 -spec handle_info(Info :: any(), #state{}) ->
     {noreply, #state{}} |
-    {noreply, #state{}, Timeout :: pos_integer()} |
+    {noreply, #state{}, Timeout :: non_neg_integer()} |
     {stop, Reason :: any(), #state{}}.
 handle_info(timeout, #state{
     scope = Scope,
@@ -225,8 +225,8 @@ code_change(_OldVsn, State, _Extra) ->
 %% ===================================================================
 %% Internal
 %% ===================================================================
--spec get_process_name(Scope :: atom()) -> atom().
-get_process_name(Scope) ->
+-spec get_process_name_for(Scope :: atom()) -> atom().
+get_process_name_for(Scope) ->
     ModuleBin = atom_to_binary(?MODULE),
     ScopeBin = atom_to_binary(Scope),
     binary_to_atom(<<ModuleBin/binary, "_", ScopeBin/binary>>).

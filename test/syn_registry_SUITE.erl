@@ -33,7 +33,8 @@
 
 %% tests
 -export([
-    three_nodes_discover_default_scope/1
+    three_nodes_discover_default_scope/1,
+    three_nodes_discover_custom_scope/1
 %%    three_nodes_register_unregister_and_monitor_default_scope/1
 ]).
 
@@ -72,7 +73,8 @@ all() ->
 groups() ->
     [
         {three_nodes_process_registration, [shuffle], [
-            three_nodes_discover_default_scope
+            three_nodes_discover_default_scope,
+            three_nodes_discover_custom_scope
 %%            three_nodes_register_unregister_and_monitor_default_scope
         ]}
     ].
@@ -172,22 +174,10 @@ three_nodes_discover_default_scope(Config) ->
     ok = rpc:call(SlaveNode2, syn, start, []),
     timer:sleep(100),
 
-    %% check scope network
-    NodesMap0_0 = syn_registry:get_nodes(default),
-    Nodes0_0 = maps:keys(NodesMap0_0),
-    2 = length(Nodes0_0),
-    true = lists:member(SlaveNode1, Nodes0_0),
-    true = lists:member(SlaveNode2, Nodes0_0),
-    NodesMap0_1 = rpc:call(SlaveNode1, syn_registry, get_nodes, [default]),
-    Nodes0_1 = maps:keys(NodesMap0_1),
-    2 = length(Nodes0_1),
-    true = lists:member(node(), Nodes0_1),
-    true = lists:member(SlaveNode2, Nodes0_1),
-    NodesMap0_2 = rpc:call(SlaveNode2, syn_registry, get_nodes, [default]),
-    Nodes0_2 = maps:keys(NodesMap0_2),
-    2 = length(Nodes0_2),
-    true = lists:member(node(), Nodes0_2),
-    true = lists:member(SlaveNode1, Nodes0_2),
+    %% check
+    assert_scope_subcluster(node(), default, [SlaveNode1, SlaveNode2]),
+    assert_scope_subcluster(SlaveNode1, default, [node(), SlaveNode2]),
+    assert_scope_subcluster(SlaveNode2, default, [node(), SlaveNode1]),
 
     %% simulate full netsplit
     rpc:call(SlaveNode1, syn_test_suite_helper, disconnect_node, [SlaveNode2]),
@@ -195,69 +185,124 @@ three_nodes_discover_default_scope(Config) ->
     syn_test_suite_helper:disconnect_node(SlaveNode2),
     timer:sleep(100),
 
-    %% check scope network
-    NodesMap1_0 = syn_registry:get_nodes(default),
-    Nodes1_0 = maps:keys(NodesMap1_0),
-    0 = length(Nodes1_0),
+    %% check
+    assert_scope_subcluster(node(), default, []),
 
-    %% reconnect one node
+    %% reconnect slave 1
     syn_test_suite_helper:connect_node(SlaveNode1),
     ok = syn_test_suite_helper:wait_cluster_connected([node(), SlaveNode1]),
 
-    %% check scope network
-    NodesMap2_0 = syn_registry:get_nodes(default),
-    Nodes2_0 = maps:keys(NodesMap2_0),
-    1 = length(Nodes2_0),
-    true = lists:member(SlaveNode1, Nodes2_0),
-    false = lists:member(SlaveNode2, Nodes2_0),
-    NodesMap2_1 = rpc:call(SlaveNode1, syn_registry, get_nodes, [default]),
-    Nodes2_1 = maps:keys(NodesMap2_1),
-    1 = length(Nodes2_1),
-    true = lists:member(node(), Nodes2_1),
-    false = lists:member(SlaveNode2, Nodes2_1),
+    %% check
+    assert_scope_subcluster(node(), default, [SlaveNode1]),
+    assert_scope_subcluster(SlaveNode1, default, [node()]),
 
     %% reconnect all
     syn_test_suite_helper:connect_node(SlaveNode2),
     rpc:call(SlaveNode1, syn_test_suite_helper, connect_node, [SlaveNode2]),
     ok = syn_test_suite_helper:wait_cluster_connected([node(), SlaveNode1, SlaveNode2]),
 
-    %% check scope network
-    NodesMap3_0 = syn_registry:get_nodes(default),
-    Nodes3_0 = maps:keys(NodesMap3_0),
-    2 = length(Nodes3_0),
-    true = lists:member(SlaveNode1, Nodes3_0),
-    true = lists:member(SlaveNode2, Nodes3_0),
-    NodesMap3_1 = rpc:call(SlaveNode1, syn_registry, get_nodes, [default]),
-    Nodes3_1 = maps:keys(NodesMap3_1),
-    2 = length(Nodes3_1),
-    true = lists:member(node(), Nodes3_1),
-    true = lists:member(SlaveNode2, Nodes3_1),
-    NodesMap3_2 = rpc:call(SlaveNode2, syn_registry, get_nodes, [default]),
-    Nodes3_2 = maps:keys(NodesMap3_2),
-    2 = length(Nodes3_2),
-    true = lists:member(node(), Nodes3_2),
-    true = lists:member(SlaveNode1, Nodes3_2),
+    %% check
+    assert_scope_subcluster(node(), default, [SlaveNode1, SlaveNode2]),
+    assert_scope_subcluster(SlaveNode1, default, [node(), SlaveNode2]),
+    assert_scope_subcluster(SlaveNode2, default, [node(), SlaveNode1]),
 
-    %% crash the scope process on slave1
-    rpc:call(SlaveNode1, syn_test_suite_helper, kill_process, [syn_registry_default]),
+    %% crash the scope process on local
+    syn_test_suite_helper:kill_process(syn_registry_default),
     timer:sleep(100),
 
-    %% check scope network, it should have rebuilt after supervisor restarts it
-    NodesMap3_0 = syn_registry:get_nodes(default),
-    Nodes3_0 = maps:keys(NodesMap3_0),
-    2 = length(Nodes3_0),
-    true = lists:member(SlaveNode1, Nodes3_0),
-    true = lists:member(SlaveNode2, Nodes3_0),
-    NodesMap3_1 = rpc:call(SlaveNode1, syn_registry, get_nodes, [default]),
-    Nodes3_1 = maps:keys(NodesMap3_1),
-    2 = length(Nodes3_1),
-    true = lists:member(node(), Nodes3_1),
-    true = lists:member(SlaveNode2, Nodes3_1),
-    NodesMap3_2 = rpc:call(SlaveNode2, syn_registry, get_nodes, [default]),
-    Nodes3_2 = maps:keys(NodesMap3_2),
-    2 = length(Nodes3_2),
-    true = lists:member(node(), Nodes3_2),
-    true = lists:member(SlaveNode1, Nodes3_2).
+    %% check, it should have rebuilt after supervisor restarts it
+    assert_scope_subcluster(node(), default, [SlaveNode1, SlaveNode2]),
+    assert_scope_subcluster(SlaveNode1, default, [node(), SlaveNode2]),
+    assert_scope_subcluster(SlaveNode2, default, [node(), SlaveNode1]),
+
+    %% crash scopes supervisor on local
+    syn_test_suite_helper:kill_process(syn_scopes_sup),
+    timer:sleep(100),
+
+    %% check
+    assert_scope_subcluster(node(), default, [SlaveNode1, SlaveNode2]),
+    assert_scope_subcluster(SlaveNode1, default, [node(), SlaveNode2]),
+    assert_scope_subcluster(SlaveNode2, default, [node(), SlaveNode1]).
+
+three_nodes_discover_custom_scope(Config) ->
+    %% get slaves
+    SlaveNode1 = proplists:get_value(slave_node_1, Config),
+    SlaveNode2 = proplists:get_value(slave_node_2, Config),
+    %% start syn on nodes
+    ok = syn:start(),
+    ok = rpc:call(SlaveNode1, syn, start, []),
+    ok = rpc:call(SlaveNode2, syn, start, []),
+    timer:sleep(100),
+
+    %% add custom scopes
+    ok = syn:add_node_to_scope(custom_scope_a),
+    ok = syn:add_node_to_scope(custom_scope_all),
+    ok = rpc:call(SlaveNode1, syn, add_node_to_scopes, [[custom_scope_a, custom_scope_b, custom_scope_all]]),
+    ok = rpc:call(SlaveNode2, syn, add_node_to_scopes, [[custom_scope_b, custom_scope_c, custom_scope_all]]),
+    timer:sleep(100),
+
+    %% check
+    assert_scope_subcluster(node(), custom_scope_a, [SlaveNode1]),
+    assert_scope_subcluster(node(), custom_scope_all, [SlaveNode1, SlaveNode2]),
+    assert_scope_subcluster(SlaveNode1, custom_scope_a, [node()]),
+    assert_scope_subcluster(SlaveNode1, custom_scope_b, [SlaveNode2]),
+    assert_scope_subcluster(SlaveNode1, custom_scope_all, [node(), SlaveNode2]),
+    assert_scope_subcluster(SlaveNode2, custom_scope_b, [SlaveNode1]),
+    assert_scope_subcluster(SlaveNode2, custom_scope_c, []),
+    assert_scope_subcluster(SlaveNode2, custom_scope_all, [node(), SlaveNode1]),
+
+    %% disconnect node 2 (node 1 can still see node 2)
+    syn_test_suite_helper:disconnect_node(SlaveNode2),
+    timer:sleep(100),
+
+    %% check
+    assert_scope_subcluster(node(), custom_scope_a, [SlaveNode1]),
+    assert_scope_subcluster(node(), custom_scope_all, [SlaveNode1]),
+    assert_scope_subcluster(SlaveNode1, custom_scope_a, [node()]),
+    assert_scope_subcluster(SlaveNode1, custom_scope_b, [SlaveNode2]),
+    assert_scope_subcluster(SlaveNode1, custom_scope_all, [node(), SlaveNode2]),
+
+    %% reconnect node 2
+    syn_test_suite_helper:connect_node(SlaveNode2),
+    ok = syn_test_suite_helper:wait_cluster_connected([node(), SlaveNode1, SlaveNode2]),
+
+    %% check
+    assert_scope_subcluster(node(), custom_scope_a, [SlaveNode1]),
+    assert_scope_subcluster(node(), custom_scope_all, [SlaveNode1, SlaveNode2]),
+    assert_scope_subcluster(SlaveNode1, custom_scope_a, [node()]),
+    assert_scope_subcluster(SlaveNode1, custom_scope_b, [SlaveNode2]),
+    assert_scope_subcluster(SlaveNode1, custom_scope_all, [node(), SlaveNode2]),
+    assert_scope_subcluster(SlaveNode2, custom_scope_b, [SlaveNode1]),
+    assert_scope_subcluster(SlaveNode2, custom_scope_c, []),
+    assert_scope_subcluster(SlaveNode2, custom_scope_all, [node(), SlaveNode1]),
+
+    %% crash a scope process on 2
+    rpc:call(SlaveNode2, syn_test_suite_helper, kill_process, [syn_registry_custom_scope_b]),
+    timer:sleep(100),
+
+    %% check
+    assert_scope_subcluster(node(), custom_scope_a, [SlaveNode1]),
+    assert_scope_subcluster(node(), custom_scope_all, [SlaveNode1, SlaveNode2]),
+    assert_scope_subcluster(SlaveNode1, custom_scope_a, [node()]),
+    assert_scope_subcluster(SlaveNode1, custom_scope_b, [SlaveNode2]),
+    assert_scope_subcluster(SlaveNode1, custom_scope_all, [node(), SlaveNode2]),
+    assert_scope_subcluster(SlaveNode2, custom_scope_b, [SlaveNode1]),
+    assert_scope_subcluster(SlaveNode2, custom_scope_c, []),
+    assert_scope_subcluster(SlaveNode2, custom_scope_all, [node(), SlaveNode1]),
+
+    %% crash scopes supervisor on local
+    syn_test_suite_helper:kill_process(syn_scopes_sup),
+    timer:sleep(100),
+
+    %% check
+    assert_scope_subcluster(node(), custom_scope_a, [SlaveNode1]),
+    assert_scope_subcluster(node(), custom_scope_all, [SlaveNode1, SlaveNode2]),
+    assert_scope_subcluster(SlaveNode1, custom_scope_a, [node()]),
+    assert_scope_subcluster(SlaveNode1, custom_scope_b, [SlaveNode2]),
+    assert_scope_subcluster(SlaveNode1, custom_scope_all, [node(), SlaveNode2]),
+    assert_scope_subcluster(SlaveNode2, custom_scope_b, [SlaveNode1]),
+    assert_scope_subcluster(SlaveNode2, custom_scope_c, []),
+    assert_scope_subcluster(SlaveNode2, custom_scope_all, [node(), SlaveNode1]).
 
 %%three_nodes_register_unregister_and_monitor_default_scope(Config) ->
 %%    %% get slaves
@@ -342,3 +387,14 @@ three_nodes_discover_default_scope(Config) ->
 %%    undefined = syn:lookup({remote_pid_on, slave_1}),
 %%    undefined = rpc:call(SlaveNode1, syn, lookup, [{remote_pid_on, slave_1}]),
 %%    undefined = rpc:call(SlaveNode2, syn, lookup, [{remote_pid_on, slave_1}]).
+
+
+%% ===================================================================
+%% Internal
+%% ===================================================================
+assert_scope_subcluster(Node, Scope, ExpectedNodes) ->
+    NodesMap = rpc:call(Node, syn_registry, get_nodes, [Scope]),
+    Nodes = maps:keys(NodesMap),
+    ExpectedCount = length(ExpectedNodes),
+    ExpectedCount = length(Nodes),
+    lists:foreach(fun(RemoteNode) -> true = lists:member(RemoteNode, Nodes) end, ExpectedNodes).

@@ -44,7 +44,7 @@
 -spec start_link(Scope :: atom()) -> {ok, pid()} | {error, any()}.
 start_link(Scope) when is_atom(Scope) ->
     Args = [],
-    ProcessName = get_process_name(Scope),
+    ProcessName = get_process_name_for(Scope),
     gen_server:start_link({local, ProcessName}, ?MODULE, Args, []).
 
 %% ===================================================================
@@ -120,8 +120,8 @@ code_change(_OldVsn, State, _Extra) ->
 %% ===================================================================
 %% Internal
 %% ===================================================================
--spec get_process_name(Scope :: atom()) -> atom().
-get_process_name(Scope) ->
+-spec get_process_name_for(Scope :: atom()) -> atom().
+get_process_name_for(Scope) ->
     ModuleBin = atom_to_binary(?MODULE),
     ScopeBin = atom_to_binary(Scope),
     binary_to_atom(<<ModuleBin/binary, "_", ScopeBin/binary>>).

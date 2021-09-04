@@ -27,9 +27,7 @@
 
 %% API
 -export([start/0, stop/0]).
--export([register/2, register/3]).
--export([lookup/1]).
--export([unregister/1]).
+-export([get_node_scopes/0, add_node_to_scope/1, add_node_to_scopes/1]).
 
 %% ===================================================================
 %% API
@@ -43,19 +41,17 @@ start() ->
 stop() ->
     application:stop(syn).
 
-%% ----- \/ registry -------------------------------------------------
--spec register(Name :: any(), Pid :: pid()) -> ok | {error, Reason :: any()}.
-register(Name, Pid) ->
-    syn_registry:register(Name, Pid).
+%% ----- \/ scopes ---------------------------------------------------
+-spec get_node_scopes() -> [atom()].
+get_node_scopes() ->
+    syn_scopes_sup:get_node_scopes().
 
--spec register(Name :: any(), Pid :: pid(), Meta :: any()) -> ok | {error, Reason :: any()}.
-register(Name, Pid, Meta) ->
-    syn_registry:register(Name, Pid, Meta).
+-spec add_node_to_scope(Scope :: atom()) -> ok.
+add_node_to_scope(Scope) ->
+    syn_scopes_sup:add_node_to_scope(Scope).
 
--spec lookup(Name :: any()) -> {pid(), Meta :: term()} | undefined.
-lookup(Name) ->
-    syn_registry:lookup(Name).
-
--spec unregister(Name :: any()) -> ok | {error, Reason :: any()}.
-unregister(Name) ->
-    syn_registry:unregister(Name).
+-spec add_node_to_scopes(Scopes :: [atom()]) -> ok.
+add_node_to_scopes(Scopes) ->
+    lists:foreach(fun(Scope) ->
+        syn_scopes_sup:add_node_to_scope(Scope)
+    end, Scopes).

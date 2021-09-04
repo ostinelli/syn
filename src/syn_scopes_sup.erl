@@ -28,6 +28,7 @@
 
 %% API
 -export([start_link/0]).
+-export([get_node_scopes/0, add_node_to_scope/1]).
 
 %% Supervisor callbacks
 -export([init/1]).
@@ -39,17 +40,41 @@
 start_link() ->
     supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
+-spec get_node_scopes() -> [atom()].
+get_node_scopes() ->
+    case application:get_env(syn, syn_custom_scopes) of
+        undefined -> [default];
+        {ok, Scopes} -> [default] ++ maps:keys(Scopes)
+    end.
+
+-spec add_node_to_scope(Scope :: atom()) -> ok.
+add_node_to_scope(Scope) ->
+    error_logger:info_msg("SYN[~p] Adding node to scope: ~p~n", [node(), Scope]),
+    %% save to ENV (failsafe if sup is restarted)
+    CustomScopes0 = case application:get_env(syn, syn_custom_scopes) of
+        undefined -> #{};
+        {ok, Scopes} -> Scopes
+    end,
+    CustomScopes = CustomScopes0#{Scope => #{}},
+    application:set_env(syn, syn_custom_scopes, CustomScopes),
+    %% start children
+    supervisor:start_child(?MODULE, scope_child_spec(syn_registry, Scope)),
+    supervisor:start_child(?MODULE, scope_child_spec(syn_groups, Scope)),
+    ok.
+
 %% ===================================================================
 %% Callbacks
 %% ===================================================================
 -spec init([]) ->
     {ok, {{supervisor:strategy(), non_neg_integer(), pos_integer()}, [supervisor:child_spec()]}}.
 init([]) ->
-    %% start default scopes
-    Children = [
-        scope_child_spec(syn_registry, default),
-        scope_child_spec(syn_groups, default)
-    ],
+    Children = lists:foldl(fun(Scope, Acc) ->
+        [
+            scope_child_spec(syn_registry, Scope),
+            scope_child_spec(syn_groups, Scope)
+            | Acc
+        ]
+    end, [], get_node_scopes()),
     {ok, {{one_for_one, 10, 10}, Children}}.
 
 %% ===================================================================
