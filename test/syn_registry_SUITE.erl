@@ -74,8 +74,8 @@ groups() ->
     [
         {three_nodes_process_registration, [shuffle], [
             three_nodes_discover_default_scope,
-            three_nodes_discover_custom_scope
-%%            three_nodes_register_unregister_and_monitor_default_scope
+            three_nodes_discover_custom_scope,
+            three_nodes_register_unregister_and_monitor_default_scope
         ]}
     ].
 %% -------------------------------------------------------------------
@@ -376,7 +376,7 @@ three_nodes_register_unregister_and_monitor_default_scope(Config) ->
     syn_test_suite_helper:kill_process(Pid),
     syn_test_suite_helper:kill_process(PidRemote1),
     %% unregister process
-    syn:unregister(<<"my proc with meta">>),
+    ok = syn:unregister(<<"my proc with meta">>),
     timer:sleep(100),
 
     %% retrieve
