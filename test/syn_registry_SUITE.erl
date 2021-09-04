@@ -34,8 +34,8 @@
 %% tests
 -export([
     three_nodes_discover_default_scope/1,
-    three_nodes_discover_custom_scope/1
-%%    three_nodes_register_unregister_and_monitor_default_scope/1
+    three_nodes_discover_custom_scope/1,
+    three_nodes_register_unregister_and_monitor_default_scope/1
 ]).
 
 %% include
@@ -251,6 +251,11 @@ three_nodes_discover_custom_scope(Config) ->
     assert_scope_subcluster(SlaveNode2, custom_scope_c, []),
     assert_scope_subcluster(SlaveNode2, custom_scope_all, [node(), SlaveNode1]),
 
+    %% check default
+    assert_scope_subcluster(node(), default, [SlaveNode1, SlaveNode2]),
+    assert_scope_subcluster(SlaveNode1, default, [node(), SlaveNode2]),
+    assert_scope_subcluster(SlaveNode2, default, [node(), SlaveNode1]),
+
     %% disconnect node 2 (node 1 can still see node 2)
     syn_test_suite_helper:disconnect_node(SlaveNode2),
     timer:sleep(100),
@@ -304,96 +309,95 @@ three_nodes_discover_custom_scope(Config) ->
     assert_scope_subcluster(SlaveNode2, custom_scope_c, []),
     assert_scope_subcluster(SlaveNode2, custom_scope_all, [node(), SlaveNode1]).
 
-%%three_nodes_register_unregister_and_monitor_default_scope(Config) ->
-%%    %% get slaves
-%%    SlaveNode1 = proplists:get_value(slave_node_1, Config),
-%%    SlaveNode2 = proplists:get_value(slave_node_2, Config),
-%%    %% start syn on nodes
-%%    ok = syn:start(),
-%%    ok = rpc:call(SlaveNode1, syn, start, []),
-%%    ok = rpc:call(SlaveNode2, syn, start, []),
-%%    timer:sleep(50),
-%%
-%%    %% start processes
-%%    Pid = syn_test_suite_helper:start_process(),
-%%    PidWithMeta = syn_test_suite_helper:start_process(),
-%%    PidRemote1 = syn_test_suite_helper:start_process(SlaveNode1),
-%%
-%%    %% retrieve
-%%    undefined = syn:lookup(<<"my proc">>),
-%%    undefined = rpc:call(SlaveNode1, syn, lookup, [<<"my proc">>]),
-%%    undefined = rpc:call(SlaveNode2, syn, lookup, [<<"my proc">>]),
-%%    undefined = syn:lookup({"my proc 2"}),
-%%    undefined = rpc:call(SlaveNode1, syn, lookup, [{"my proc 2"}]),
-%%    undefined = rpc:call(SlaveNode2, syn, lookup, [{"my proc 2"}]),
-%%    undefined = syn:lookup(<<"my proc with meta">>),
-%%    undefined = rpc:call(SlaveNode1, syn, lookup, [<<"my proc with meta">>]),
-%%    undefined = rpc:call(SlaveNode2, syn, lookup, [<<"my proc with meta">>]),
-%%    undefined = syn:lookup({remote_pid_on, slave_1}),
-%%    undefined = rpc:call(SlaveNode1, syn, lookup, [{remote_pid_on, slave_1}]),
-%%    undefined = rpc:call(SlaveNode2, syn, lookup, [{remote_pid_on, slave_1}]),
-%%
-%%    %% register
-%%    ok = syn:register(<<"my proc">>, Pid),
-%%    ok = syn:register({"my proc 2"}, Pid), %% same pid, different name
-%%    ok = syn:register(<<"my proc with meta">>, PidWithMeta, {meta, <<"meta">>}), %% pid with meta
-%%    ok = rpc:call(SlaveNode1, syn, register, [{remote_pid_on, slave_1}, PidRemote1]), %% remote on slave 1
-%%    timer:sleep(100),
-%%
-%%    %% retrieve
-%%    {Pid, undefined} = syn:lookup(<<"my proc">>),
-%%    {Pid, undefined} = rpc:call(SlaveNode1, syn, lookup, [<<"my proc">>]),
-%%    {Pid, undefined} = rpc:call(SlaveNode2, syn, lookup, [<<"my proc">>]),
-%%    {Pid, undefined} = syn:lookup({"my proc 2"}),
-%%    {Pid, undefined} = rpc:call(SlaveNode1, syn, lookup, [{"my proc 2"}]),
-%%    {Pid, undefined} = rpc:call(SlaveNode2, syn, lookup, [{"my proc 2"}]),
-%%    {PidWithMeta, {meta, <<"meta">>}} = syn:lookup(<<"my proc with meta">>),
-%%    {PidWithMeta, {meta, <<"meta">>}} = rpc:call(SlaveNode1, syn, lookup, [<<"my proc with meta">>]),
-%%    {PidWithMeta, {meta, <<"meta">>}} = rpc:call(SlaveNode2, syn, lookup, [<<"my proc with meta">>]),
-%%    {PidRemote1, undefined} = syn:lookup({remote_pid_on, slave_1}),
-%%    {PidRemote1, undefined} = rpc:call(SlaveNode1, syn, lookup, [{remote_pid_on, slave_1}]),
-%%    {PidRemote1, undefined} = rpc:call(SlaveNode2, syn, lookup, [{remote_pid_on, slave_1}]),
-%%
-%%    %% re-register to edit meta
-%%    ok = syn:register(<<"my proc with meta">>, PidWithMeta, {meta2, <<"meta2">>}),
-%%    ok = rpc:call(SlaveNode2, syn, register, [{remote_pid_on, slave_1}, PidRemote1, added_meta]), %% updated on slave 2
-%%    timer:sleep(50),
-%%
-%%    %% retrieve
-%%    {PidWithMeta, {meta2, <<"meta2">>}} = syn:lookup(<<"my proc with meta">>),
-%%    {PidWithMeta, {meta2, <<"meta2">>}} = rpc:call(SlaveNode1, syn, lookup, [<<"my proc with meta">>]),
-%%    {PidWithMeta, {meta2, <<"meta2">>}} = rpc:call(SlaveNode2, syn, lookup, [<<"my proc with meta">>]),
-%%    {PidRemote1, added_meta} = syn:lookup({remote_pid_on, slave_1}),
-%%    {PidRemote1, added_meta} = rpc:call(SlaveNode1, syn, lookup, [{remote_pid_on, slave_1}]),
-%%    {PidRemote1, added_meta} = rpc:call(SlaveNode2, syn, lookup, [{remote_pid_on, slave_1}]),
-%%
-%%    %% kill process
-%%    syn_test_suite_helper:kill_process(Pid),
-%%    syn_test_suite_helper:kill_process(PidRemote1),
-%%    %% unregister process
-%%    syn:unregister(<<"my proc with meta">>),
-%%    timer:sleep(50),
-%%
-%%    %% retrieve
-%%    undefined = syn:lookup(<<"my proc">>),
-%%    undefined = rpc:call(SlaveNode1, syn, lookup, [<<"my proc">>]),
-%%    undefined = rpc:call(SlaveNode2, syn, lookup, [<<"my proc">>]),
-%%    undefined = syn:lookup({"my proc 2"}),
-%%    undefined = rpc:call(SlaveNode1, syn, lookup, [{"my proc 2"}]),
-%%    undefined = rpc:call(SlaveNode2, syn, lookup, [{"my proc 2"}]),
-%%    undefined = syn:lookup(<<"my proc with meta">>),
-%%    undefined = rpc:call(SlaveNode1, syn, lookup, [<<"my proc with meta">>]),
-%%    undefined = rpc:call(SlaveNode2, syn, lookup, [<<"my proc with meta">>]),
-%%    undefined = syn:lookup({remote_pid_on, slave_1}),
-%%    undefined = rpc:call(SlaveNode1, syn, lookup, [{remote_pid_on, slave_1}]),
-%%    undefined = rpc:call(SlaveNode2, syn, lookup, [{remote_pid_on, slave_1}]).
+three_nodes_register_unregister_and_monitor_default_scope(Config) ->
+    %% get slaves
+    SlaveNode1 = proplists:get_value(slave_node_1, Config),
+    SlaveNode2 = proplists:get_value(slave_node_2, Config),
+    %% start syn on nodes
+    ok = syn:start(),
+    ok = rpc:call(SlaveNode1, syn, start, []),
+    ok = rpc:call(SlaveNode2, syn, start, []),
+    timer:sleep(100),
 
+    %% start processes
+    Pid = syn_test_suite_helper:start_process(),
+    PidWithMeta = syn_test_suite_helper:start_process(),
+    PidRemote1 = syn_test_suite_helper:start_process(SlaveNode1),
+
+    %% retrieve
+    undefined = syn:lookup(<<"my proc">>),
+    undefined = rpc:call(SlaveNode1, syn, lookup, [<<"my proc">>]),
+    undefined = rpc:call(SlaveNode2, syn, lookup, [<<"my proc">>]),
+    undefined = syn:lookup({"my proc alias"}),
+    undefined = rpc:call(SlaveNode1, syn, lookup, [{"my proc alias"}]),
+    undefined = rpc:call(SlaveNode2, syn, lookup, [{"my proc alias"}]),
+    undefined = syn:lookup(<<"my proc with meta">>),
+    undefined = rpc:call(SlaveNode1, syn, lookup, [<<"my proc with meta">>]),
+    undefined = rpc:call(SlaveNode2, syn, lookup, [<<"my proc with meta">>]),
+    undefined = syn:lookup({remote_pid_on, slave_1}),
+    undefined = rpc:call(SlaveNode1, syn, lookup, [{remote_pid_on, slave_1}]),
+    undefined = rpc:call(SlaveNode2, syn, lookup, [{remote_pid_on, slave_1}]),
+
+    %% register
+    ok = syn:register(<<"my proc">>, Pid),
+    ok = syn:register({"my proc alias"}, Pid), %% same pid, different name
+    ok = syn:register(<<"my proc with meta">>, PidWithMeta, {meta, <<"meta">>}), %% pid with meta
+    ok = rpc:call(SlaveNode1, syn, register, [{remote_pid_on, slave_1}, PidRemote1]), %% remote on slave 1
+    timer:sleep(100),
+
+    %% retrieve
+    {Pid, undefined} = syn:lookup(<<"my proc">>),
+    {Pid, undefined} = rpc:call(SlaveNode1, syn, lookup, [<<"my proc">>]),
+    {Pid, undefined} = rpc:call(SlaveNode2, syn, lookup, [<<"my proc">>]),
+    {Pid, undefined} = syn:lookup({"my proc alias"}),
+    {Pid, undefined} = rpc:call(SlaveNode1, syn, lookup, [{"my proc alias"}]),
+    {Pid, undefined} = rpc:call(SlaveNode2, syn, lookup, [{"my proc alias"}]),
+    {PidWithMeta, {meta, <<"meta">>}} = syn:lookup(<<"my proc with meta">>),
+    {PidWithMeta, {meta, <<"meta">>}} = rpc:call(SlaveNode1, syn, lookup, [<<"my proc with meta">>]),
+    {PidWithMeta, {meta, <<"meta">>}} = rpc:call(SlaveNode2, syn, lookup, [<<"my proc with meta">>]),
+    {PidRemote1, undefined} = syn:lookup({remote_pid_on, slave_1}),
+    {PidRemote1, undefined} = rpc:call(SlaveNode1, syn, lookup, [{remote_pid_on, slave_1}]),
+    {PidRemote1, undefined} = rpc:call(SlaveNode2, syn, lookup, [{remote_pid_on, slave_1}]),
+
+    %% re-register to edit meta
+    ok = syn:register(<<"my proc with meta">>, PidWithMeta, {meta2, <<"meta2">>}),
+    ok = rpc:call(SlaveNode2, syn, register, [{remote_pid_on, slave_1}, PidRemote1, added_meta]), %% updated on slave 2
+    timer:sleep(100),
+
+    %% retrieve
+    {PidWithMeta, {meta2, <<"meta2">>}} = syn:lookup(<<"my proc with meta">>),
+    {PidWithMeta, {meta2, <<"meta2">>}} = rpc:call(SlaveNode1, syn, lookup, [<<"my proc with meta">>]),
+    {PidWithMeta, {meta2, <<"meta2">>}} = rpc:call(SlaveNode2, syn, lookup, [<<"my proc with meta">>]),
+    {PidRemote1, added_meta} = syn:lookup({remote_pid_on, slave_1}),
+    {PidRemote1, added_meta} = rpc:call(SlaveNode1, syn, lookup, [{remote_pid_on, slave_1}]),
+    {PidRemote1, added_meta} = rpc:call(SlaveNode2, syn, lookup, [{remote_pid_on, slave_1}]),
+
+    %% kill process
+    syn_test_suite_helper:kill_process(Pid),
+    syn_test_suite_helper:kill_process(PidRemote1),
+    %% unregister process
+    syn:unregister(<<"my proc with meta">>),
+    timer:sleep(100),
+
+    %% retrieve
+    undefined = syn:lookup(<<"my proc">>),
+    undefined = rpc:call(SlaveNode1, syn, lookup, [<<"my proc">>]),
+    undefined = rpc:call(SlaveNode2, syn, lookup, [<<"my proc">>]),
+    undefined = syn:lookup({"my proc alias"}),
+    undefined = rpc:call(SlaveNode1, syn, lookup, [{"my proc alias"}]),
+    undefined = rpc:call(SlaveNode2, syn, lookup, [{"my proc alias"}]),
+    undefined = syn:lookup(<<"my proc with meta">>),
+    undefined = rpc:call(SlaveNode1, syn, lookup, [<<"my proc with meta">>]),
+    undefined = rpc:call(SlaveNode2, syn, lookup, [<<"my proc with meta">>]),
+    undefined = syn:lookup({remote_pid_on, slave_1}),
+    undefined = rpc:call(SlaveNode1, syn, lookup, [{remote_pid_on, slave_1}]),
+    undefined = rpc:call(SlaveNode2, syn, lookup, [{remote_pid_on, slave_1}]).
 
 %% ===================================================================
 %% Internal
 %% ===================================================================
 assert_scope_subcluster(Node, Scope, ExpectedNodes) ->
-    NodesMap = rpc:call(Node, syn_registry, get_nodes, [Scope]),
+    NodesMap = rpc:call(Node, syn_registry, get_subcluster_nodes, [Scope]),
     Nodes = maps:keys(NodesMap),
     ExpectedCount = length(ExpectedNodes),
     ExpectedCount = length(Nodes),

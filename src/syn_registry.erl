@@ -28,7 +28,7 @@
 
 %% API
 -export([start_link/1]).
--export([get_nodes/1]).
+-export([get_subcluster_nodes/1]).
 
 %% Cluster API
 -export([announce/2]).
@@ -56,9 +56,10 @@ start_link(Scope) when is_atom(Scope) ->
     Args = [Scope, ProcessName],
     gen_server:start_link({local, ProcessName}, ?MODULE, Args, []).
 
-get_nodes(Scope) ->
+-spec get_subcluster_nodes(Scope :: atom()) -> [node()].
+get_subcluster_nodes(Scope) ->
     ProcessName = get_process_name_for(Scope),
-    gen_server:call(ProcessName, get_nodes).
+    gen_server:call(ProcessName, get_subcluster_nodes).
 
 %% ===================================================================
 %% Cluster API
@@ -102,7 +103,7 @@ init([Scope, ProcessName]) ->
     {noreply, #state{}, Timeout :: non_neg_integer()} |
     {stop, Reason :: any(), Reply :: any(), #state{}} |
     {stop, Reason :: any(), #state{}}.
-handle_call(get_nodes, _From, #state{
+handle_call(get_subcluster_nodes, _From, #state{
     nodes = Nodes
 } = State) ->
     {reply, Nodes, State};
