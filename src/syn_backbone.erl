@@ -28,6 +28,8 @@
 
 %% API
 -export([start_link/0]).
+-export([create_tables_for_scope/1]).
+-export([get_table_name/2]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
@@ -46,6 +48,16 @@ start_link() ->
     Options = [],
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], Options).
 
+-spec create_tables_for_scope(Scope :: atom()) -> ok.
+create_tables_for_scope(Scope) ->
+    gen_server:call(?MODULE, {create_tables_for_scope, Scope}).
+
+-spec get_table_name(TableName :: atom(), Scope :: atom()) -> atom().
+get_table_name(TableName, Scope) ->
+    TableNameBin = atom_to_binary(TableName),
+    ScopeBin = atom_to_binary(Scope),
+    binary_to_atom(<<TableNameBin/binary, "_", ScopeBin/binary>>).
+
 %% ===================================================================
 %% Callbacks
 %% ===================================================================
@@ -59,16 +71,6 @@ start_link() ->
     ignore |
     {stop, Reason :: any()}.
 init([]) ->
-    %% create default ETS tables
-
-    %% entries have structure {{Name, Pid}, Meta, Clock, MonitorRef, Node}
-    ets:new(syn_registry_by_name_default, [ordered_set, public, named_table, {read_concurrency, true}, {write_concurrency, true}]),
-    %% entries have format {{Pid, Name}, Meta, Clock, MonitorRef, Node}
-    ets:new(syn_registry_by_pid_default, [ordered_set, public, named_table, {read_concurrency, true}, {write_concurrency, true}]),
-    %% entries have format {{GroupName, Pid}, Meta, MonitorRef, Node}
-    ets:new(syn_groups_by_name_default, [ordered_set, public, named_table, {read_concurrency, true}, {write_concurrency, true}]),
-    %% entries have format {{Pid, GroupName}, Meta, MonitorRef, Node}
-    ets:new(syn_groups_by_pid_default, [ordered_set, public, named_table, {read_concurrency, true}, {write_concurrency, true}]),
     %% init
     {ok, #state{}}.
 
@@ -82,9 +84,16 @@ init([]) ->
     {noreply, #state{}, Timeout :: non_neg_integer()} |
     {stop, Reason :: any(), Reply :: any(), #state{}} |
     {stop, Reason :: any(), #state{}}.
+handle_call({create_tables_for_scope, Scope}, _From, State) ->
+    error_logger:warning_msg("SYN[~p] Creating tables for scope: ~p~n", [node(), Scope]),
+    ensure_table_exists(get_table_name(syn_registry_by_name, Scope)),
+    ensure_table_exists(get_table_name(syn_registry_by_pid, Scope)),
+    ensure_table_exists(get_table_name(syn_groups_by_name, Scope)),
+    ensure_table_exists(get_table_name(syn_groups_by_pid, Scope)),
+    {reply, ok, State};
 
 handle_call(Request, From, State) ->
-    error_logger:warning_msg("Syn(~p): Received from ~p an unknown call message: ~p~n", [node(), Request, From]),
+    error_logger:warning_msg("SYN[~p] Received from ~p an unknown call message: ~p~n", [node(), Request, From]),
     {reply, undefined, State}.
 
 %% ----------------------------------------------------------------------------------------------------------
@@ -94,9 +103,8 @@ handle_call(Request, From, State) ->
     {noreply, #state{}} |
     {noreply, #state{}, Timeout :: non_neg_integer()} |
     {stop, Reason :: any(), #state{}}.
-
 handle_cast(Msg, State) ->
-    error_logger:warning_msg("Syn(~p): Received an unknown cast message: ~p~n", [node(), Msg]),
+    error_logger:warning_msg("SYN[~p] Received an unknown cast message: ~p~n", [node(), Msg]),
     {noreply, State}.
 
 %% ----------------------------------------------------------------------------------------------------------
@@ -106,9 +114,8 @@ handle_cast(Msg, State) ->
     {noreply, #state{}} |
     {noreply, #state{}, Timeout :: non_neg_integer()} |
     {stop, Reason :: any(), #state{}}.
-
 handle_info(Info, State) ->
-    error_logger:warning_msg("Syn(~p): Received an unknown info message: ~p~n", [node(), Info]),
+    error_logger:warning_msg("SYN[~p] Received an unknown info message: ~p~n", [node(), Info]),
     {noreply, State}.
 
 %% ----------------------------------------------------------------------------------------------------------
@@ -116,12 +123,7 @@ handle_info(Info, State) ->
 %% ----------------------------------------------------------------------------------------------------------
 -spec terminate(Reason :: any(), #state{}) -> terminated.
 terminate(Reason, _State) ->
-    error_logger:info_msg("Syn(~p): Terminating with reason: ~p~n", [node(), Reason]),
-    %% delete ETS tables
-    ets:delete(syn_registry_by_name_default),
-    ets:delete(syn_registry_by_pid_default),
-    ets:delete(syn_groups_by_name_default),
-    ets:delete(syn_groups_by_pid_default),
+    error_logger:info_msg("SYN[~p] Terminating with reason: ~p~n", [node(), Reason]),
     %% return
     terminated.
 
@@ -131,3 +133,20 @@ terminate(Reason, _State) ->
 -spec code_change(OldVsn :: any(), #state{}, Extra :: any()) -> {ok, #state{}}.
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
+
+%% ===================================================================
+%% Internal
+%% ===================================================================
+-spec ensure_table_exists(Name :: atom()) -> atom().
+ensure_table_exists(Name) ->
+    case ets:whereis(Name) of
+        undefined ->
+            %% regarding decentralized_counters: <https://blog.erlang.org/scalable-ets-counters/>
+            ets:new(Name, [
+                ordered_set, public, named_table,
+                {read_concurrency, true}, {write_concurrency, true}, {decentralized_counters, true}
+            ]);
+
+        _ ->
+            ok
+    end.

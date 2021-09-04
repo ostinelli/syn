@@ -57,6 +57,8 @@ add_node_to_scope(Scope) ->
     end,
     CustomScopes = CustomScopes0#{Scope => #{}},
     application:set_env(syn, syn_custom_scopes, CustomScopes),
+    %% create ETS tables
+    syn_backbone:create_tables_for_scope(Scope),
     %% start children
     supervisor:start_child(?MODULE, scope_child_spec(syn_registry, Scope)),
     supervisor:start_child(?MODULE, scope_child_spec(syn_groups, Scope)),
@@ -68,7 +70,11 @@ add_node_to_scope(Scope) ->
 -spec init([]) ->
     {ok, {{supervisor:strategy(), non_neg_integer(), pos_integer()}, [supervisor:child_spec()]}}.
 init([]) ->
+    %% empty on application start, but populated if the supervisor is restarted
     Children = lists:foldl(fun(Scope, Acc) ->
+        %% create ETS tables
+        syn_backbone:create_tables_for_scope(Scope),
+        %% add to specs
         [
             scope_child_spec(syn_registry, Scope),
             scope_child_spec(syn_groups, Scope)

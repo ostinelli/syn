@@ -230,9 +230,3 @@ get_process_name_for(Scope) ->
     ModuleBin = atom_to_binary(?MODULE),
     ScopeBin = atom_to_binary(Scope),
     binary_to_atom(<<ModuleBin/binary, "_", ScopeBin/binary>>).
-
-%%-spec get_table_name(TableName :: atom(), Scope :: atom()) -> atom().
-%%get_table_name(TableName, Scope) ->
-%%    TableNameBin = atom_to_binary(TableName),
-%%    ScopeBin = atom_to_binary(Scope),
-%%    binary_to_atom(<<TableNameBin/binary, "_", ScopeBin/binary>>).

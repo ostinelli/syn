@@ -46,8 +46,8 @@ start_link() ->
     {ok, {{supervisor:strategy(), non_neg_integer(), pos_integer()}, [supervisor:child_spec()]}}.
 init([]) ->
     Children = [
-        child_spec(syn_scopes_sup, supervisor),
-        child_spec(syn_backbone, worker)
+        child_spec(syn_backbone, worker),
+        child_spec(syn_scopes_sup, supervisor)
     ],
     {ok, {{one_for_one, 10, 10}, Children}}.
 
