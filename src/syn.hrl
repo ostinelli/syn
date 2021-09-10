@@ -35,7 +35,7 @@
     },
     Meta :: any(),
     Time :: integer(),
-    MonitorRef :: undefined | reference(),
+    MRef :: undefined | reference(),
     Node :: node()
 }.
 -type syn_registry_tuple() :: {
@@ -48,7 +48,7 @@
     GroupName :: any(),
     Pid :: pid(),
     Meta :: any(),
-    MonitorRef :: undefined | reference(),
+    MRef :: undefined | reference(),
     Node :: node()
 }.
 -type syn_groups_tuple() :: {

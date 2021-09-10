@@ -342,8 +342,12 @@ three_nodes_register_unregister_and_monitor_default_scope(Config) ->
     ok = syn:register(<<"my proc">>, Pid),
     ok = syn:register({"my proc alias"}, Pid), %% same pid, different name
     ok = syn:register(<<"my proc with meta">>, PidWithMeta, {meta, <<"meta">>}), %% pid with meta
-    ok = rpc:call(SlaveNode1, syn, register, [{remote_pid_on, slave_1}, PidRemote1]), %% remote on slave 1
+    ok = syn:register({remote_pid_on, slave_1}, PidRemote1), %% remote on slave 1
     timer:sleep(100),
+
+    %% errors
+    {error, taken} = syn:register(<<"my proc">>, PidRemote1),
+    {error, not_alive} = syn:register({"pid not alive"}, list_to_pid("<0.9999.0>")),
 
     %% retrieve
     {Pid, undefined} = syn:lookup(<<"my proc">>),
