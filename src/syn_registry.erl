@@ -217,7 +217,7 @@ handle_call({register_on_node, Name, Pid, Meta}, _From, #state{
 
 handle_call({unregister_on_node, Name, Pid}, _From, #state{scope = Scope} = State) ->
     case find_registry_entry_by_name(Scope, Name) of
-        {{Name, Pid}, _Meta, _Clock, _MRef, _Node} ->
+        {{Name, Pid}, _Meta, _Time, _MRef, _Node} ->
             %% demonitor if the process is not registered under other names
             maybe_demonitor(Scope, Pid),
             %% remove from table
@@ -227,7 +227,7 @@ handle_call({unregister_on_node, Name, Pid}, _From, #state{scope = Scope} = Stat
             %% return
             {reply, ok, State};
 
-        {{Name, _TablePid}, _Meta, _Clock, _MRef, _Node} ->
+        {{Name, _TablePid}, _Meta, _Time, _MRef, _Node} ->
             %% process is registered locally with another pid: race condition, wait for sync to happen & return error
             {reply, {error, race_condition}, State};
 
@@ -247,7 +247,28 @@ handle_call(Request, From, State) ->
     {noreply, #state{}, Timeout :: non_neg_integer()} |
     {stop, Reason :: any(), #state{}}.
 handle_cast({'3.0', sync_register, Scope, Name, Pid, Meta, Time}, State) ->
-    add_to_local_table(Scope, Name, Pid, Meta, Time, undefined),
+
+    ct:pal("----> ~p~n", [{Scope, Name, Pid, Meta, Time}]),
+
+    case find_registry_entry_by_name(Scope, Name) of
+        undefined ->
+            %% no conflict
+            add_to_local_table(Scope, Name, Pid, Meta, Time, undefined);
+
+        {{Name, Pid}, _Meta, TableTime, MRef, _Node} when TableTime < Time ->
+            %% same pid, more recent time
+            add_to_local_table(Scope, Name, Pid, Meta, Time, MRef);
+
+        {{Name, Pid}, _Meta, _TableTime, _MRef, _Node} ->
+            %% same pid, not more recent time
+            ok;
+
+        {{Name, TablePid}, _Meta, _Time, _MRef, _Node} ->
+            %% different pid -> conflict
+
+            ct:pal("CONFLICT!!!!!"),
+            ok
+    end,
     {noreply, State};
 
 handle_cast({'3.0', sync_unregister, Name, Pid}, #state{scope = Scope} = State) ->
@@ -261,7 +282,8 @@ handle_cast({'3.0', announce, RemoteScopePid}, #state{
     RemoteScopeNode = node(RemoteScopePid),
     error_logger:info_msg("SYN[~p] Received announce request from node ~p and scope ~p~n", [node(), RemoteScopeNode, Scope]),
     %% send data
-    cast_to_node(RemoteScopeNode, {'3.0', sync, self(), []}, State),
+    RegistryTuplesOfLocalNode = get_registry_tuples_for_node(Scope, node()),
+    cast_to_node(RemoteScopeNode, {'3.0', sync, self(), RegistryTuplesOfLocalNode}, State),
     %% is this a new node?
     case maps:is_key(RemoteScopeNode, Nodes) of
         true ->
@@ -275,12 +297,18 @@ handle_cast({'3.0', announce, RemoteScopePid}, #state{
             {noreply, State#state{nodes = Nodes#{RemoteScopeNode => RemoteScopePid}}}
     end;
 
-handle_cast({'3.0', sync, RemoteScopePid, _Data}, #state{
+handle_cast({'3.0', sync, RemoteScopePid, RegistryTuplesOfRemoteNode}, #state{
     scope = Scope,
     nodes = Nodes
 } = State) ->
     RemoteScopeNode = node(RemoteScopePid),
-    error_logger:info_msg("SYN[~p] Received sync data from node ~p and scope ~p~n", [node(), RemoteScopeNode, Scope]),
+    error_logger:info_msg("SYN[~p] Received sync data (~p entries) from node ~p and scope ~p~n",
+        [node(), length(RegistryTuplesOfRemoteNode), RemoteScopeNode, Scope]
+    ),
+    %% insert tuples
+    lists:foreach(fun({Name, Pid, Meta, Time}) ->
+        add_to_local_table(Scope, Name, Pid, Meta, Time, undefined)
+    end, RegistryTuplesOfRemoteNode),
     %% is this a new node?
     case maps:is_key(RemoteScopeNode, Nodes) of
         true ->
@@ -316,11 +344,11 @@ handle_info({'DOWN', _MRef, process, Pid, _Reason}, #state{
     scope = Scope,
     nodes = Nodes
 } = State) when node(Pid) =/= node() ->
-    PidNode = node(Pid),
-    case maps:take(PidNode, Nodes) of
+    RemoteNode = node(Pid),
+    case maps:take(RemoteNode, Nodes) of
         {Pid, Nodes1} ->
-            error_logger:warning_msg("SYN[~p] Scope Process ~p is DOWN on node ~p~n", [node(), Scope, PidNode]),
-            %% TODO: remove data from node
+            error_logger:info_msg("SYN[~p] Scope Process ~p is DOWN on node ~p~n", [node(), Scope, RemoteNode]),
+            purge_registry_for_remote_node(Scope, RemoteNode),
             {noreply, State#state{nodes = Nodes1}};
 
         error ->
@@ -478,14 +506,22 @@ maybe_demonitor(Scope, Pid) ->
     MRef :: undefined | reference()
 ) -> true.
 add_to_local_table(Scope, Name, Pid, Meta, Time, MRef) ->
-    ets:insert(syn_backbone:get_table_name(syn_registry_by_name, Scope),
+
+    true = ets:insert(syn_backbone:get_table_name(syn_registry_by_name, Scope),
         {{Name, Pid}, Meta, Time, MRef, node(Pid)}
     ),
-    ets:insert(syn_backbone:get_table_name(syn_registry_by_pid, Scope),
+    true = ets:insert(syn_backbone:get_table_name(syn_registry_by_pid, Scope),
         {{Pid, Name}, Meta, Time, MRef, node(Pid)}
-    ).
+    ),
+
+    ct:pal("WTF: ~p~n",[ets:tab2list(syn_backbone:get_table_name(syn_registry_by_name, Scope))]).
 
 -spec remove_from_local_table(Scope :: atom(), Name :: any(), Pid :: pid()) -> true.
 remove_from_local_table(Scope, Name, Pid) ->
-    ets:delete(syn_backbone:get_table_name(syn_registry_by_name, Scope), {Name, Pid}),
-    ets:delete(syn_backbone:get_table_name(syn_registry_by_pid, Scope), {Pid, Name}).
+    true = ets:delete(syn_backbone:get_table_name(syn_registry_by_name, Scope), {Name, Pid}),
+    true = ets:delete(syn_backbone:get_table_name(syn_registry_by_pid, Scope), {Pid, Name}).
+
+-spec purge_registry_for_remote_node(Scope :: atom(), Node :: atom()) -> true.
+purge_registry_for_remote_node(Scope, Node) when Node =/= node() ->
+    true = ets:match_delete(syn_backbone:get_table_name(syn_registry_by_name, Scope), {{'_', '_'}, '_', '_', '_', Node}),
+    true = ets:match_delete(syn_backbone:get_table_name(syn_registry_by_pid, Scope), {{'_', '_'}, '_', '_', '_', Node}).

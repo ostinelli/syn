@@ -36,7 +36,8 @@
     three_nodes_discover_default_scope/1,
     three_nodes_discover_custom_scope/1,
     three_nodes_register_unregister_and_monitor_default_scope/1,
-    three_nodes_register_unregister_and_monitor_custom_scope/1
+    three_nodes_register_unregister_and_monitor_custom_scope/1,
+    three_nodes_cluster_changes_and_conflicts/1
 ]).
 
 %% include
@@ -74,10 +75,11 @@ all() ->
 groups() ->
     [
         {three_nodes_process_registration, [shuffle], [
-            three_nodes_discover_default_scope,
-            three_nodes_discover_custom_scope,
-            three_nodes_register_unregister_and_monitor_default_scope,
-            three_nodes_register_unregister_and_monitor_custom_scope
+%%            three_nodes_discover_default_scope,
+%%            three_nodes_discover_custom_scope,
+%%            three_nodes_register_unregister_and_monitor_default_scope,
+%%            three_nodes_register_unregister_and_monitor_custom_scope,
+            three_nodes_cluster_changes_and_conflicts
         ]}
     ].
 %% -------------------------------------------------------------------
@@ -444,7 +446,7 @@ three_nodes_register_unregister_and_monitor_custom_scope(Config) ->
     %% add custom scopes
     ok = syn:add_node_to_scope(custom_scope_ab),
     ok = rpc:call(SlaveNode1, syn, add_node_to_scopes, [[custom_scope_ab, custom_scope_bc]]),
-    ok = rpc:call(SlaveNode2, syn, add_node_to_scopes, [[custom_scope_bc, custom_scope_c]]),
+    ok = rpc:call(SlaveNode2, syn, add_node_to_scopes, [[custom_scope_bc]]),
     timer:sleep(100),
 
     %% start processes
@@ -610,6 +612,197 @@ three_nodes_register_unregister_and_monitor_custom_scope(Config) ->
     syn_registry:remove_from_local_table(custom_scope_ab, <<"my proc">>, Pid1),
     syn_registry:add_to_local_table(custom_scope_ab, <<"my proc">>, Pid2, undefined, 0, undefined),
     {error, race_condition} = rpc:call(SlaveNode1, syn, unregister, [custom_scope_ab, <<"my proc">>]).
+
+three_nodes_cluster_changes_and_conflicts(Config) ->
+    %% get slaves
+    SlaveNode1 = proplists:get_value(slave_node_1, Config),
+    SlaveNode2 = proplists:get_value(slave_node_2, Config),
+
+    %% disconnect 1 from 2
+    rpc:call(SlaveNode1, syn_test_suite_helper, disconnect_node, [SlaveNode2]),
+
+    %% start syn on 1 and 2, nodes don't know of each other
+    ok = rpc:call(SlaveNode1, syn, start, []),
+    ok = rpc:call(SlaveNode2, syn, start, []),
+
+    %% add custom scopes
+    ok = rpc:call(SlaveNode1, syn, add_node_to_scopes, [[custom_scope_bc]]),
+    ok = rpc:call(SlaveNode2, syn, add_node_to_scopes, [[custom_scope_bc]]),
+    timer:sleep(100),
+
+    %% start processes
+    PidRemoteOn1 = syn_test_suite_helper:start_process(SlaveNode1),
+    PidRemoteOn2 = syn_test_suite_helper:start_process(SlaveNode2),
+
+    %% register
+    ok = rpc:call(SlaveNode1, syn, register, ["proc-1", PidRemoteOn1, "meta-1"]),
+    ok = rpc:call(SlaveNode1, syn, register, ["proc-2", PidRemoteOn2, "meta-2"]),
+    ok = rpc:call(SlaveNode1, syn, register, [custom_scope_bc, "BC-proc-1", PidRemoteOn1, "meta-1"]),
+    ok = rpc:call(SlaveNode1, syn, register, [custom_scope_bc, "BC-proc-1 alias", PidRemoteOn1, "meta-1 alias"]),
+    timer:sleep(100),
+
+    %% form full cluster
+    ok = syn:start(),
+    rpc:call(SlaveNode1, syn_test_suite_helper, connect_node, [SlaveNode2]),
+    syn_test_suite_helper:wait_cluster_connected([node(), SlaveNode1, SlaveNode2]),
+
+    %% retrieve
+    {PidRemoteOn1, "meta-1"} = syn:lookup("proc-1"),
+    {PidRemoteOn1, "meta-1"} = rpc:call(SlaveNode1, syn, lookup, ["proc-1"]),
+    {PidRemoteOn1, "meta-1"} = rpc:call(SlaveNode2, syn, lookup, ["proc-1"]),
+    {PidRemoteOn2, "meta-2"} = syn:lookup("proc-2"),
+    {PidRemoteOn2, "meta-2"} = rpc:call(SlaveNode1, syn, lookup, ["proc-2"]),
+    {PidRemoteOn2, "meta-2"} = rpc:call(SlaveNode2, syn, lookup, ["proc-2"]),
+    2 = syn:registry_count(default),
+    0 = syn:registry_count(default, node()),
+    1 = syn:registry_count(default, SlaveNode1),
+    1 = syn:registry_count(default, SlaveNode2),
+    2 = rpc:call(SlaveNode1, syn, registry_count, [default]),
+    0 = rpc:call(SlaveNode1, syn, registry_count, [default, node()]),
+    1 = rpc:call(SlaveNode1, syn, registry_count, [default, SlaveNode1]),
+    1 = rpc:call(SlaveNode1, syn, registry_count, [default, SlaveNode2]),
+    2 = rpc:call(SlaveNode2, syn, registry_count, [default]),
+    0 = rpc:call(SlaveNode2, syn, registry_count, [default, node()]),
+    1 = rpc:call(SlaveNode2, syn, registry_count, [default, SlaveNode1]),
+    1 = rpc:call(SlaveNode2, syn, registry_count, [default, SlaveNode2]),
+
+    {'EXIT', {{invalid_scope, custom_scope_bc}, _}} = catch syn:lookup(custom_scope_bc, "BC-proc-1"),
+    {PidRemoteOn1, "meta-1"} = rpc:call(SlaveNode1, syn, lookup, [custom_scope_bc, "BC-proc-1"]),
+    {PidRemoteOn1, "meta-1"} = rpc:call(SlaveNode2, syn, lookup, [custom_scope_bc, "BC-proc-1"]),
+    {'EXIT', {{invalid_scope, custom_scope_bc}, _}} = catch syn:lookup(custom_scope_bc, "BC-proc-1 alias"),
+    {PidRemoteOn1, "meta-1 alias"} = rpc:call(SlaveNode1, syn, lookup, [custom_scope_bc, "BC-proc-1 alias"]),
+    {PidRemoteOn1, "meta-1 alias"} = rpc:call(SlaveNode2, syn, lookup, [custom_scope_bc, "BC-proc-1 alias"]),
+    {'EXIT', {{invalid_scope, custom_scope_bc}, _}} = catch syn:registry_count(custom_scope_bc),
+    2 = rpc:call(SlaveNode1, syn, registry_count, [custom_scope_bc]),
+    0 = rpc:call(SlaveNode1, syn, registry_count, [custom_scope_bc, node()]),
+    2 = rpc:call(SlaveNode1, syn, registry_count, [custom_scope_bc, SlaveNode1]),
+    0 = rpc:call(SlaveNode1, syn, registry_count, [custom_scope_bc, SlaveNode2]),
+    2 = rpc:call(SlaveNode2, syn, registry_count, [custom_scope_bc]),
+    0 = rpc:call(SlaveNode2, syn, registry_count, [custom_scope_bc, node()]),
+    2 = rpc:call(SlaveNode2, syn, registry_count, [custom_scope_bc, SlaveNode1]),
+    0 = rpc:call(SlaveNode2, syn, registry_count, [custom_scope_bc, SlaveNode2]),
+
+    %% partial netsplit (1 cannot see 2)
+    rpc:call(SlaveNode1, syn_test_suite_helper, disconnect_node, [SlaveNode2]),
+    timer:sleep(100),
+
+    %% retrieve
+    {PidRemoteOn1, "meta-1"} = syn:lookup("proc-1"),
+    {PidRemoteOn1, "meta-1"} = rpc:call(SlaveNode1, syn, lookup, ["proc-1"]),
+    undefined = rpc:call(SlaveNode2, syn, lookup, ["proc-1"]),
+    {PidRemoteOn2, "meta-2"} = syn:lookup("proc-2"),
+    undefined = rpc:call(SlaveNode1, syn, lookup, ["proc-2"]),
+    {PidRemoteOn2, "meta-2"} = rpc:call(SlaveNode2, syn, lookup, ["proc-2"]),
+    2 = syn:registry_count(default),
+    0 = syn:registry_count(default, node()),
+    1 = syn:registry_count(default, SlaveNode1),
+    1 = syn:registry_count(default, SlaveNode2),
+    1 = rpc:call(SlaveNode1, syn, registry_count, [default]),
+    0 = rpc:call(SlaveNode1, syn, registry_count, [default, node()]),
+    1 = rpc:call(SlaveNode1, syn, registry_count, [default, SlaveNode1]),
+    0 = rpc:call(SlaveNode1, syn, registry_count, [default, SlaveNode2]),
+    1 = rpc:call(SlaveNode2, syn, registry_count, [default]),
+    0 = rpc:call(SlaveNode2, syn, registry_count, [default, node()]),
+    0 = rpc:call(SlaveNode2, syn, registry_count, [default, SlaveNode1]),
+    1 = rpc:call(SlaveNode2, syn, registry_count, [default, SlaveNode2]),
+
+    {'EXIT', {{invalid_scope, custom_scope_bc}, _}} = catch syn:lookup(custom_scope_bc, "BC-proc-1"),
+    {PidRemoteOn1, "meta-1"} = rpc:call(SlaveNode1, syn, lookup, [custom_scope_bc, "BC-proc-1"]),
+    undefined = rpc:call(SlaveNode2, syn, lookup, [custom_scope_bc, "BC-proc-1"]),
+    {'EXIT', {{invalid_scope, custom_scope_bc}, _}} = catch syn:lookup(custom_scope_bc, "BC-proc-1 alias"),
+    {PidRemoteOn1, "meta-1 alias"} = rpc:call(SlaveNode1, syn, lookup, [custom_scope_bc, "BC-proc-1 alias"]),
+    undefined = rpc:call(SlaveNode2, syn, lookup, [custom_scope_bc, "BC-proc-1 alias"]),
+    {'EXIT', {{invalid_scope, custom_scope_bc}, _}} = catch syn:registry_count(custom_scope_bc),
+    2 = rpc:call(SlaveNode1, syn, registry_count, [custom_scope_bc]),
+    0 = rpc:call(SlaveNode1, syn, registry_count, [custom_scope_bc, node()]),
+    2 = rpc:call(SlaveNode1, syn, registry_count, [custom_scope_bc, SlaveNode1]),
+    0 = rpc:call(SlaveNode1, syn, registry_count, [custom_scope_bc, SlaveNode2]),
+    0 = rpc:call(SlaveNode2, syn, registry_count, [custom_scope_bc]),
+    0 = rpc:call(SlaveNode2, syn, registry_count, [custom_scope_bc, node()]),
+    0 = rpc:call(SlaveNode2, syn, registry_count, [custom_scope_bc, SlaveNode1]),
+    0 = rpc:call(SlaveNode2, syn, registry_count, [custom_scope_bc, SlaveNode2]),
+
+    %% re-join
+    rpc:call(SlaveNode1, syn_test_suite_helper, connect_node, [SlaveNode2]),
+    syn_test_suite_helper:wait_cluster_connected([node(), SlaveNode1, SlaveNode2]),
+
+    %% retrieve
+    {PidRemoteOn1, "meta-1"} = syn:lookup("proc-1"),
+    {PidRemoteOn1, "meta-1"} = rpc:call(SlaveNode1, syn, lookup, ["proc-1"]),
+    {PidRemoteOn1, "meta-1"} = rpc:call(SlaveNode2, syn, lookup, ["proc-1"]),
+    {PidRemoteOn2, "meta-2"} = syn:lookup("proc-2"),
+    {PidRemoteOn2, "meta-2"} = rpc:call(SlaveNode1, syn, lookup, ["proc-2"]),
+    {PidRemoteOn2, "meta-2"} = rpc:call(SlaveNode2, syn, lookup, ["proc-2"]),
+    2 = syn:registry_count(default),
+    0 = syn:registry_count(default, node()),
+    1 = syn:registry_count(default, SlaveNode1),
+    1 = syn:registry_count(default, SlaveNode2),
+    2 = rpc:call(SlaveNode1, syn, registry_count, [default]),
+    0 = rpc:call(SlaveNode1, syn, registry_count, [default, node()]),
+    1 = rpc:call(SlaveNode1, syn, registry_count, [default, SlaveNode1]),
+    1 = rpc:call(SlaveNode1, syn, registry_count, [default, SlaveNode2]),
+    2 = rpc:call(SlaveNode2, syn, registry_count, [default]),
+    0 = rpc:call(SlaveNode2, syn, registry_count, [default, node()]),
+    1 = rpc:call(SlaveNode2, syn, registry_count, [default, SlaveNode1]),
+    1 = rpc:call(SlaveNode2, syn, registry_count, [default, SlaveNode2]),
+
+    {'EXIT', {{invalid_scope, custom_scope_bc}, _}} = catch syn:lookup(custom_scope_bc, "BC-proc-1"),
+    {PidRemoteOn1, "meta-1"} = rpc:call(SlaveNode1, syn, lookup, [custom_scope_bc, "BC-proc-1"]),
+    {PidRemoteOn1, "meta-1"} = rpc:call(SlaveNode2, syn, lookup, [custom_scope_bc, "BC-proc-1"]),
+    {'EXIT', {{invalid_scope, custom_scope_bc}, _}} = catch syn:lookup(custom_scope_bc, "BC-proc-1 alias"),
+    {PidRemoteOn1, "meta-1 alias"} = rpc:call(SlaveNode1, syn, lookup, [custom_scope_bc, "BC-proc-1 alias"]),
+    {PidRemoteOn1, "meta-1 alias"} = rpc:call(SlaveNode2, syn, lookup, [custom_scope_bc, "BC-proc-1 alias"]),
+    {'EXIT', {{invalid_scope, custom_scope_bc}, _}} = catch syn:registry_count(custom_scope_bc),
+    2 = rpc:call(SlaveNode1, syn, registry_count, [custom_scope_bc]),
+    0 = rpc:call(SlaveNode1, syn, registry_count, [custom_scope_bc, node()]),
+    2 = rpc:call(SlaveNode1, syn, registry_count, [custom_scope_bc, SlaveNode1]),
+    0 = rpc:call(SlaveNode1, syn, registry_count, [custom_scope_bc, SlaveNode2]),
+    2 = rpc:call(SlaveNode2, syn, registry_count, [custom_scope_bc]),
+    0 = rpc:call(SlaveNode2, syn, registry_count, [custom_scope_bc, node()]),
+    2 = rpc:call(SlaveNode2, syn, registry_count, [custom_scope_bc, SlaveNode1]),
+    0 = rpc:call(SlaveNode2, syn, registry_count, [custom_scope_bc, SlaveNode2]),
+
+    %% partial netsplit (1 cannot see 2)
+    rpc:call(SlaveNode1, syn_test_suite_helper, disconnect_node, [SlaveNode2]),
+    timer:sleep(100),
+
+    %% start conflict processes
+    Pid2RemoteOn1 = syn_test_suite_helper:start_process(SlaveNode1),
+    Pid2RemoteOn2 = syn_test_suite_helper:start_process(SlaveNode2),
+
+    ct:pal("STARTED On1: ~p, On2: ~p", [Pid2RemoteOn1, Pid2RemoteOn2]),
+
+    %% register conflicts new during netsplit
+    ok = rpc:call(SlaveNode1, syn, register, ["proc-2", Pid2RemoteOn1, "new-meta-2"]),
+    ok = rpc:call(SlaveNode2, syn, register, ["proc-1", Pid2RemoteOn2, "new-meta-1"]),
+
+    %% re-join
+    rpc:call(SlaveNode1, syn_test_suite_helper, connect_node, [SlaveNode2]),
+    syn_test_suite_helper:wait_cluster_connected([node(), SlaveNode1, SlaveNode2]),
+
+    %% retrieve
+    {Pid2RemoteOn2, "new-meta-1"} = syn:lookup("proc-1"),
+    {Pid2RemoteOn2, "new-meta-1"} = rpc:call(SlaveNode1, syn, lookup, ["proc-1"]),
+    {Pid2RemoteOn2, "new-meta-1"} = rpc:call(SlaveNode2, syn, lookup, ["proc-1"]),
+    {Pid2RemoteOn1, "new-meta-2"} = syn:lookup("proc-2"),
+    {Pid2RemoteOn1, "new-meta-2"} = rpc:call(SlaveNode1, syn, lookup, ["proc-2"]),
+    {Pid2RemoteOn1, "new-meta-2"} = rpc:call(SlaveNode2, syn, lookup, ["proc-2"]),
+    2 = syn:registry_count(default),
+    0 = syn:registry_count(default, node()),
+    1 = syn:registry_count(default, SlaveNode1),
+    1 = syn:registry_count(default, SlaveNode2),
+    2 = rpc:call(SlaveNode1, syn, registry_count, [default]),
+    0 = rpc:call(SlaveNode1, syn, registry_count, [default, node()]),
+    1 = rpc:call(SlaveNode1, syn, registry_count, [default, SlaveNode1]),
+    1 = rpc:call(SlaveNode1, syn, registry_count, [default, SlaveNode2]),
+    2 = rpc:call(SlaveNode2, syn, registry_count, [default]),
+    0 = rpc:call(SlaveNode2, syn, registry_count, [default, node()]),
+    1 = rpc:call(SlaveNode2, syn, registry_count, [default, SlaveNode1]),
+    1 = rpc:call(SlaveNode2, syn, registry_count, [default, SlaveNode2]).
+
+
+
+
 
 %% ===================================================================
 %% Internal
