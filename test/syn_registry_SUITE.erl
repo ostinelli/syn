@@ -35,7 +35,8 @@
 -export([
     three_nodes_discover_default_scope/1,
     three_nodes_discover_custom_scope/1,
-    three_nodes_register_unregister_and_monitor_default_scope/1
+    three_nodes_register_unregister_and_monitor_default_scope/1,
+    three_nodes_register_unregister_and_monitor_custom_scope/1
 ]).
 
 %% include
@@ -75,7 +76,8 @@ groups() ->
         {three_nodes_process_registration, [shuffle], [
             three_nodes_discover_default_scope,
             three_nodes_discover_custom_scope,
-            three_nodes_register_unregister_and_monitor_default_scope
+            three_nodes_register_unregister_and_monitor_default_scope,
+            three_nodes_register_unregister_and_monitor_custom_scope
         ]}
     ].
 %% -------------------------------------------------------------------
@@ -235,19 +237,19 @@ three_nodes_discover_custom_scope(Config) ->
     timer:sleep(100),
 
     %% add custom scopes
-    ok = syn:add_node_to_scope(custom_scope_a),
+    ok = syn:add_node_to_scope(custom_scope_ab),
     ok = syn:add_node_to_scope(custom_scope_all),
-    ok = rpc:call(SlaveNode1, syn, add_node_to_scopes, [[custom_scope_a, custom_scope_b, custom_scope_all]]),
-    ok = rpc:call(SlaveNode2, syn, add_node_to_scopes, [[custom_scope_b, custom_scope_c, custom_scope_all]]),
+    ok = rpc:call(SlaveNode1, syn, add_node_to_scopes, [[custom_scope_ab, custom_scope_bc, custom_scope_all]]),
+    ok = rpc:call(SlaveNode2, syn, add_node_to_scopes, [[custom_scope_bc, custom_scope_c, custom_scope_all]]),
     timer:sleep(100),
 
     %% check
-    assert_scope_subcluster(node(), custom_scope_a, [SlaveNode1]),
+    assert_scope_subcluster(node(), custom_scope_ab, [SlaveNode1]),
     assert_scope_subcluster(node(), custom_scope_all, [SlaveNode1, SlaveNode2]),
-    assert_scope_subcluster(SlaveNode1, custom_scope_a, [node()]),
-    assert_scope_subcluster(SlaveNode1, custom_scope_b, [SlaveNode2]),
+    assert_scope_subcluster(SlaveNode1, custom_scope_ab, [node()]),
+    assert_scope_subcluster(SlaveNode1, custom_scope_bc, [SlaveNode2]),
     assert_scope_subcluster(SlaveNode1, custom_scope_all, [node(), SlaveNode2]),
-    assert_scope_subcluster(SlaveNode2, custom_scope_b, [SlaveNode1]),
+    assert_scope_subcluster(SlaveNode2, custom_scope_bc, [SlaveNode1]),
     assert_scope_subcluster(SlaveNode2, custom_scope_c, []),
     assert_scope_subcluster(SlaveNode2, custom_scope_all, [node(), SlaveNode1]),
 
@@ -261,10 +263,10 @@ three_nodes_discover_custom_scope(Config) ->
     timer:sleep(100),
 
     %% check
-    assert_scope_subcluster(node(), custom_scope_a, [SlaveNode1]),
+    assert_scope_subcluster(node(), custom_scope_ab, [SlaveNode1]),
     assert_scope_subcluster(node(), custom_scope_all, [SlaveNode1]),
-    assert_scope_subcluster(SlaveNode1, custom_scope_a, [node()]),
-    assert_scope_subcluster(SlaveNode1, custom_scope_b, [SlaveNode2]),
+    assert_scope_subcluster(SlaveNode1, custom_scope_ab, [node()]),
+    assert_scope_subcluster(SlaveNode1, custom_scope_bc, [SlaveNode2]),
     assert_scope_subcluster(SlaveNode1, custom_scope_all, [node(), SlaveNode2]),
 
     %% reconnect node 2
@@ -272,26 +274,26 @@ three_nodes_discover_custom_scope(Config) ->
     ok = syn_test_suite_helper:wait_cluster_connected([node(), SlaveNode1, SlaveNode2]),
 
     %% check
-    assert_scope_subcluster(node(), custom_scope_a, [SlaveNode1]),
+    assert_scope_subcluster(node(), custom_scope_ab, [SlaveNode1]),
     assert_scope_subcluster(node(), custom_scope_all, [SlaveNode1, SlaveNode2]),
-    assert_scope_subcluster(SlaveNode1, custom_scope_a, [node()]),
-    assert_scope_subcluster(SlaveNode1, custom_scope_b, [SlaveNode2]),
+    assert_scope_subcluster(SlaveNode1, custom_scope_ab, [node()]),
+    assert_scope_subcluster(SlaveNode1, custom_scope_bc, [SlaveNode2]),
     assert_scope_subcluster(SlaveNode1, custom_scope_all, [node(), SlaveNode2]),
-    assert_scope_subcluster(SlaveNode2, custom_scope_b, [SlaveNode1]),
+    assert_scope_subcluster(SlaveNode2, custom_scope_bc, [SlaveNode1]),
     assert_scope_subcluster(SlaveNode2, custom_scope_c, []),
     assert_scope_subcluster(SlaveNode2, custom_scope_all, [node(), SlaveNode1]),
 
     %% crash a scope process on 2
-    rpc:call(SlaveNode2, syn_test_suite_helper, kill_process, [syn_registry_custom_scope_b]),
+    rpc:call(SlaveNode2, syn_test_suite_helper, kill_process, [syn_registry_custom_scope_bc]),
     timer:sleep(100),
 
     %% check
-    assert_scope_subcluster(node(), custom_scope_a, [SlaveNode1]),
+    assert_scope_subcluster(node(), custom_scope_ab, [SlaveNode1]),
     assert_scope_subcluster(node(), custom_scope_all, [SlaveNode1, SlaveNode2]),
-    assert_scope_subcluster(SlaveNode1, custom_scope_a, [node()]),
-    assert_scope_subcluster(SlaveNode1, custom_scope_b, [SlaveNode2]),
+    assert_scope_subcluster(SlaveNode1, custom_scope_ab, [node()]),
+    assert_scope_subcluster(SlaveNode1, custom_scope_bc, [SlaveNode2]),
     assert_scope_subcluster(SlaveNode1, custom_scope_all, [node(), SlaveNode2]),
-    assert_scope_subcluster(SlaveNode2, custom_scope_b, [SlaveNode1]),
+    assert_scope_subcluster(SlaveNode2, custom_scope_bc, [SlaveNode1]),
     assert_scope_subcluster(SlaveNode2, custom_scope_c, []),
     assert_scope_subcluster(SlaveNode2, custom_scope_all, [node(), SlaveNode1]),
 
@@ -300,12 +302,12 @@ three_nodes_discover_custom_scope(Config) ->
     timer:sleep(100),
 
     %% check
-    assert_scope_subcluster(node(), custom_scope_a, [SlaveNode1]),
+    assert_scope_subcluster(node(), custom_scope_ab, [SlaveNode1]),
     assert_scope_subcluster(node(), custom_scope_all, [SlaveNode1, SlaveNode2]),
-    assert_scope_subcluster(SlaveNode1, custom_scope_a, [node()]),
-    assert_scope_subcluster(SlaveNode1, custom_scope_b, [SlaveNode2]),
+    assert_scope_subcluster(SlaveNode1, custom_scope_ab, [node()]),
+    assert_scope_subcluster(SlaveNode1, custom_scope_bc, [SlaveNode2]),
     assert_scope_subcluster(SlaveNode1, custom_scope_all, [node(), SlaveNode2]),
-    assert_scope_subcluster(SlaveNode2, custom_scope_b, [SlaveNode1]),
+    assert_scope_subcluster(SlaveNode2, custom_scope_bc, [SlaveNode1]),
     assert_scope_subcluster(SlaveNode2, custom_scope_c, []),
     assert_scope_subcluster(SlaveNode2, custom_scope_all, [node(), SlaveNode1]).
 
@@ -322,7 +324,7 @@ three_nodes_register_unregister_and_monitor_default_scope(Config) ->
     %% start processes
     Pid = syn_test_suite_helper:start_process(),
     PidWithMeta = syn_test_suite_helper:start_process(),
-    PidRemote1 = syn_test_suite_helper:start_process(SlaveNode1),
+    PidRemoteOn1 = syn_test_suite_helper:start_process(SlaveNode1),
 
     %% retrieve
     undefined = syn:lookup(<<"my proc">>),
@@ -338,6 +340,7 @@ three_nodes_register_unregister_and_monitor_default_scope(Config) ->
     undefined = rpc:call(SlaveNode1, syn, lookup, [{remote_pid_on, slave_1}]),
     undefined = rpc:call(SlaveNode2, syn, lookup, [{remote_pid_on, slave_1}]),
     0 = syn:registry_count(default),
+    0 = syn:registry_count(default, node()),
     0 = syn:registry_count(default, SlaveNode1),
     0 = syn:registry_count(default, SlaveNode2),
 
@@ -345,11 +348,11 @@ three_nodes_register_unregister_and_monitor_default_scope(Config) ->
     ok = syn:register(<<"my proc">>, Pid),
     ok = syn:register({"my proc alias"}, Pid), %% same pid, different name
     ok = syn:register(<<"my proc with meta">>, PidWithMeta, {meta, <<"meta">>}), %% pid with meta
-    ok = syn:register({remote_pid_on, slave_1}, PidRemote1), %% remote on slave 1
+    ok = syn:register({remote_pid_on, slave_1}, PidRemoteOn1), %% remote on slave 1
     timer:sleep(100),
 
     %% errors
-    {error, taken} = syn:register(<<"my proc">>, PidRemote1),
+    {error, taken} = syn:register(<<"my proc">>, PidRemoteOn1),
     {error, not_alive} = syn:register({"pid not alive"}, list_to_pid("<0.9999.0>")),
 
     %% retrieve
@@ -362,9 +365,9 @@ three_nodes_register_unregister_and_monitor_default_scope(Config) ->
     {PidWithMeta, {meta, <<"meta">>}} = syn:lookup(<<"my proc with meta">>),
     {PidWithMeta, {meta, <<"meta">>}} = rpc:call(SlaveNode1, syn, lookup, [<<"my proc with meta">>]),
     {PidWithMeta, {meta, <<"meta">>}} = rpc:call(SlaveNode2, syn, lookup, [<<"my proc with meta">>]),
-    {PidRemote1, undefined} = syn:lookup({remote_pid_on, slave_1}),
-    {PidRemote1, undefined} = rpc:call(SlaveNode1, syn, lookup, [{remote_pid_on, slave_1}]),
-    {PidRemote1, undefined} = rpc:call(SlaveNode2, syn, lookup, [{remote_pid_on, slave_1}]),
+    {PidRemoteOn1, undefined} = syn:lookup({remote_pid_on, slave_1}),
+    {PidRemoteOn1, undefined} = rpc:call(SlaveNode1, syn, lookup, [{remote_pid_on, slave_1}]),
+    {PidRemoteOn1, undefined} = rpc:call(SlaveNode2, syn, lookup, [{remote_pid_on, slave_1}]),
     4 = syn:registry_count(default),
     3 = syn:registry_count(default, node()),
     1 = syn:registry_count(default, SlaveNode1),
@@ -372,16 +375,16 @@ three_nodes_register_unregister_and_monitor_default_scope(Config) ->
 
     %% re-register to edit meta
     ok = syn:register(<<"my proc with meta">>, PidWithMeta, {meta2, <<"meta2">>}),
-    ok = rpc:call(SlaveNode2, syn, register, [{remote_pid_on, slave_1}, PidRemote1, added_meta]), %% updated on slave 2
+    ok = rpc:call(SlaveNode2, syn, register, [{remote_pid_on, slave_1}, PidRemoteOn1, added_meta]), %% updated on slave 2
     timer:sleep(100),
 
     %% retrieve
     {PidWithMeta, {meta2, <<"meta2">>}} = syn:lookup(<<"my proc with meta">>),
     {PidWithMeta, {meta2, <<"meta2">>}} = rpc:call(SlaveNode1, syn, lookup, [<<"my proc with meta">>]),
     {PidWithMeta, {meta2, <<"meta2">>}} = rpc:call(SlaveNode2, syn, lookup, [<<"my proc with meta">>]),
-    {PidRemote1, added_meta} = syn:lookup({remote_pid_on, slave_1}),
-    {PidRemote1, added_meta} = rpc:call(SlaveNode1, syn, lookup, [{remote_pid_on, slave_1}]),
-    {PidRemote1, added_meta} = rpc:call(SlaveNode2, syn, lookup, [{remote_pid_on, slave_1}]),
+    {PidRemoteOn1, added_meta} = syn:lookup({remote_pid_on, slave_1}),
+    {PidRemoteOn1, added_meta} = rpc:call(SlaveNode1, syn, lookup, [{remote_pid_on, slave_1}]),
+    {PidRemoteOn1, added_meta} = rpc:call(SlaveNode2, syn, lookup, [{remote_pid_on, slave_1}]),
     4 = syn:registry_count(default),
     3 = syn:registry_count(default, node()),
     1 = syn:registry_count(default, SlaveNode1),
@@ -389,7 +392,7 @@ three_nodes_register_unregister_and_monitor_default_scope(Config) ->
 
     %% kill process
     syn_test_suite_helper:kill_process(Pid),
-    syn_test_suite_helper:kill_process(PidRemote1),
+    syn_test_suite_helper:kill_process(PidRemoteOn1),
     %% unregister process
     ok = syn:unregister(<<"my proc with meta">>),
     timer:sleep(100),
@@ -412,9 +415,6 @@ three_nodes_register_unregister_and_monitor_default_scope(Config) ->
     0 = syn:registry_count(default, SlaveNode1),
     0 = syn:registry_count(default, SlaveNode2),
 
-    %% clean
-    syn_test_suite_helper:kill_process(PidWithMeta),
-
     %% errors
     {error, undefined} = syn:unregister({invalid_name}),
 
@@ -425,11 +425,183 @@ three_nodes_register_unregister_and_monitor_default_scope(Config) ->
     timer:sleep(100),
     syn_registry:remove_from_local_table(default, <<"my proc">>, Pid1),
     syn_registry:add_to_local_table(default, <<"my proc">>, Pid2, undefined, 0, undefined),
-    {error, race_condition} = rpc:call(SlaveNode1, syn, unregister, [<<"my proc">>]),
+    {error, race_condition} = rpc:call(SlaveNode1, syn, unregister, [<<"my proc">>]).
 
-    %% kill
-    syn_test_suite_helper:kill_process(Pid1),
-    syn_test_suite_helper:kill_process(Pid2).
+three_nodes_register_unregister_and_monitor_custom_scope(Config) ->
+    %% get slaves
+    SlaveNode1 = proplists:get_value(slave_node_1, Config),
+    SlaveNode2 = proplists:get_value(slave_node_2, Config),
+    %% start syn on nodes
+    ok = syn:start(),
+    ok = rpc:call(SlaveNode1, syn, start, []),
+    ok = rpc:call(SlaveNode2, syn, start, []),
+    timer:sleep(100),
+
+    %% add custom scopes
+    ok = syn:add_node_to_scope(custom_scope_ab),
+    ok = rpc:call(SlaveNode1, syn, add_node_to_scopes, [[custom_scope_ab, custom_scope_bc]]),
+    ok = rpc:call(SlaveNode2, syn, add_node_to_scopes, [[custom_scope_bc, custom_scope_c]]),
+    timer:sleep(100),
+
+    %% start processes
+    Pid = syn_test_suite_helper:start_process(),
+    PidWithMeta = syn_test_suite_helper:start_process(),
+    PidRemoteWithMetaOn1 = syn_test_suite_helper:start_process(SlaveNode1),
+
+    %% retrieve
+    undefined = syn:lookup("scope_a"),
+    undefined = syn:lookup("scope_a"),
+    undefined = rpc:call(SlaveNode1, syn, lookup, ["scope_a"]),
+    undefined = syn:lookup(custom_scope_ab, "scope_a"),
+    undefined = rpc:call(SlaveNode1, syn, lookup, [custom_scope_ab, "scope_a"]),
+    {badrpc, {'EXIT', {{invalid_scope, custom_scope_ab}, _}}} = catch rpc:call(SlaveNode2, syn, lookup, [custom_scope_ab, "scope_a"]),
+    undefined = syn:lookup(custom_scope_ab, "scope_a_alias"),
+    undefined = rpc:call(SlaveNode1, syn, lookup, [custom_scope_ab, "scope_a_alias"]),
+    {badrpc, {'EXIT', {{invalid_scope, custom_scope_ab}, _}}} = catch rpc:call(SlaveNode2, syn, lookup, [custom_scope_ab, "scope_a_alias"]),
+    {'EXIT', {{invalid_scope, custom_scope_bc}, _}} = catch syn:lookup(custom_scope_bc, {remote_scoped_bc}),
+    undefined = rpc:call(SlaveNode1, syn, lookup, [custom_scope_bc, {remote_scoped_bc}]),
+    undefined = rpc:call(SlaveNode2, syn, lookup, [custom_scope_bc, {remote_scoped_bc}]),
+    0 = syn:registry_count(custom_scope_ab),
+    0 = syn:registry_count(custom_scope_ab, node()),
+    0 = syn:registry_count(custom_scope_ab, SlaveNode1),
+    0 = syn:registry_count(custom_scope_ab, SlaveNode2),
+    {'EXIT', {{invalid_scope, custom_scope_bc}, _}} = catch syn:registry_count(custom_scope_bc),
+    {'EXIT', {{invalid_scope, custom_scope_bc}, _}} = catch syn:registry_count(custom_scope_bc, node()),
+    {'EXIT', {{invalid_scope, custom_scope_bc}, _}} = catch syn:registry_count(custom_scope_bc, SlaveNode1),
+    {'EXIT', {{invalid_scope, custom_scope_bc}, _}} = catch syn:registry_count(custom_scope_bc, SlaveNode2),
+    0 = rpc:call(SlaveNode1, syn, registry_count, [custom_scope_ab]),
+    0 = rpc:call(SlaveNode1, syn, registry_count, [custom_scope_ab, node()]),
+    0 = rpc:call(SlaveNode1, syn, registry_count, [custom_scope_ab, SlaveNode1]),
+    0 = rpc:call(SlaveNode1, syn, registry_count, [custom_scope_ab, SlaveNode2]),
+    0 = rpc:call(SlaveNode1, syn, registry_count, [custom_scope_bc]),
+    0 = rpc:call(SlaveNode1, syn, registry_count, [custom_scope_bc, node()]),
+    0 = rpc:call(SlaveNode1, syn, registry_count, [custom_scope_bc, SlaveNode1]),
+    0 = rpc:call(SlaveNode1, syn, registry_count, [custom_scope_bc, SlaveNode2]),
+    {badrpc, {'EXIT', {{invalid_scope, custom_scope_ab}, _}}} = catch rpc:call(SlaveNode2, syn, registry_count, [custom_scope_ab]),
+    {badrpc, {'EXIT', {{invalid_scope, custom_scope_ab}, _}}} = catch rpc:call(SlaveNode2, syn, registry_count, [custom_scope_ab, node()]),
+    {badrpc, {'EXIT', {{invalid_scope, custom_scope_ab}, _}}} = catch rpc:call(SlaveNode2, syn, registry_count, [custom_scope_ab, SlaveNode1]),
+    {badrpc, {'EXIT', {{invalid_scope, custom_scope_ab}, _}}} = catch rpc:call(SlaveNode2, syn, registry_count, [custom_scope_ab, SlaveNode2]),
+    0 = rpc:call(SlaveNode2, syn, registry_count, [custom_scope_bc]),
+    0 = rpc:call(SlaveNode2, syn, registry_count, [custom_scope_bc, node()]),
+    0 = rpc:call(SlaveNode2, syn, registry_count, [custom_scope_bc, SlaveNode1]),
+    0 = rpc:call(SlaveNode2, syn, registry_count, [custom_scope_bc, SlaveNode2]),
+
+    %% register
+    ok = syn:register(custom_scope_ab, "scope_a", Pid),
+    ok = syn:register(custom_scope_ab, "scope_a_alias", PidWithMeta, <<"with_meta">>),
+    {'EXIT', {{invalid_scope, custom_scope_bc}, _}} = catch syn:register(custom_scope_bc, "scope_a", Pid),
+    {'EXIT', {{invalid_scope, non_existent_scope}, _}} = catch syn:register(non_existent_scope, "scope_a", Pid),
+    ok = rpc:call(SlaveNode2, syn, register, [custom_scope_bc, {remote_scoped_bc}, PidRemoteWithMetaOn1, <<"with_meta 1">>]),
+    timer:sleep(100),
+
+    %% errors
+    {error, taken} = syn:register(custom_scope_ab, "scope_a", PidWithMeta),
+    {error, not_alive} = syn:register(custom_scope_ab, {"pid not alive"}, list_to_pid("<0.9999.0>")),
+    {'EXIT', {{invalid_scope, custom_scope_bc}, _}} = catch syn:register(custom_scope_bc, "scope_a_noscope", Pid),
+
+    %% retrieve
+    undefined = syn:lookup("scope_a"),
+    undefined = syn:lookup("scope_a"),
+    undefined = rpc:call(SlaveNode1, syn, lookup, ["scope_a"]),
+    {Pid, undefined} = syn:lookup(custom_scope_ab, "scope_a"),
+    {Pid, undefined} = rpc:call(SlaveNode1, syn, lookup, [custom_scope_ab, "scope_a"]),
+    {badrpc, {'EXIT', {{invalid_scope, custom_scope_ab}, _}}} = catch rpc:call(SlaveNode2, syn, lookup, [custom_scope_ab, "scope_a"]),
+    {PidWithMeta, <<"with_meta">>} = syn:lookup(custom_scope_ab, "scope_a_alias"),
+    {PidWithMeta, <<"with_meta">>} = rpc:call(SlaveNode1, syn, lookup, [custom_scope_ab, "scope_a_alias"]),
+    {badrpc, {'EXIT', {{invalid_scope, custom_scope_ab}, _}}} = catch rpc:call(SlaveNode2, syn, lookup, [custom_scope_ab, "scope_a_alias"]),
+    {'EXIT', {{invalid_scope, custom_scope_bc}, _}} = catch syn:lookup(custom_scope_bc, {remote_scoped_bc}),
+    {PidRemoteWithMetaOn1, <<"with_meta 1">>} = rpc:call(SlaveNode1, syn, lookup, [custom_scope_bc, {remote_scoped_bc}]),
+    {PidRemoteWithMetaOn1, <<"with_meta 1">>} = rpc:call(SlaveNode2, syn, lookup, [custom_scope_bc, {remote_scoped_bc}]),
+    2 = syn:registry_count(custom_scope_ab),
+    2 = syn:registry_count(custom_scope_ab, node()),
+    0 = syn:registry_count(custom_scope_ab, SlaveNode1),
+    0 = syn:registry_count(custom_scope_ab, SlaveNode2),
+    {'EXIT', {{invalid_scope, custom_scope_bc}, _}} = catch syn:registry_count(custom_scope_bc),
+    {'EXIT', {{invalid_scope, custom_scope_bc}, _}} = catch syn:registry_count(custom_scope_bc, node()),
+    {'EXIT', {{invalid_scope, custom_scope_bc}, _}} = catch syn:registry_count(custom_scope_bc, SlaveNode1),
+    {'EXIT', {{invalid_scope, custom_scope_bc}, _}} = catch syn:registry_count(custom_scope_bc, SlaveNode2),
+    2 = rpc:call(SlaveNode1, syn, registry_count, [custom_scope_ab]),
+    2 = rpc:call(SlaveNode1, syn, registry_count, [custom_scope_ab, node()]),
+    0 = rpc:call(SlaveNode1, syn, registry_count, [custom_scope_ab, SlaveNode1]),
+    0 = rpc:call(SlaveNode1, syn, registry_count, [custom_scope_ab, SlaveNode2]),
+    1 = rpc:call(SlaveNode1, syn, registry_count, [custom_scope_bc]),
+    0 = rpc:call(SlaveNode1, syn, registry_count, [custom_scope_bc, node()]),
+    1 = rpc:call(SlaveNode1, syn, registry_count, [custom_scope_bc, SlaveNode1]),
+    0 = rpc:call(SlaveNode1, syn, registry_count, [custom_scope_bc, SlaveNode2]),
+    {badrpc, {'EXIT', {{invalid_scope, custom_scope_ab}, _}}} = catch rpc:call(SlaveNode2, syn, registry_count, [custom_scope_ab]),
+    {badrpc, {'EXIT', {{invalid_scope, custom_scope_ab}, _}}} = catch rpc:call(SlaveNode2, syn, registry_count, [custom_scope_ab, node()]),
+    {badrpc, {'EXIT', {{invalid_scope, custom_scope_ab}, _}}} = catch rpc:call(SlaveNode2, syn, registry_count, [custom_scope_ab, SlaveNode1]),
+    {badrpc, {'EXIT', {{invalid_scope, custom_scope_ab}, _}}} = catch rpc:call(SlaveNode2, syn, registry_count, [custom_scope_ab, SlaveNode2]),
+    1 = rpc:call(SlaveNode2, syn, registry_count, [custom_scope_bc]),
+    0 = rpc:call(SlaveNode2, syn, registry_count, [custom_scope_bc, node()]),
+    1 = rpc:call(SlaveNode2, syn, registry_count, [custom_scope_bc, SlaveNode1]),
+    0 = rpc:call(SlaveNode2, syn, registry_count, [custom_scope_bc, SlaveNode2]),
+
+    %% re-register to edit meta
+    ok = syn:register(custom_scope_ab, "scope_a_alias", PidWithMeta, <<"with_meta_updated">>),
+    timer:sleep(100),
+    {PidWithMeta, <<"with_meta_updated">>} = syn:lookup(custom_scope_ab, "scope_a_alias"),
+    {PidWithMeta, <<"with_meta_updated">>} = rpc:call(SlaveNode1, syn, lookup, [custom_scope_ab, "scope_a_alias"]),
+    {badrpc, {'EXIT', {{invalid_scope, custom_scope_ab}, _}}} = catch rpc:call(SlaveNode2, syn, lookup, [custom_scope_ab, "scope_a_alias"]),
+
+    %% kill process
+    syn_test_suite_helper:kill_process(Pid),
+    syn_test_suite_helper:kill_process(PidWithMeta),
+    %% unregister processes
+    {error, undefined} = catch syn:unregister(<<"my proc with meta">>),
+    {'EXIT', {{invalid_scope, custom_scope_bc}, _}} = catch syn:unregister(custom_scope_bc, <<"my proc with meta">>),
+    ok = rpc:call(SlaveNode1, syn, unregister, [custom_scope_bc, {remote_scoped_bc}]),
+    timer:sleep(100),
+
+    %% retrieve
+    undefined = syn:lookup("scope_a"),
+    undefined = syn:lookup("scope_a"),
+    undefined = rpc:call(SlaveNode1, syn, lookup, ["scope_a"]),
+    undefined = syn:lookup(custom_scope_ab, "scope_a"),
+    undefined = rpc:call(SlaveNode1, syn, lookup, [custom_scope_ab, "scope_a"]),
+    {badrpc, {'EXIT', {{invalid_scope, custom_scope_ab}, _}}} = catch rpc:call(SlaveNode2, syn, lookup, [custom_scope_ab, "scope_a"]),
+    undefined = syn:lookup(custom_scope_ab, "scope_a_alias"),
+    undefined = rpc:call(SlaveNode1, syn, lookup, [custom_scope_ab, "scope_a_alias"]),
+    {badrpc, {'EXIT', {{invalid_scope, custom_scope_ab}, _}}} = catch rpc:call(SlaveNode2, syn, lookup, [custom_scope_ab, "scope_a_alias"]),
+    {'EXIT', {{invalid_scope, custom_scope_bc}, _}} = catch syn:lookup(custom_scope_bc, {remote_scoped_bc}),
+    undefined = rpc:call(SlaveNode1, syn, lookup, [custom_scope_bc, {remote_scoped_bc}]),
+    undefined = rpc:call(SlaveNode2, syn, lookup, [custom_scope_bc, {remote_scoped_bc}]),
+    0 = syn:registry_count(custom_scope_ab),
+    0 = syn:registry_count(custom_scope_ab, node()),
+    0 = syn:registry_count(custom_scope_ab, SlaveNode1),
+    0 = syn:registry_count(custom_scope_ab, SlaveNode2),
+    {'EXIT', {{invalid_scope, custom_scope_bc}, _}} = catch syn:registry_count(custom_scope_bc),
+    {'EXIT', {{invalid_scope, custom_scope_bc}, _}} = catch syn:registry_count(custom_scope_bc, node()),
+    {'EXIT', {{invalid_scope, custom_scope_bc}, _}} = catch syn:registry_count(custom_scope_bc, SlaveNode1),
+    {'EXIT', {{invalid_scope, custom_scope_bc}, _}} = catch syn:registry_count(custom_scope_bc, SlaveNode2),
+    0 = rpc:call(SlaveNode1, syn, registry_count, [custom_scope_ab]),
+    0 = rpc:call(SlaveNode1, syn, registry_count, [custom_scope_ab, node()]),
+    0 = rpc:call(SlaveNode1, syn, registry_count, [custom_scope_ab, SlaveNode1]),
+    0 = rpc:call(SlaveNode1, syn, registry_count, [custom_scope_ab, SlaveNode2]),
+    0 = rpc:call(SlaveNode1, syn, registry_count, [custom_scope_bc]),
+    0 = rpc:call(SlaveNode1, syn, registry_count, [custom_scope_bc, node()]),
+    0 = rpc:call(SlaveNode1, syn, registry_count, [custom_scope_bc, SlaveNode1]),
+    0 = rpc:call(SlaveNode1, syn, registry_count, [custom_scope_bc, SlaveNode2]),
+    {badrpc, {'EXIT', {{invalid_scope, custom_scope_ab}, _}}} = catch rpc:call(SlaveNode2, syn, registry_count, [custom_scope_ab]),
+    {badrpc, {'EXIT', {{invalid_scope, custom_scope_ab}, _}}} = catch rpc:call(SlaveNode2, syn, registry_count, [custom_scope_ab, node()]),
+    {badrpc, {'EXIT', {{invalid_scope, custom_scope_ab}, _}}} = catch rpc:call(SlaveNode2, syn, registry_count, [custom_scope_ab, SlaveNode1]),
+    {badrpc, {'EXIT', {{invalid_scope, custom_scope_ab}, _}}} = catch rpc:call(SlaveNode2, syn, registry_count, [custom_scope_ab, SlaveNode2]),
+    0 = rpc:call(SlaveNode2, syn, registry_count, [custom_scope_bc]),
+    0 = rpc:call(SlaveNode2, syn, registry_count, [custom_scope_bc, node()]),
+    0 = rpc:call(SlaveNode2, syn, registry_count, [custom_scope_bc, SlaveNode1]),
+    0 = rpc:call(SlaveNode2, syn, registry_count, [custom_scope_bc, SlaveNode2]),
+
+    %% errors
+    {error, undefined} = syn:unregister(custom_scope_ab, {invalid_name}),
+
+    %% (simulate race condition)
+    Pid1 = syn_test_suite_helper:start_process(),
+    Pid2 = syn_test_suite_helper:start_process(),
+    ok = syn:register(custom_scope_ab, <<"my proc">>, Pid1),
+    timer:sleep(100),
+    syn_registry:remove_from_local_table(custom_scope_ab, <<"my proc">>, Pid1),
+    syn_registry:add_to_local_table(custom_scope_ab, <<"my proc">>, Pid2, undefined, 0, undefined),
+    {error, race_condition} = rpc:call(SlaveNode1, syn, unregister, [custom_scope_ab, <<"my proc">>]).
 
 %% ===================================================================
 %% Internal

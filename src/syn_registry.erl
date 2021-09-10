@@ -29,7 +29,7 @@
 %% API
 -export([start_link/1]).
 -export([get_subcluster_nodes/1]).
--export([lookup/1]).
+-export([lookup/1, lookup/2]).
 -export([register/2, register/3, register/4]).
 -export([unregister/1, unregister/2]).
 -export([count/1, count/2]).
@@ -72,9 +72,11 @@ lookup(Name) ->
 
 -spec lookup(Scope :: atom(), Name :: any()) -> {pid(), Meta :: any()} | undefined.
 lookup(Scope, Name) ->
-    case find_registry_entry_by_name(Scope, Name) of
+    try find_registry_entry_by_name(Scope, Name) of
         undefined -> undefined;
         {{Name, Pid}, Meta, _, _, _} -> {Pid, Meta}
+    catch
+        error:badarg -> error({invalid_scope, Scope})
     end.
 
 -spec register(Name :: any(), Pid :: pid()) -> ok | {error, Reason :: any()}.
@@ -92,7 +94,11 @@ register(Scope, Name, Pid) when is_pid(Pid) ->
 register(Scope, Name, Pid, Meta) ->
     ProcessName = get_process_name_for_scope(Scope),
     Node = node(Pid),
-    gen_server:call({ProcessName, Node}, {register_on_node, Name, Pid, Meta}).
+    try gen_server:call({ProcessName, Node}, {register_on_node, Name, Pid, Meta}) of
+        Value -> Value
+    catch
+        exit:{noproc, {gen_server, call, _}} -> error({invalid_scope, Scope})
+    end.
 
 -spec unregister(Name :: any()) -> ok | {error, Reason :: any()}.
 unregister(Name) ->
@@ -101,26 +107,36 @@ unregister(Name) ->
 -spec unregister(Scope :: atom(), Name :: any()) -> ok | {error, Reason :: any()}.
 unregister(Scope, Name) ->
     % get process' node
-    case find_registry_entry_by_name(Scope, Name) of
+    try find_registry_entry_by_name(Scope, Name) of
         undefined ->
             {error, undefined};
+
         {{Name, Pid}, _, _, _, _} ->
             ProcessName = get_process_name_for_scope(Scope),
             Node = node(Pid),
             gen_server:call({ProcessName, Node}, {unregister_on_node, Name, Pid})
+    catch
+        exit:{noproc, {gen_server, call, _}} -> error({invalid_scope, Scope});
+        error:badarg -> error({invalid_scope, Scope})
     end.
 
 -spec count(Scope :: atom()) -> non_neg_integer().
 count(Scope) ->
-    ets:info(syn_backbone:get_table_name(syn_registry_by_name, Scope), size).
+    case ets:info(syn_backbone:get_table_name(syn_registry_by_name, Scope), size) of
+        undefined -> error({invalid_scope, Scope});
+        Value -> Value
+    end.
 
 -spec count(Scope :: atom(), Node :: node()) -> non_neg_integer().
 count(Scope, Node) ->
-    ets:select_count(syn_backbone:get_table_name(syn_registry_by_name, Scope), [{
+    case catch ets:select_count(syn_backbone:get_table_name(syn_registry_by_name, Scope), [{
         {{'_', '_'}, '_', '_', '_', Node},
         [],
         [true]
-    }]).
+    }]) of
+        {'EXIT', {badarg, [{ets, select_count, _, _} | _]}} -> error({invalid_scope, Scope});
+        Value -> Value
+    end.
 
 %% ===================================================================
 %% Callbacks
@@ -319,7 +335,7 @@ handle_info({'DOWN', _MRef, process, Pid, Reason}, #state{scope = Scope} = State
             );
 
         Entries ->
-            lists:foreach(fun({{Name, _Pid}, _Meta, _Time, _MRef, _Node}) ->
+            lists:foreach(fun({{Name, Pid}, _, _, _, _}) ->
                 %% remove from table
                 remove_from_local_table(Scope, Name, Pid),
                 %% broadcast

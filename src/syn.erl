@@ -28,7 +28,7 @@
 %% API
 -export([start/0, stop/0]).
 -export([get_node_scopes/0, add_node_to_scope/1, add_node_to_scopes/1]).
--export([lookup/1]).
+-export([lookup/1, lookup/2]).
 -export([register/2, register/3, register/4]).
 -export([unregister/1, unregister/2]).
 -export([registry_count/1, registry_count/2]).
@@ -64,6 +64,10 @@ add_node_to_scopes(Scopes) ->
 -spec lookup(Name :: any()) -> {pid(), Meta :: any()} | undefined.
 lookup(Name) ->
     syn_registry:lookup(Name).
+
+-spec lookup(Scope ::atom(), Name :: any()) -> {pid(), Meta :: any()} | undefined.
+lookup(Scope, Name) ->
+    syn_registry:lookup(Scope, Name).
 
 -spec register(Name :: any(), Pid :: pid()) -> ok | {error, Reason :: any()}.
 register(Name, Pid) ->
