@@ -31,6 +31,7 @@
 -export([lookup/1]).
 -export([register/2, register/3, register/4]).
 -export([unregister/1, unregister/2]).
+-export([registry_count/1, registry_count/2]).
 
 %% ===================================================================
 %% API
@@ -83,3 +84,11 @@ unregister(Name) ->
 -spec unregister(Scope :: atom(), Name :: any()) -> ok | {error, Reason :: any()}.
 unregister(Scope, Name) ->
     syn_registry:unregister(Scope, Name).
+
+-spec registry_count(Scope :: atom()) -> non_neg_integer().
+registry_count(Scope) ->
+    syn_registry:count(Scope).
+
+-spec registry_count(Scope :: atom(), Node :: node()) -> non_neg_integer().
+registry_count(Scope, Node) ->
+    syn_registry:count(Scope, Node).

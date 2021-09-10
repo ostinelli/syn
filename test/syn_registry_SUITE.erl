@@ -337,6 +337,9 @@ three_nodes_register_unregister_and_monitor_default_scope(Config) ->
     undefined = syn:lookup({remote_pid_on, slave_1}),
     undefined = rpc:call(SlaveNode1, syn, lookup, [{remote_pid_on, slave_1}]),
     undefined = rpc:call(SlaveNode2, syn, lookup, [{remote_pid_on, slave_1}]),
+    0 = syn:registry_count(default),
+    0 = syn:registry_count(default, SlaveNode1),
+    0 = syn:registry_count(default, SlaveNode2),
 
     %% register
     ok = syn:register(<<"my proc">>, Pid),
@@ -362,6 +365,10 @@ three_nodes_register_unregister_and_monitor_default_scope(Config) ->
     {PidRemote1, undefined} = syn:lookup({remote_pid_on, slave_1}),
     {PidRemote1, undefined} = rpc:call(SlaveNode1, syn, lookup, [{remote_pid_on, slave_1}]),
     {PidRemote1, undefined} = rpc:call(SlaveNode2, syn, lookup, [{remote_pid_on, slave_1}]),
+    4 = syn:registry_count(default),
+    3 = syn:registry_count(default, node()),
+    1 = syn:registry_count(default, SlaveNode1),
+    0 = syn:registry_count(default, SlaveNode2),
 
     %% re-register to edit meta
     ok = syn:register(<<"my proc with meta">>, PidWithMeta, {meta2, <<"meta2">>}),
@@ -375,6 +382,10 @@ three_nodes_register_unregister_and_monitor_default_scope(Config) ->
     {PidRemote1, added_meta} = syn:lookup({remote_pid_on, slave_1}),
     {PidRemote1, added_meta} = rpc:call(SlaveNode1, syn, lookup, [{remote_pid_on, slave_1}]),
     {PidRemote1, added_meta} = rpc:call(SlaveNode2, syn, lookup, [{remote_pid_on, slave_1}]),
+    4 = syn:registry_count(default),
+    3 = syn:registry_count(default, node()),
+    1 = syn:registry_count(default, SlaveNode1),
+    0 = syn:registry_count(default, SlaveNode2),
 
     %% kill process
     syn_test_suite_helper:kill_process(Pid),
@@ -396,14 +407,18 @@ three_nodes_register_unregister_and_monitor_default_scope(Config) ->
     undefined = syn:lookup({remote_pid_on, slave_1}),
     undefined = rpc:call(SlaveNode1, syn, lookup, [{remote_pid_on, slave_1}]),
     undefined = rpc:call(SlaveNode2, syn, lookup, [{remote_pid_on, slave_1}]),
+    0 = syn:registry_count(default),
+    0 = syn:registry_count(default, node()),
+    0 = syn:registry_count(default, SlaveNode1),
+    0 = syn:registry_count(default, SlaveNode2),
 
-    % clean
+    %% clean
     syn_test_suite_helper:kill_process(PidWithMeta),
 
     %% errors
     {error, undefined} = syn:unregister({invalid_name}),
 
-    %% simulate race condition
+    %% (simulate race condition)
     Pid1 = syn_test_suite_helper:start_process(),
     Pid2 = syn_test_suite_helper:start_process(),
     ok = syn:register(<<"my proc">>, Pid1),

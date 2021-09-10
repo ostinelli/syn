@@ -32,6 +32,7 @@
 -export([lookup/1]).
 -export([register/2, register/3, register/4]).
 -export([unregister/1, unregister/2]).
+-export([count/1, count/2]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
@@ -108,6 +109,18 @@ unregister(Scope, Name) ->
             Node = node(Pid),
             gen_server:call({ProcessName, Node}, {unregister_on_node, Name, Pid})
     end.
+
+-spec count(Scope :: atom()) -> non_neg_integer().
+count(Scope) ->
+    ets:info(syn_backbone:get_table_name(syn_registry_by_name, Scope), size).
+
+-spec count(Scope :: atom(), Node :: node()) -> non_neg_integer().
+count(Scope, Node) ->
+    ets:select_count(syn_backbone:get_table_name(syn_registry_by_name, Scope), [{
+        {{'_', '_'}, '_', '_', '_', Node},
+        [],
+        [true]
+    }]).
 
 %% ===================================================================
 %% Callbacks
