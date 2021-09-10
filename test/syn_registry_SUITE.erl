@@ -390,6 +390,10 @@ three_nodes_register_unregister_and_monitor_default_scope(Config) ->
     1 = syn:registry_count(default, SlaveNode1),
     0 = syn:registry_count(default, SlaveNode2),
 
+    %% crash scope process to ensure that monitors get recreated
+    exit(whereis(syn_registry_default), kill),
+    timer:sleep(100), %$ wait for sup to restart it
+
     %% kill process
     syn_test_suite_helper:kill_process(Pid),
     syn_test_suite_helper:kill_process(PidRemoteOn1),
@@ -543,6 +547,10 @@ three_nodes_register_unregister_and_monitor_custom_scope(Config) ->
     {PidWithMeta, <<"with_meta_updated">>} = syn:lookup(custom_scope_ab, "scope_a_alias"),
     {PidWithMeta, <<"with_meta_updated">>} = rpc:call(SlaveNode1, syn, lookup, [custom_scope_ab, "scope_a_alias"]),
     {badrpc, {'EXIT', {{invalid_scope, custom_scope_ab}, _}}} = catch rpc:call(SlaveNode2, syn, lookup, [custom_scope_ab, "scope_a_alias"]),
+
+    %% crash scope process to ensure that monitors get recreated
+    exit(whereis(syn_registry_custom_scope_ab), kill),
+    timer:sleep(100), %$ wait for sup to restart it
 
     %% kill process
     syn_test_suite_helper:kill_process(Pid),
