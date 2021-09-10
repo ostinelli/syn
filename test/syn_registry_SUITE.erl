@@ -395,7 +395,26 @@ three_nodes_register_unregister_and_monitor_default_scope(Config) ->
     undefined = rpc:call(SlaveNode2, syn, lookup, [<<"my proc with meta">>]),
     undefined = syn:lookup({remote_pid_on, slave_1}),
     undefined = rpc:call(SlaveNode1, syn, lookup, [{remote_pid_on, slave_1}]),
-    undefined = rpc:call(SlaveNode2, syn, lookup, [{remote_pid_on, slave_1}]).
+    undefined = rpc:call(SlaveNode2, syn, lookup, [{remote_pid_on, slave_1}]),
+
+    % clean
+    syn_test_suite_helper:kill_process(PidWithMeta),
+
+    %% errors
+    {error, undefined} = syn:unregister({invalid_name}),
+
+    %% simulate race condition
+    Pid1 = syn_test_suite_helper:start_process(),
+    Pid2 = syn_test_suite_helper:start_process(),
+    ok = syn:register(<<"my proc">>, Pid1),
+    timer:sleep(100),
+    syn_registry:remove_from_local_table(default, <<"my proc">>, Pid1),
+    syn_registry:add_to_local_table(default, <<"my proc">>, Pid2, undefined, 0, undefined),
+    {error, race_condition} = rpc:call(SlaveNode1, syn, unregister, [<<"my proc">>]),
+
+    %% kill
+    syn_test_suite_helper:kill_process(Pid1),
+    syn_test_suite_helper:kill_process(Pid2).
 
 %% ===================================================================
 %% Internal

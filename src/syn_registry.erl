@@ -36,6 +36,11 @@
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
+%% tests
+-ifdef(TEST).
+-export([add_to_local_table/6, remove_from_local_table/3]).
+-endif.
+
 %% records
 -record(state, {
     scope = default :: atom(),
@@ -101,7 +106,7 @@ unregister(Scope, Name) ->
         {{Name, Pid}, _, _, _, _} ->
             ProcessName = get_process_name_for_scope(Scope),
             Node = node(Pid),
-            gen_server:call({ProcessName, Node}, {unregister_on_node, Name})
+            gen_server:call({ProcessName, Node}, {unregister_on_node, Name, Pid})
     end.
 
 %% ===================================================================
@@ -179,7 +184,7 @@ handle_call({register_on_node, Name, Pid, Meta}, _From, #state{
             {reply, {error, not_alive}, State}
     end;
 
-handle_call({unregister_on_node, Name}, _From, #state{scope = Scope} = State) ->
+handle_call({unregister_on_node, Name, Pid}, _From, #state{scope = Scope} = State) ->
     case find_registry_entry_by_name(Scope, Name) of
         {{Name, Pid}, _Meta, _Clock, _MRef, _Node} ->
             %% demonitor if the process is not registered under other names
@@ -191,8 +196,12 @@ handle_call({unregister_on_node, Name}, _From, #state{scope = Scope} = State) ->
             %% return
             {reply, ok, State};
 
-        _ ->
-            {reply, ok, State}
+        {{Name, _TablePid}, _Meta, _Clock, _MRef, _Node} ->
+            %% process is registered locally with another pid: race condition, wait for sync to happen & return error
+            {reply, {error, race_condition}, State};
+
+        undefined ->
+            {reply, {error, undefined}, State}
     end;
 
 handle_call(Request, From, State) ->
@@ -398,7 +407,7 @@ maybe_demonitor(Scope, Pid) ->
         [],
         ['$5']
     }], 2) of
-        {[MRef], _} when MRef =/= undefined ->
+        {[MRef], _} ->
             %% no other aliases, demonitor
             erlang:demonitor(MRef, [flush]),
             ok;
