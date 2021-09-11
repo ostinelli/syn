@@ -510,6 +510,7 @@ three_nodes_register_unregister_and_monitor_custom_scope(Config) ->
     {error, taken} = syn:register(custom_scope_ab, "scope_a", PidWithMeta),
     {error, not_alive} = syn:register(custom_scope_ab, {"pid not alive"}, list_to_pid("<0.9999.0>")),
     {'EXIT', {{invalid_scope, custom_scope_bc}, _}} = catch syn:register(custom_scope_bc, "scope_a_noscope", Pid),
+    {'EXIT', {{invalid_scope, custom_scope_bc}, _}} = catch syn:unregister(custom_scope_bc, "scope_a_noscope"),
 
     %% retrieve
     undefined = syn:lookup("scope_a"),

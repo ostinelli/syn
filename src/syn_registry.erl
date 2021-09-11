@@ -95,7 +95,13 @@ register(Scope, Name, Pid, Meta) ->
     ProcessName = get_process_name_for_scope(Scope),
     Node = node(Pid),
     try gen_server:call({ProcessName, Node}, {register_on_node, Name, Pid, Meta}) of
-        Value -> Value
+        {ok, Time} when Node =/= node() ->
+            %% update table on caller node immediately so that subsequent calls have an updated registry
+            add_to_local_table(Scope, Name, Pid, Meta, Time, undefined),
+            ok;
+
+        {Response, _} ->
+            Response
     catch
         exit:{noproc, {gen_server, call, _}} -> error({invalid_scope, Scope})
     end.
@@ -114,7 +120,15 @@ unregister(Scope, Name) ->
         {{Name, Pid}, _, _, _, _} ->
             ProcessName = get_process_name_for_scope(Scope),
             Node = node(Pid),
-            gen_server:call({ProcessName, Node}, {unregister_on_node, Name, Pid})
+            case gen_server:call({ProcessName, Node}, {unregister_on_node, Name, Pid}) of
+                ok when Node =/= node() ->
+                    %% remove table on caller node immediately so that subsequent calls have an updated registry
+                    remove_from_local_table(Scope, Name, Pid),
+                    ok;
+
+                Response ->
+                    Response
+            end
     catch
         exit:{noproc, {gen_server, call, _}} -> error({invalid_scope, Scope});
         error:badarg -> error({invalid_scope, Scope})
@@ -196,7 +210,7 @@ handle_call({register_on_node, Name, Pid, Meta}, _From, #state{
                     %% broadcast
                     broadcast({'3.0', sync_register, Scope, Name, Pid, Meta, Time}, State),
                     %% return
-                    {reply, ok, State};
+                    {reply, {ok, Time}, State};
 
                 {{Name, Pid}, _TableMeta, _TableTime, MRef, _TableNode} ->
                     %% same pid, possibly new meta or time, overwrite
@@ -205,14 +219,14 @@ handle_call({register_on_node, Name, Pid, Meta}, _From, #state{
                     %% broadcast
                     broadcast({'3.0', sync_register, Scope, Name, Pid, Meta, Time}, State),
                     %% return
-                    {reply, ok, State};
+                    {reply, {ok, Time}, State};
 
                 _ ->
-                    {reply, {error, taken}, State}
+                    {reply, {{error, taken}, undefined}, State}
             end;
 
         false ->
-            {reply, {error, not_alive}, State}
+            {reply, {{error, not_alive}, undefined}, State}
     end;
 
 handle_call({unregister_on_node, Name, Pid}, _From, #state{scope = Scope} = State) ->
