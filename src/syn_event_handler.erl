@@ -28,35 +28,45 @@
 %% ==========================================================================================================
 -module(syn_event_handler).
 
--export([on_process_unregistered/5]).
+-export([do_resolve_registry_conflict/5]).
 
--callback on_process_unregistered(
+-callback resolve_registry_conflict(
+    Name :: any(),
+    {Pid1 :: pid(), Meta1 :: any()},
+    {Pid2 :: pid(), Meta2 :: any()}
+) -> PidToKeep :: pid() | undefined.
+
+-optional_callbacks([resolve_registry_conflict/3]).
+
+-spec do_resolve_registry_conflict(
     Scope :: atom(),
     Name :: any(),
-    Pid :: pid(),
-    Meta :: any(),
-    Reason :: any()
-) -> any().
-
--optional_callbacks([on_process_unregistered/5]).
-
-%% ===================================================================
-%% API
-%% ===================================================================
--spec on_process_unregistered(
-    Scope :: atom(),
-    Name :: any(),
-    Pid :: pid(),
-    Meta :: any(),
-    Reason :: any()
-) -> any().
-on_process_unregistered(Scope, Name, Pid, Meta, Reason) ->
-    CustomEventHandler = undefined,
-    case erlang:function_exported(CustomEventHandler, on_process_unregistered, 5) of
+    {Pid1 :: pid(), Meta1 :: any(), Time1 :: non_neg_integer()},
+    {Pid2 :: pid(), Meta2 :: any(), Time2 :: non_neg_integer()},
+    CustomEventHandler :: module() | undefined
+) -> PidToKeep :: pid() | undefined.
+do_resolve_registry_conflict(Scope, Name, {Pid1, Meta1, Time1}, {Pid2, Meta2, Time2}, CustomEventHandler) ->
+    case erlang:function_exported(CustomEventHandler, resolve_registry_conflict, 4) of
         true ->
-            spawn(fun() ->
-                CustomEventHandler:on_process_unregistered(Scope, Name, Pid, Meta, Reason)
-            end);
+            try CustomEventHandler:resolve_registry_conflict(Scope, Name, {Pid1, Meta1}, {Pid2, Meta2}) of
+                PidToKeep when is_pid(PidToKeep) -> PidToKeep;
+                _ -> undefined
+
+            catch Exception:Reason ->
+                error_logger:error_msg(
+                    "Syn(~p): Error ~p in custom handler resolve_registry_conflict: ~p~n",
+                    [node(), Exception, Reason]
+                ),
+                undefined
+            end;
+
         _ ->
-            ok
+            %% by default, keep pid registered more recently
+            %% this is a simple mechanism that can be imprecise, as system clocks are not perfectly aligned in a cluster
+            %% if something more elaborate is desired (such as vector clocks) use Meta to store data and a custom event handler
+            PidToKeep = case Time1 > Time2 of
+                true -> Pid1;
+                _ -> Pid2
+            end,
+            PidToKeep
     end.

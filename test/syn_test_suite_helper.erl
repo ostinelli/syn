@@ -33,6 +33,7 @@
 -export([start_process/0, start_process/1, start_process/2]).
 -export([kill_process/1]).
 -export([wait_cluster_connected/1]).
+-export([send_error_logger_to_disk/0]).
 
 %% internal
 -export([process_main/0]).
@@ -115,6 +116,8 @@ wait_cluster_connected(Nodes, StartAt) ->
             end
     end.
 
+send_error_logger_to_disk() ->
+    error_logger:logfile({open, atom_to_list(node())}).
 
 %% ===================================================================
 %% Internal
