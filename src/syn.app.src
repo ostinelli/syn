@@ -16,8 +16,7 @@
         {env, []},
 
         {licenses, ["MIT"]},
-        {links, [
-            {"Github", "https://github.com/ostinelli/syn"}
-        ]}
+        {links, [{"Github", "https://github.com/ostinelli/syn"}]},
+        {doc, "doc"}
     ]
 }.

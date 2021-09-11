@@ -28,3 +28,4 @@ erl_crash.dump
 *.beam
 test/results/*
 !test/results/.keep
+doc/

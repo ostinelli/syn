@@ -280,6 +280,7 @@ three_nodes_discover_custom_scope(Config) ->
     %% reconnect node 2
     syn_test_suite_helper:connect_node(SlaveNode2),
     ok = syn_test_suite_helper:wait_cluster_connected([node(), SlaveNode1, SlaveNode2]),
+    timer:sleep(250),
 
     %% check
     assert_scope_subcluster(node(), custom_scope_ab, [SlaveNode1]),
