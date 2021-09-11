@@ -497,14 +497,17 @@ maybe_demonitor(Scope, Pid) ->
     Meta :: any(),
     Time :: integer(),
     MRef :: undefined | reference()
-) -> true.
+) -> any().
 add_to_local_table(Scope, Name, Pid, Meta, Time, MRef) ->
+    %% insert
     true = ets:insert(syn_backbone:get_table_name(syn_registry_by_name, Scope),
         {{Name, Pid}, Meta, Time, MRef, node(Pid)}
     ),
     true = ets:insert(syn_backbone:get_table_name(syn_registry_by_pid, Scope),
         {{Pid, Name}, Meta, Time, MRef, node(Pid)}
-    ).
+    ),
+    %% callback
+    syn_event_handler:do_on_process_registered(Scope, Name, Pid, Meta).
 
 -spec remove_from_local_table(Scope :: atom(), Name :: any(), Pid :: pid()) -> true.
 remove_from_local_table(Scope, Name, Pid) ->
@@ -573,16 +576,14 @@ handle_registry_sync(Scope, Name, Pid, Meta, Time, State) ->
     {Pid :: pid(), Meta :: any(), Time :: non_neg_integer()},
     {TablePid :: pid(), TableMeta :: any(), TableTime :: non_neg_integer(), TableMRef :: reference()},
     #state{}
-) -> KeptPid :: pid().
+) -> any().
 resolve_conflict(Scope, Name, {Pid, Meta, Time}, {TablePid, TableMeta, TableTime, TableMRef}, State) ->
-    CustomEventHandler = undefined,
     %% call conflict resolution
     PidToKeep = syn_event_handler:do_resolve_registry_conflict(
         Scope,
         Name,
         {Pid, Meta, Time},
-        {TablePid, TableMeta, TableTime},
-        CustomEventHandler
+        {TablePid, TableMeta, TableTime}
     ),
     %% resolve
     case PidToKeep of
@@ -610,7 +611,7 @@ resolve_conflict(Scope, Name, {Pid, Meta, Time}, {TablePid, TableMeta, TableTime
         Invalid ->
             maybe_demonitor(Scope, TablePid),
             remove_from_local_table(Scope, Name, TablePid),
-            %% kill local, remote will be killed by other node performing the resolve
+            %% kill local, remote will be killed by other node performing the same resolve
             exit(TablePid, {syn_resolve_kill, Name, TableMeta}),
             error_logger:info_msg("SYN[~p] Registry CONFLICT for name ~p@~p: ~p ~p -> none chosen (got: ~p)~n",
                 [node(), Name, Scope, Pid, TablePid, Invalid]

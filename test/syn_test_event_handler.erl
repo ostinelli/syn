@@ -23,25 +23,21 @@
 %% OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 %% THE SOFTWARE.
 %% ==========================================================================================================
--module(syn_app).
--behaviour(application).
+-module(syn_test_event_handler).
+-behaviour(syn_event_handler).
 
-%% API
--export([start/2, stop/1]).
+-export([on_process_registered/4]).
 
-%% ===================================================================
-%% API
-%% ===================================================================
--spec start(
-    StartType :: normal | {takeover, node()} | {failover, node()},
-    StartArgs :: any()
-) -> {ok, pid()} | {ok, pid(), State :: any()} | {error, any()}.
-start(_StartType, _StartArgs) ->
-    %% ensure event handler is loaded
-    syn_event_handler:ensure_event_handler_loaded(),
-    %% start main sup
-    syn_sup:start_link().
+on_process_registered(Scope, Name, Pid, Meta) ->
+    global:send(syn_test_main_process, {on_process_registered, node(), Scope, Name, Pid, Meta}).
 
--spec stop(State :: any()) -> ok.
-stop(_State) ->
-    ok.
+%%-export([resolve_registry_conflict/4]).
+%%
+%%-spec resolve_registry_conflict(
+%%    Scope ::atom(),
+%%    Name :: any(),
+%%    {LocalPid :: pid(), LocalMeta :: any()},
+%%    {RemotePid :: pid(), RemoteMeta :: any()}
+%%) -> PidToKeep :: pid().
+%%resolve_registry_conflict(_Scope, _Name, {Pid1, _Meta1, _Time1}, {_Pid2, _Meta2, _Time2}) ->
+%%    Pid1.

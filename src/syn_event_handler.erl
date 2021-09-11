@@ -28,7 +28,17 @@
 %% ==========================================================================================================
 -module(syn_event_handler).
 
--export([do_resolve_registry_conflict/5]).
+%% API
+-export([ensure_event_handler_loaded/0]).
+-export([do_on_process_registered/4]).
+-export([do_resolve_registry_conflict/4]).
+
+-callback on_process_registered(
+    Scope :: any(),
+    Name :: any(),
+    Pid :: pid(),
+    Meta :: any()
+) -> any().
 
 -callback resolve_registry_conflict(
     Name :: any(),
@@ -36,26 +46,58 @@
     {Pid2 :: pid(), Meta2 :: any()}
 ) -> PidToKeep :: pid() | undefined.
 
--optional_callbacks([resolve_registry_conflict/3]).
+-optional_callbacks([on_process_registered/4, resolve_registry_conflict/3]).
+
+%% ===================================================================
+%% API
+%% ===================================================================
+-spec ensure_event_handler_loaded() -> module().
+ensure_event_handler_loaded() ->
+    %% get handler
+    CustomEventHandler = get_custom_event_handler(),
+    %% ensure that is it loaded (not using code:ensure_loaded/1 to support embedded mode)
+    catch CustomEventHandler:module_info(exports).
+
+-spec do_on_process_registered(
+    Scope :: atom(),
+    Name :: any(),
+    Pid :: pid(),
+    Meta :: any()
+) -> any().
+do_on_process_registered(Scope, Name, Pid, Meta) ->
+    CustomEventHandler = get_custom_event_handler(),
+    case erlang:function_exported(CustomEventHandler, on_process_registered, 4) of
+        true ->
+            try CustomEventHandler:on_process_registered(Scope, Name, Pid, Meta)
+            catch Class:Reason:Stacktrace ->
+                error_logger:error_msg(
+                    "Syn(~p): Error ~p:~p in custom handler on_process_registered: ~p~n",
+                    [node(), Class, Reason, Stacktrace]
+                )
+            end;
+
+        _ ->
+            ok
+    end.
 
 -spec do_resolve_registry_conflict(
     Scope :: atom(),
     Name :: any(),
     {Pid1 :: pid(), Meta1 :: any(), Time1 :: non_neg_integer()},
-    {Pid2 :: pid(), Meta2 :: any(), Time2 :: non_neg_integer()},
-    CustomEventHandler :: module() | undefined
+    {Pid2 :: pid(), Meta2 :: any(), Time2 :: non_neg_integer()}
 ) -> PidToKeep :: pid() | undefined.
-do_resolve_registry_conflict(Scope, Name, {Pid1, Meta1, Time1}, {Pid2, Meta2, Time2}, CustomEventHandler) ->
+do_resolve_registry_conflict(Scope, Name, {Pid1, Meta1, Time1}, {Pid2, Meta2, Time2}) ->
+    CustomEventHandler = get_custom_event_handler(),
     case erlang:function_exported(CustomEventHandler, resolve_registry_conflict, 4) of
         true ->
-            try CustomEventHandler:resolve_registry_conflict(Scope, Name, {Pid1, Meta1}, {Pid2, Meta2}) of
+            try CustomEventHandler:resolve_registry_conflict(Scope, Name, {Pid1, Meta1, Time1}, {Pid2, Meta2, Time2}) of
                 PidToKeep when is_pid(PidToKeep) -> PidToKeep;
                 _ -> undefined
 
-            catch Exception:Reason ->
+            catch Class:Reason ->
                 error_logger:error_msg(
                     "Syn(~p): Error ~p in custom handler resolve_registry_conflict: ~p~n",
-                    [node(), Exception, Reason]
+                    [node(), Class, Reason]
                 ),
                 undefined
             end;
@@ -70,3 +112,10 @@ do_resolve_registry_conflict(Scope, Name, {Pid1, Meta1, Time1}, {Pid2, Meta2, Ti
             end,
             PidToKeep
     end.
+
+%% ===================================================================
+%% Internal
+%% ===================================================================
+-spec get_custom_event_handler() -> undefined | {ok, CustomEventHandler :: atom()}.
+get_custom_event_handler() ->
+    application:get_env(syn, event_handler, undefined).

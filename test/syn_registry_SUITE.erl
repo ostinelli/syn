@@ -38,7 +38,8 @@
     three_nodes_register_unregister_and_monitor_default_scope/1,
     three_nodes_register_unregister_and_monitor_custom_scope/1,
     three_nodes_cluster_changes/1,
-    three_nodes_cluster_conflicts/1
+    three_nodes_cluster_conflicts/1,
+    three_nodes_custom_event_handler/1
 ]).
 
 %% include
@@ -81,7 +82,8 @@ groups() ->
             three_nodes_register_unregister_and_monitor_default_scope,
             three_nodes_register_unregister_and_monitor_custom_scope,
             three_nodes_cluster_changes,
-            three_nodes_cluster_conflicts
+            three_nodes_cluster_conflicts,
+            three_nodes_custom_event_handler
         ]}
     ].
 %% -------------------------------------------------------------------
@@ -853,6 +855,69 @@ three_nodes_cluster_conflicts(Config) ->
     {PidCustom1, "meta-1"} = rpc:call(SlaveNode2, syn, lookup, [custom_scope_bc, <<"my proc">>]),
     true = rpc:call(SlaveNode1, erlang, is_process_alive, [PidCustom1]),
     false = rpc:call(SlaveNode2, erlang, is_process_alive, [PidCustom2]).
+
+three_nodes_custom_event_handler(Config) ->
+    %% get slaves
+    SlaveNode1 = proplists:get_value(slave_node_1, Config),
+    SlaveNode2 = proplists:get_value(slave_node_2, Config),
+
+    %% add custom handler
+    syn_test_suite_helper:use_custom_handler(),
+    rpc:call(SlaveNode1, syn_test_suite_helper, use_custom_handler, []),
+    rpc:call(SlaveNode2, syn_test_suite_helper, use_custom_handler, []),
+
+    %% start syn on nodes
+    ok = syn:start(),
+    ok = rpc:call(SlaveNode1, syn, start, []),
+    ok = rpc:call(SlaveNode2, syn, start, []),
+    timer:sleep(250),
+
+    %% register test process to receive messages back from test handler
+    global:register_name(syn_test_main_process, self()),
+
+    %% start process
+    Pid = syn_test_suite_helper:start_process(),
+    ok = syn:register("proc-handler", Pid, <<"my-meta">>),
+
+    %% check callbacks on_process_registered called on all nodes
+    CurrentNode = node(),
+    receive
+        {on_process_registered, CurrentNode, default, "proc-handler", Pid, <<"my-meta">>} -> ok
+    after 1000 ->
+        ok = on_process_registered_not_called_on_main_node
+    end,
+    receive
+        {on_process_registered, SlaveNode1, default, "proc-handler", Pid, <<"my-meta">>} -> ok
+    after 1000 ->
+        ok = on_process_registered_not_called_on_slave_1_node
+    end,
+    receive
+        {on_process_registered, SlaveNode2, default, "proc-handler", Pid, <<"my-meta">>} -> ok
+    after 1000 ->
+        ok = on_process_registered_not_called_on_slave_2_node
+    end,
+
+    ok = syn:register("proc-handler", Pid, <<"my-new-meta">>),
+
+    %% check callbacks on_process_registered are called on nodes because of change of meta
+    receive
+        {on_process_registered, CurrentNode, default, "proc-handler", Pid, <<"my-new-meta">>} -> ok
+    after 1000 ->
+        ok = on_process_registered_not_called_on_main_node
+    end,
+    receive
+        {on_process_registered, SlaveNode1, default, "proc-handler", Pid, <<"my-new-meta">>} -> ok
+    after 1000 ->
+        ok = on_process_registered_not_called_on_slave_1_node
+    end,
+    receive
+        {on_process_registered, SlaveNode2, default, "proc-handler", Pid, <<"my-new-meta">>} -> ok
+    after 1000 ->
+        ok = on_process_registered_not_called_on_slave_2_node
+    end,
+
+    %% clean
+    global:unregister_name(syn_test_main_process).
 
 %% ===================================================================
 %% Internal

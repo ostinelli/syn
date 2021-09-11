@@ -33,6 +33,7 @@
 -export([start_process/0, start_process/1, start_process/2]).
 -export([kill_process/1]).
 -export([wait_cluster_connected/1]).
+-export([use_custom_handler/0]).
 -export([send_error_logger_to_disk/0]).
 
 %% internal
@@ -72,7 +73,9 @@ clean_after_test() ->
     %% shutdown
     lists:foreach(fun(Node) ->
         %% close syn
-        rpc:call(Node, application, stop, [syn])
+        rpc:call(Node, application, stop, [syn]),
+        %% clean env
+        rpc:call(Node, application, unset_env, [syn, event_handler])
     end, Nodes).
 
 start_process() ->
@@ -115,6 +118,9 @@ wait_cluster_connected(Nodes, StartAt) ->
                     wait_cluster_connected(Nodes, StartAt)
             end
     end.
+
+use_custom_handler() ->
+    application:set_env(syn, event_handler, syn_test_event_handler).
 
 send_error_logger_to_disk() ->
     error_logger:logfile({open, atom_to_list(node())}).
