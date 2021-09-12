@@ -29,11 +29,13 @@
 -export([start_slave/1, start_slave/4]).
 -export([stop_slave/1, stop_slave/2]).
 -export([connect_node/1, disconnect_node/1]).
+-export([use_custom_handler/0]).
 -export([clean_after_test/0]).
 -export([start_process/0, start_process/1, start_process/2]).
 -export([kill_process/1]).
--export([wait_cluster_connected/1]).
--export([use_custom_handler/0]).
+-export([flush_inbox/0]).
+-export([wait_cluster_mesh_connected/1]).
+-export([assert_scope_subcluster/3]).
 -export([send_error_logger_to_disk/0]).
 
 %% internal
@@ -68,6 +70,9 @@ connect_node(Node) ->
 disconnect_node(Node) ->
     erlang:disconnect_node(Node).
 
+use_custom_handler() ->
+    application:set_env(syn, event_handler, syn_test_event_handler).
+
 clean_after_test() ->
     Nodes = [node() | nodes()],
     %% shutdown
@@ -96,9 +101,16 @@ kill_process(Pid) when is_pid(Pid) ->
 kill_process(RegisteredName) when is_atom(RegisteredName) ->
     exit(whereis(RegisteredName), kill).
 
-wait_cluster_connected(Nodes) ->
-    wait_cluster_connected(Nodes, os:system_time(millisecond)).
-wait_cluster_connected(Nodes, StartAt) ->
+flush_inbox() ->
+    receive
+        _ -> flush_inbox()
+    after
+        0 -> ok
+    end.
+
+wait_cluster_mesh_connected(Nodes) ->
+    wait_cluster_mesh_connected(Nodes, os:system_time(millisecond)).
+wait_cluster_mesh_connected(Nodes, StartAt) ->
     AllSynced = lists:all(fun(Node) ->
         RemoteNodes = rpc:call(Node, erlang, nodes, []),
         AllNodes = [Node | RemoteNodes],
@@ -114,13 +126,37 @@ wait_cluster_connected(Nodes, StartAt) ->
                 true ->
                     {error, {could_not_init_cluster, Nodes}};
                 false ->
-                    timer:sleep(1000),
-                    wait_cluster_connected(Nodes, StartAt)
+                    timer:sleep(100),
+                    wait_cluster_mesh_connected(Nodes, StartAt)
             end
     end.
 
-use_custom_handler() ->
-    application:set_env(syn, event_handler, syn_test_event_handler).
+assert_scope_subcluster(Node, Scope, ExpectedNodes) ->
+    NodesMap = rpc:call(Node, syn_registry, get_subcluster_nodes, [Scope]),
+    Nodes = maps:keys(NodesMap),
+    ExpectedCount = length(ExpectedNodes),
+    %% count nodes
+    case length(Nodes) of
+        ExpectedCount ->
+            ok;
+
+        _ ->
+            ct:fail("~n\tInvalid subcluster~n\tExpected: ~p~n\tActual: ~p~n\tLine: ~p~n",
+                [ExpectedNodes, Nodes, get_line_from_stacktrace(2)]
+            )
+    end,
+    %% loop nodes
+    lists:foreach(fun(RemoteNode) ->
+        case lists:member(RemoteNode, Nodes) of
+            true ->
+                ok;
+
+            _ ->
+                ct:fail("~n\tInvalid subcluster~n\tExpected: ~p~n\tActual: ~p~n\tLine: ~p~n",
+                    [ExpectedNodes, Nodes, get_line_from_stacktrace(3)]
+                )
+        end
+    end, ExpectedNodes).
 
 send_error_logger_to_disk() ->
     error_logger:logfile({open, atom_to_list(node())}).
@@ -132,3 +168,8 @@ process_main() ->
     receive
         _ -> process_main()
     end.
+
+get_line_from_stacktrace(Position) ->
+    {current_stacktrace, Stacktrace} = process_info(self(), current_stacktrace),
+    {_, _, _, FileInfo} = lists:nth(Position, Stacktrace),
+    proplists:get_value(line, FileInfo).

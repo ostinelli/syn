@@ -27,9 +27,13 @@
 -behaviour(syn_event_handler).
 
 -export([on_process_registered/4]).
+-export([on_process_unregistered/4]).
 
 on_process_registered(Scope, Name, Pid, Meta) ->
     global:send(syn_test_main_process, {on_process_registered, node(), Scope, Name, Pid, Meta}).
+
+on_process_unregistered(Scope, Name, Pid, Meta) ->
+    global:send(syn_test_main_process, {on_process_unregistered, node(), Scope, Name, Pid, Meta}).
 
 %%-export([resolve_registry_conflict/4]).
 %%

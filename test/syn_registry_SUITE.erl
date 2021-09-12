@@ -39,7 +39,7 @@
     three_nodes_register_unregister_and_monitor_custom_scope/1,
     three_nodes_cluster_changes/1,
     three_nodes_cluster_conflicts/1,
-    three_nodes_custom_event_handler/1
+    three_nodes_custom_event_handler_reg_unreg/1
 ]).
 
 %% include
@@ -83,7 +83,7 @@ groups() ->
             three_nodes_register_unregister_and_monitor_custom_scope,
             three_nodes_cluster_changes,
             three_nodes_cluster_conflicts,
-            three_nodes_custom_event_handler
+            three_nodes_custom_event_handler_reg_unreg
         ]}
     ].
 %% -------------------------------------------------------------------
@@ -116,7 +116,7 @@ init_per_group(three_nodes_process_registration, Config) ->
     {ok, SlaveNode1} = syn_test_suite_helper:start_slave(syn_slave_1),
     {ok, SlaveNode2} = syn_test_suite_helper:start_slave(syn_slave_2),
     %% wait full cluster
-    case syn_test_suite_helper:wait_cluster_connected([node(), SlaveNode1, SlaveNode2]) of
+    case syn_test_suite_helper:wait_cluster_mesh_connected([node(), SlaveNode1, SlaveNode2]) of
         ok ->
             %% config
             [{slave_node_1, SlaveNode1}, {slave_node_2, SlaveNode2} | Config];
@@ -181,57 +181,76 @@ three_nodes_discover_default_scope(Config) ->
     ok = syn:start(),
     ok = rpc:call(SlaveNode1, syn, start, []),
     ok = rpc:call(SlaveNode2, syn, start, []),
-    timer:sleep(250),
+    timer:sleep(500),
 
     %% check
-    assert_scope_subcluster(node(), default, [SlaveNode1, SlaveNode2]),
-    assert_scope_subcluster(SlaveNode1, default, [node(), SlaveNode2]),
-    assert_scope_subcluster(SlaveNode2, default, [node(), SlaveNode1]),
+    syn_test_suite_helper:assert_scope_subcluster(node(), default, [SlaveNode1, SlaveNode2]),
+    syn_test_suite_helper:assert_scope_subcluster(SlaveNode1, default, [node(), SlaveNode2]),
+    syn_test_suite_helper:assert_scope_subcluster(SlaveNode2, default, [node(), SlaveNode1]),
 
     %% simulate full netsplit
     rpc:call(SlaveNode1, syn_test_suite_helper, disconnect_node, [SlaveNode2]),
     syn_test_suite_helper:disconnect_node(SlaveNode1),
     syn_test_suite_helper:disconnect_node(SlaveNode2),
-    timer:sleep(250),
+    timer:sleep(500),
 
     %% check
-    assert_scope_subcluster(node(), default, []),
+    syn_test_suite_helper:assert_scope_subcluster(node(), default, []),
 
     %% reconnect slave 1
     syn_test_suite_helper:connect_node(SlaveNode1),
-    ok = syn_test_suite_helper:wait_cluster_connected([node(), SlaveNode1]),
+    ok = syn_test_suite_helper:wait_cluster_mesh_connected([node(), SlaveNode1]),
 
     %% check
-    assert_scope_subcluster(node(), default, [SlaveNode1]),
-    assert_scope_subcluster(SlaveNode1, default, [node()]),
+    syn_test_suite_helper:assert_scope_subcluster(node(), default, [SlaveNode1]),
+    syn_test_suite_helper:assert_scope_subcluster(SlaveNode1, default, [node()]),
 
     %% reconnect all
     syn_test_suite_helper:connect_node(SlaveNode2),
     rpc:call(SlaveNode1, syn_test_suite_helper, connect_node, [SlaveNode2]),
-    ok = syn_test_suite_helper:wait_cluster_connected([node(), SlaveNode1, SlaveNode2]),
+    ok = syn_test_suite_helper:wait_cluster_mesh_connected([node(), SlaveNode1, SlaveNode2]),
 
     %% check
-    assert_scope_subcluster(node(), default, [SlaveNode1, SlaveNode2]),
-    assert_scope_subcluster(SlaveNode1, default, [node(), SlaveNode2]),
-    assert_scope_subcluster(SlaveNode2, default, [node(), SlaveNode1]),
+    syn_test_suite_helper:assert_scope_subcluster(node(), default, [SlaveNode1, SlaveNode2]),
+    syn_test_suite_helper:assert_scope_subcluster(SlaveNode1, default, [node(), SlaveNode2]),
+    syn_test_suite_helper:assert_scope_subcluster(SlaveNode2, default, [node(), SlaveNode1]),
+
+    %% simulate full netsplit, again
+    rpc:call(SlaveNode1, syn_test_suite_helper, disconnect_node, [SlaveNode2]),
+    syn_test_suite_helper:disconnect_node(SlaveNode1),
+    syn_test_suite_helper:disconnect_node(SlaveNode2),
+    timer:sleep(500),
+
+    %% check
+    syn_test_suite_helper:assert_scope_subcluster(node(), default, []),
+
+    %% reconnect all, again
+    syn_test_suite_helper:connect_node(SlaveNode2),
+    rpc:call(SlaveNode1, syn_test_suite_helper, connect_node, [SlaveNode2]),
+    ok = syn_test_suite_helper:wait_cluster_mesh_connected([node(), SlaveNode1, SlaveNode2]),
+
+    %% check
+    syn_test_suite_helper:assert_scope_subcluster(node(), default, [SlaveNode1, SlaveNode2]),
+    syn_test_suite_helper:assert_scope_subcluster(SlaveNode1, default, [node(), SlaveNode2]),
+    syn_test_suite_helper:assert_scope_subcluster(SlaveNode2, default, [node(), SlaveNode1]),
 
     %% crash the scope process on local
     syn_test_suite_helper:kill_process(syn_registry_default),
-    timer:sleep(250),
+    timer:sleep(500),
 
     %% check, it should have rebuilt after supervisor restarts it
-    assert_scope_subcluster(node(), default, [SlaveNode1, SlaveNode2]),
-    assert_scope_subcluster(SlaveNode1, default, [node(), SlaveNode2]),
-    assert_scope_subcluster(SlaveNode2, default, [node(), SlaveNode1]),
+    syn_test_suite_helper:assert_scope_subcluster(node(), default, [SlaveNode1, SlaveNode2]),
+    syn_test_suite_helper:assert_scope_subcluster(SlaveNode1, default, [node(), SlaveNode2]),
+    syn_test_suite_helper:assert_scope_subcluster(SlaveNode2, default, [node(), SlaveNode1]),
 
     %% crash scopes supervisor on local
     syn_test_suite_helper:kill_process(syn_scopes_sup),
-    timer:sleep(250),
+    timer:sleep(500),
 
     %% check
-    assert_scope_subcluster(node(), default, [SlaveNode1, SlaveNode2]),
-    assert_scope_subcluster(SlaveNode1, default, [node(), SlaveNode2]),
-    assert_scope_subcluster(SlaveNode2, default, [node(), SlaveNode1]).
+    syn_test_suite_helper:assert_scope_subcluster(node(), default, [SlaveNode1, SlaveNode2]),
+    syn_test_suite_helper:assert_scope_subcluster(SlaveNode1, default, [node(), SlaveNode2]),
+    syn_test_suite_helper:assert_scope_subcluster(SlaveNode2, default, [node(), SlaveNode1]).
 
 three_nodes_discover_custom_scope(Config) ->
     %% get slaves
@@ -242,83 +261,83 @@ three_nodes_discover_custom_scope(Config) ->
     ok = syn:start(),
     ok = rpc:call(SlaveNode1, syn, start, []),
     ok = rpc:call(SlaveNode2, syn, start, []),
-    timer:sleep(250),
+    timer:sleep(500),
 
     %% add custom scopes
     ok = syn:add_node_to_scope(custom_scope_ab),
     ok = syn:add_node_to_scope(custom_scope_all),
     ok = rpc:call(SlaveNode1, syn, add_node_to_scopes, [[custom_scope_ab, custom_scope_bc, custom_scope_all]]),
     ok = rpc:call(SlaveNode2, syn, add_node_to_scopes, [[custom_scope_bc, custom_scope_c, custom_scope_all]]),
-    timer:sleep(250),
+    timer:sleep(500),
 
     %% check
-    assert_scope_subcluster(node(), custom_scope_ab, [SlaveNode1]),
-    assert_scope_subcluster(node(), custom_scope_all, [SlaveNode1, SlaveNode2]),
-    assert_scope_subcluster(SlaveNode1, custom_scope_ab, [node()]),
-    assert_scope_subcluster(SlaveNode1, custom_scope_bc, [SlaveNode2]),
-    assert_scope_subcluster(SlaveNode1, custom_scope_all, [node(), SlaveNode2]),
-    assert_scope_subcluster(SlaveNode2, custom_scope_bc, [SlaveNode1]),
-    assert_scope_subcluster(SlaveNode2, custom_scope_c, []),
-    assert_scope_subcluster(SlaveNode2, custom_scope_all, [node(), SlaveNode1]),
+    syn_test_suite_helper:assert_scope_subcluster(node(), custom_scope_ab, [SlaveNode1]),
+    syn_test_suite_helper:assert_scope_subcluster(node(), custom_scope_all, [SlaveNode1, SlaveNode2]),
+    syn_test_suite_helper:assert_scope_subcluster(SlaveNode1, custom_scope_ab, [node()]),
+    syn_test_suite_helper:assert_scope_subcluster(SlaveNode1, custom_scope_bc, [SlaveNode2]),
+    syn_test_suite_helper:assert_scope_subcluster(SlaveNode1, custom_scope_all, [node(), SlaveNode2]),
+    syn_test_suite_helper:assert_scope_subcluster(SlaveNode2, custom_scope_bc, [SlaveNode1]),
+    syn_test_suite_helper:assert_scope_subcluster(SlaveNode2, custom_scope_c, []),
+    syn_test_suite_helper:assert_scope_subcluster(SlaveNode2, custom_scope_all, [node(), SlaveNode1]),
 
     %% check default
-    assert_scope_subcluster(node(), default, [SlaveNode1, SlaveNode2]),
-    assert_scope_subcluster(SlaveNode1, default, [node(), SlaveNode2]),
-    assert_scope_subcluster(SlaveNode2, default, [node(), SlaveNode1]),
+    syn_test_suite_helper:assert_scope_subcluster(node(), default, [SlaveNode1, SlaveNode2]),
+    syn_test_suite_helper:assert_scope_subcluster(SlaveNode1, default, [node(), SlaveNode2]),
+    syn_test_suite_helper:assert_scope_subcluster(SlaveNode2, default, [node(), SlaveNode1]),
 
     %% disconnect node 2 (node 1 can still see node 2)
     syn_test_suite_helper:disconnect_node(SlaveNode2),
-    timer:sleep(250),
+    timer:sleep(500),
 
     %% check
-    assert_scope_subcluster(node(), custom_scope_ab, [SlaveNode1]),
-    assert_scope_subcluster(node(), custom_scope_all, [SlaveNode1]),
-    assert_scope_subcluster(SlaveNode1, custom_scope_ab, [node()]),
-    assert_scope_subcluster(SlaveNode1, custom_scope_bc, [SlaveNode2]),
-    assert_scope_subcluster(SlaveNode1, custom_scope_all, [node(), SlaveNode2]),
+    syn_test_suite_helper:assert_scope_subcluster(node(), custom_scope_ab, [SlaveNode1]),
+    syn_test_suite_helper:assert_scope_subcluster(node(), custom_scope_all, [SlaveNode1]),
+    syn_test_suite_helper:assert_scope_subcluster(SlaveNode1, custom_scope_ab, [node()]),
+    syn_test_suite_helper:assert_scope_subcluster(SlaveNode1, custom_scope_bc, [SlaveNode2]),
+    syn_test_suite_helper:assert_scope_subcluster(SlaveNode1, custom_scope_all, [node(), SlaveNode2]),
 
     %% reconnect node 2
     syn_test_suite_helper:connect_node(SlaveNode2),
-    ok = syn_test_suite_helper:wait_cluster_connected([node(), SlaveNode1, SlaveNode2]),
-    timer:sleep(250),
+    ok = syn_test_suite_helper:wait_cluster_mesh_connected([node(), SlaveNode1, SlaveNode2]),
+    timer:sleep(500),
 
     %% check
-    assert_scope_subcluster(node(), custom_scope_ab, [SlaveNode1]),
-    assert_scope_subcluster(node(), custom_scope_all, [SlaveNode1, SlaveNode2]),
-    assert_scope_subcluster(SlaveNode1, custom_scope_ab, [node()]),
-    assert_scope_subcluster(SlaveNode1, custom_scope_bc, [SlaveNode2]),
-    assert_scope_subcluster(SlaveNode1, custom_scope_all, [node(), SlaveNode2]),
-    assert_scope_subcluster(SlaveNode2, custom_scope_bc, [SlaveNode1]),
-    assert_scope_subcluster(SlaveNode2, custom_scope_c, []),
-    assert_scope_subcluster(SlaveNode2, custom_scope_all, [node(), SlaveNode1]),
+    syn_test_suite_helper:assert_scope_subcluster(node(), custom_scope_ab, [SlaveNode1]),
+    syn_test_suite_helper:assert_scope_subcluster(node(), custom_scope_all, [SlaveNode1, SlaveNode2]),
+    syn_test_suite_helper:assert_scope_subcluster(SlaveNode1, custom_scope_ab, [node()]),
+    syn_test_suite_helper:assert_scope_subcluster(SlaveNode1, custom_scope_bc, [SlaveNode2]),
+    syn_test_suite_helper:assert_scope_subcluster(SlaveNode1, custom_scope_all, [node(), SlaveNode2]),
+    syn_test_suite_helper:assert_scope_subcluster(SlaveNode2, custom_scope_bc, [SlaveNode1]),
+    syn_test_suite_helper:assert_scope_subcluster(SlaveNode2, custom_scope_c, []),
+    syn_test_suite_helper:assert_scope_subcluster(SlaveNode2, custom_scope_all, [node(), SlaveNode1]),
 
     %% crash a scope process on 2
     rpc:call(SlaveNode2, syn_test_suite_helper, kill_process, [syn_registry_custom_scope_bc]),
-    timer:sleep(250),
+    timer:sleep(500),
 
     %% check
-    assert_scope_subcluster(node(), custom_scope_ab, [SlaveNode1]),
-    assert_scope_subcluster(node(), custom_scope_all, [SlaveNode1, SlaveNode2]),
-    assert_scope_subcluster(SlaveNode1, custom_scope_ab, [node()]),
-    assert_scope_subcluster(SlaveNode1, custom_scope_bc, [SlaveNode2]),
-    assert_scope_subcluster(SlaveNode1, custom_scope_all, [node(), SlaveNode2]),
-    assert_scope_subcluster(SlaveNode2, custom_scope_bc, [SlaveNode1]),
-    assert_scope_subcluster(SlaveNode2, custom_scope_c, []),
-    assert_scope_subcluster(SlaveNode2, custom_scope_all, [node(), SlaveNode1]),
+    syn_test_suite_helper:assert_scope_subcluster(node(), custom_scope_ab, [SlaveNode1]),
+    syn_test_suite_helper:assert_scope_subcluster(node(), custom_scope_all, [SlaveNode1, SlaveNode2]),
+    syn_test_suite_helper:assert_scope_subcluster(SlaveNode1, custom_scope_ab, [node()]),
+    syn_test_suite_helper:assert_scope_subcluster(SlaveNode1, custom_scope_bc, [SlaveNode2]),
+    syn_test_suite_helper:assert_scope_subcluster(SlaveNode1, custom_scope_all, [node(), SlaveNode2]),
+    syn_test_suite_helper:assert_scope_subcluster(SlaveNode2, custom_scope_bc, [SlaveNode1]),
+    syn_test_suite_helper:assert_scope_subcluster(SlaveNode2, custom_scope_c, []),
+    syn_test_suite_helper:assert_scope_subcluster(SlaveNode2, custom_scope_all, [node(), SlaveNode1]),
 
     %% crash scopes supervisor on local
     syn_test_suite_helper:kill_process(syn_scopes_sup),
-    timer:sleep(250),
+    timer:sleep(500),
 
     %% check
-    assert_scope_subcluster(node(), custom_scope_ab, [SlaveNode1]),
-    assert_scope_subcluster(node(), custom_scope_all, [SlaveNode1, SlaveNode2]),
-    assert_scope_subcluster(SlaveNode1, custom_scope_ab, [node()]),
-    assert_scope_subcluster(SlaveNode1, custom_scope_bc, [SlaveNode2]),
-    assert_scope_subcluster(SlaveNode1, custom_scope_all, [node(), SlaveNode2]),
-    assert_scope_subcluster(SlaveNode2, custom_scope_bc, [SlaveNode1]),
-    assert_scope_subcluster(SlaveNode2, custom_scope_c, []),
-    assert_scope_subcluster(SlaveNode2, custom_scope_all, [node(), SlaveNode1]).
+    syn_test_suite_helper:assert_scope_subcluster(node(), custom_scope_ab, [SlaveNode1]),
+    syn_test_suite_helper:assert_scope_subcluster(node(), custom_scope_all, [SlaveNode1, SlaveNode2]),
+    syn_test_suite_helper:assert_scope_subcluster(SlaveNode1, custom_scope_ab, [node()]),
+    syn_test_suite_helper:assert_scope_subcluster(SlaveNode1, custom_scope_bc, [SlaveNode2]),
+    syn_test_suite_helper:assert_scope_subcluster(SlaveNode1, custom_scope_all, [node(), SlaveNode2]),
+    syn_test_suite_helper:assert_scope_subcluster(SlaveNode2, custom_scope_bc, [SlaveNode1]),
+    syn_test_suite_helper:assert_scope_subcluster(SlaveNode2, custom_scope_c, []),
+    syn_test_suite_helper:assert_scope_subcluster(SlaveNode2, custom_scope_all, [node(), SlaveNode1]).
 
 three_nodes_register_unregister_and_monitor_default_scope(Config) ->
     %% get slaves
@@ -329,7 +348,7 @@ three_nodes_register_unregister_and_monitor_default_scope(Config) ->
     ok = syn:start(),
     ok = rpc:call(SlaveNode1, syn, start, []),
     ok = rpc:call(SlaveNode2, syn, start, []),
-    timer:sleep(250),
+    timer:sleep(500),
 
     %% start processes
     Pid = syn_test_suite_helper:start_process(),
@@ -359,7 +378,7 @@ three_nodes_register_unregister_and_monitor_default_scope(Config) ->
     ok = syn:register({"my proc alias"}, Pid), %% same pid, different name
     ok = syn:register(<<"my proc with meta">>, PidWithMeta, {meta, <<"meta">>}), %% pid with meta
     ok = syn:register({remote_pid_on, slave_1}, PidRemoteOn1), %% remote on slave 1
-    timer:sleep(250),
+    timer:sleep(500),
 
     %% errors
     {error, taken} = syn:register(<<"my proc">>, PidRemoteOn1),
@@ -386,7 +405,7 @@ three_nodes_register_unregister_and_monitor_default_scope(Config) ->
     %% re-register to edit meta
     ok = syn:register(<<"my proc with meta">>, PidWithMeta, {meta2, <<"meta2">>}),
     ok = rpc:call(SlaveNode2, syn, register, [{remote_pid_on, slave_1}, PidRemoteOn1, added_meta]), %% updated on slave 2
-    timer:sleep(250),
+    timer:sleep(500),
 
     %% retrieve
     {PidWithMeta, {meta2, <<"meta2">>}} = syn:lookup(<<"my proc with meta">>),
@@ -402,14 +421,14 @@ three_nodes_register_unregister_and_monitor_default_scope(Config) ->
 
     %% crash scope process to ensure that monitors get recreated
     exit(whereis(syn_registry_default), kill),
-    timer:sleep(250), %$ wait for sup to restart it
+    timer:sleep(500), %$ wait for sup to restart it
 
     %% kill process
     syn_test_suite_helper:kill_process(Pid),
     syn_test_suite_helper:kill_process(PidRemoteOn1),
     %% unregister process
     ok = syn:unregister(<<"my proc with meta">>),
-    timer:sleep(250),
+    timer:sleep(500),
 
     %% retrieve
     undefined = syn:lookup(<<"my proc">>),
@@ -436,7 +455,7 @@ three_nodes_register_unregister_and_monitor_default_scope(Config) ->
     Pid1 = syn_test_suite_helper:start_process(),
     Pid2 = syn_test_suite_helper:start_process(),
     ok = syn:register(<<"my proc">>, Pid1),
-    timer:sleep(250),
+    timer:sleep(500),
     syn_registry:remove_from_local_table(default, <<"my proc">>, Pid1),
     syn_registry:add_to_local_table(default, <<"my proc">>, Pid2, undefined, 0, undefined),
     {error, race_condition} = rpc:call(SlaveNode1, syn, unregister, [<<"my proc">>]).
@@ -450,13 +469,13 @@ three_nodes_register_unregister_and_monitor_custom_scope(Config) ->
     ok = syn:start(),
     ok = rpc:call(SlaveNode1, syn, start, []),
     ok = rpc:call(SlaveNode2, syn, start, []),
-    timer:sleep(250),
+    timer:sleep(500),
 
     %% add custom scopes
     ok = syn:add_node_to_scope(custom_scope_ab),
     ok = rpc:call(SlaveNode1, syn, add_node_to_scopes, [[custom_scope_ab, custom_scope_bc]]),
     ok = rpc:call(SlaveNode2, syn, add_node_to_scopes, [[custom_scope_bc]]),
-    timer:sleep(250),
+    timer:sleep(500),
 
     %% start processes
     Pid = syn_test_suite_helper:start_process(),
@@ -507,7 +526,7 @@ three_nodes_register_unregister_and_monitor_custom_scope(Config) ->
     {'EXIT', {{invalid_scope, custom_scope_bc}, _}} = catch syn:register(custom_scope_bc, "scope_a", Pid),
     {'EXIT', {{invalid_scope, non_existent_scope}, _}} = catch syn:register(non_existent_scope, "scope_a", Pid),
     ok = rpc:call(SlaveNode2, syn, register, [custom_scope_bc, {remote_scoped_bc}, PidRemoteWithMetaOn1, <<"with_meta 1">>]),
-    timer:sleep(250),
+    timer:sleep(500),
 
     %% errors
     {error, taken} = syn:register(custom_scope_ab, "scope_a", PidWithMeta),
@@ -555,14 +574,14 @@ three_nodes_register_unregister_and_monitor_custom_scope(Config) ->
 
     %% re-register to edit meta
     ok = syn:register(custom_scope_ab, "scope_a_alias", PidWithMeta, <<"with_meta_updated">>),
-    timer:sleep(250),
+    timer:sleep(500),
     {PidWithMeta, <<"with_meta_updated">>} = syn:lookup(custom_scope_ab, "scope_a_alias"),
     {PidWithMeta, <<"with_meta_updated">>} = rpc:call(SlaveNode1, syn, lookup, [custom_scope_ab, "scope_a_alias"]),
     {badrpc, {'EXIT', {{invalid_scope, custom_scope_ab}, _}}} = catch rpc:call(SlaveNode2, syn, lookup, [custom_scope_ab, "scope_a_alias"]),
 
     %% crash scope process to ensure that monitors get recreated
     exit(whereis(syn_registry_custom_scope_ab), kill),
-    timer:sleep(250), %$ wait for sup to restart it
+    timer:sleep(500), %$ wait for sup to restart it
 
     %% kill process
     syn_test_suite_helper:kill_process(Pid),
@@ -571,7 +590,7 @@ three_nodes_register_unregister_and_monitor_custom_scope(Config) ->
     {error, undefined} = catch syn:unregister(<<"my proc with meta">>),
     {'EXIT', {{invalid_scope, custom_scope_bc}, _}} = catch syn:unregister(custom_scope_bc, <<"my proc with meta">>),
     ok = rpc:call(SlaveNode1, syn, unregister, [custom_scope_bc, {remote_scoped_bc}]),
-    timer:sleep(250),
+    timer:sleep(500),
 
     %% retrieve
     undefined = syn:lookup("scope_a"),
@@ -618,7 +637,7 @@ three_nodes_register_unregister_and_monitor_custom_scope(Config) ->
     Pid1 = syn_test_suite_helper:start_process(),
     Pid2 = syn_test_suite_helper:start_process(),
     ok = syn:register(custom_scope_ab, <<"my proc">>, Pid1),
-    timer:sleep(250),
+    timer:sleep(500),
     syn_registry:remove_from_local_table(custom_scope_ab, <<"my proc">>, Pid1),
     syn_registry:add_to_local_table(custom_scope_ab, <<"my proc">>, Pid2, undefined, 0, undefined),
     {error, race_condition} = rpc:call(SlaveNode1, syn, unregister, [custom_scope_ab, <<"my proc">>]).
@@ -638,7 +657,7 @@ three_nodes_cluster_changes(Config) ->
     %% add custom scopes
     ok = rpc:call(SlaveNode1, syn, add_node_to_scopes, [[custom_scope_bc]]),
     ok = rpc:call(SlaveNode2, syn, add_node_to_scopes, [[custom_scope_bc]]),
-    timer:sleep(250),
+    timer:sleep(500),
 
     %% start processes
     PidRemoteOn1 = syn_test_suite_helper:start_process(SlaveNode1),
@@ -649,13 +668,13 @@ three_nodes_cluster_changes(Config) ->
     ok = rpc:call(SlaveNode1, syn, register, ["proc-2", PidRemoteOn2, "meta-2"]),
     ok = rpc:call(SlaveNode1, syn, register, [custom_scope_bc, "BC-proc-1", PidRemoteOn1, "meta-1"]),
     ok = rpc:call(SlaveNode1, syn, register, [custom_scope_bc, "BC-proc-1 alias", PidRemoteOn1, "meta-1 alias"]),
-    timer:sleep(250),
+    timer:sleep(500),
 
     %% form full cluster
     ok = syn:start(),
     rpc:call(SlaveNode1, syn_test_suite_helper, connect_node, [SlaveNode2]),
-    syn_test_suite_helper:wait_cluster_connected([node(), SlaveNode1, SlaveNode2]),
-    timer:sleep(250),
+    syn_test_suite_helper:wait_cluster_mesh_connected([node(), SlaveNode1, SlaveNode2]),
+    timer:sleep(500),
 
     %% retrieve
     {PidRemoteOn1, "meta-1"} = syn:lookup("proc-1"),
@@ -695,7 +714,7 @@ three_nodes_cluster_changes(Config) ->
 
     %% partial netsplit (1 cannot see 2)
     rpc:call(SlaveNode1, syn_test_suite_helper, disconnect_node, [SlaveNode2]),
-    timer:sleep(250),
+    timer:sleep(500),
 
     %% retrieve
     {PidRemoteOn1, "meta-1"} = syn:lookup("proc-1"),
@@ -735,8 +754,8 @@ three_nodes_cluster_changes(Config) ->
 
     %% re-join
     rpc:call(SlaveNode1, syn_test_suite_helper, connect_node, [SlaveNode2]),
-    syn_test_suite_helper:wait_cluster_connected([node(), SlaveNode1, SlaveNode2]),
-    timer:sleep(250),
+    syn_test_suite_helper:wait_cluster_mesh_connected([node(), SlaveNode1, SlaveNode2]),
+    timer:sleep(500),
 
     %% retrieve
     {PidRemoteOn1, "meta-1"} = syn:lookup("proc-1"),
@@ -787,11 +806,11 @@ three_nodes_cluster_conflicts(Config) ->
     %% add custom scopes
     ok = rpc:call(SlaveNode1, syn, add_node_to_scopes, [[custom_scope_bc]]),
     ok = rpc:call(SlaveNode2, syn, add_node_to_scopes, [[custom_scope_bc]]),
-    timer:sleep(250),
+    timer:sleep(500),
 
     %% partial netsplit (1 cannot see 2)
     rpc:call(SlaveNode1, syn_test_suite_helper, disconnect_node, [SlaveNode2]),
-    timer:sleep(250),
+    timer:sleep(500),
 
     %% start conflict processes
     Pid2RemoteOn1 = syn_test_suite_helper:start_process(SlaveNode1),
@@ -805,8 +824,8 @@ three_nodes_cluster_conflicts(Config) ->
 
     %% re-join
     rpc:call(SlaveNode1, syn_test_suite_helper, connect_node, [SlaveNode2]),
-    syn_test_suite_helper:wait_cluster_connected([node(), SlaveNode1, SlaveNode2]),
-    timer:sleep(250),
+    syn_test_suite_helper:wait_cluster_mesh_connected([node(), SlaveNode1, SlaveNode2]),
+    timer:sleep(500),
 
     %% retrieve
     {Pid2RemoteOn2, "meta-2"} = syn:lookup("proc-confict"),
@@ -840,7 +859,7 @@ three_nodes_cluster_conflicts(Config) ->
     Pid2 = syn_test_suite_helper:start_process(SlaveNode1),
     rpc:call(SlaveNode1, syn_registry, add_to_local_table, [default, <<"my proc">>, Pid2, "meta-2", erlang:system_time(), undefined]),
     ok = syn:register(<<"my proc">>, Pid1, "meta-1"),
-    timer:sleep(250),
+    timer:sleep(500),
     {Pid1, "meta-1"} = syn:lookup(<<"my proc">>),
     {Pid1, "meta-1"} = rpc:call(SlaveNode1, syn, lookup, [<<"my proc">>]),
     {Pid1, "meta-1"} = rpc:call(SlaveNode2, syn, lookup, [<<"my proc">>]),
@@ -851,13 +870,13 @@ three_nodes_cluster_conflicts(Config) ->
     PidCustom2 = syn_test_suite_helper:start_process(SlaveNode2),
     rpc:call(SlaveNode2, syn_registry, add_to_local_table, [custom_scope_bc, <<"my proc">>, PidCustom2, "meta-2", erlang:system_time(), undefined]),
     ok = rpc:call(SlaveNode1, syn, register, [custom_scope_bc, <<"my proc">>, PidCustom1, "meta-1"]),
-    timer:sleep(250),
+    timer:sleep(500),
     {PidCustom1, "meta-1"} = rpc:call(SlaveNode1, syn, lookup, [custom_scope_bc, <<"my proc">>]),
     {PidCustom1, "meta-1"} = rpc:call(SlaveNode2, syn, lookup, [custom_scope_bc, <<"my proc">>]),
     true = rpc:call(SlaveNode1, erlang, is_process_alive, [PidCustom1]),
     false = rpc:call(SlaveNode2, erlang, is_process_alive, [PidCustom2]).
 
-three_nodes_custom_event_handler(Config) ->
+three_nodes_custom_event_handler_reg_unreg(Config) ->
     %% get slaves
     SlaveNode1 = proplists:get_value(slave_node_1, Config),
     SlaveNode2 = proplists:get_value(slave_node_2, Config),
@@ -871,61 +890,180 @@ three_nodes_custom_event_handler(Config) ->
     ok = syn:start(),
     ok = rpc:call(SlaveNode1, syn, start, []),
     ok = rpc:call(SlaveNode2, syn, start, []),
-    timer:sleep(250),
+    timer:sleep(500),
+
+    %% init
+    CurrentNode = node(),
 
     %% register test process to receive messages back from test handler
     global:register_name(syn_test_main_process, self()),
 
     %% start process
     Pid = syn_test_suite_helper:start_process(),
+
+    %% ---> on registration
     ok = syn:register("proc-handler", Pid, <<"my-meta">>),
 
     %% check callbacks on_process_registered called on all nodes
-    CurrentNode = node(),
     receive
         {on_process_registered, CurrentNode, default, "proc-handler", Pid, <<"my-meta">>} -> ok
     after 1000 ->
-        ok = on_process_registered_not_called_on_main_node
+        ct:fail({on_process_registered_not_called_on, node()})
     end,
     receive
         {on_process_registered, SlaveNode1, default, "proc-handler", Pid, <<"my-meta">>} -> ok
     after 1000 ->
-        ok = on_process_registered_not_called_on_slave_1_node
+        ct:fail({on_process_registered_not_called_on, SlaveNode1})
     end,
     receive
         {on_process_registered, SlaveNode2, default, "proc-handler", Pid, <<"my-meta">>} -> ok
     after 1000 ->
-        ok = on_process_registered_not_called_on_slave_2_node
+        ct:fail({on_process_registered_not_called_on, SlaveNode2})
     end,
+    %% no other messages
+    {message_queue_len, 0} = process_info(global:whereis_name(syn_test_main_process), message_queue_len),
 
+    %% ---> on meta update
     ok = syn:register("proc-handler", Pid, <<"my-new-meta">>),
 
     %% check callbacks on_process_registered are called on nodes because of change of meta
     receive
         {on_process_registered, CurrentNode, default, "proc-handler", Pid, <<"my-new-meta">>} -> ok
     after 1000 ->
-        ok = on_process_registered_not_called_on_main_node
+        ct:fail({on_process_registered_not_called_on, node()})
     end,
     receive
         {on_process_registered, SlaveNode1, default, "proc-handler", Pid, <<"my-new-meta">>} -> ok
     after 1000 ->
-        ok = on_process_registered_not_called_on_slave_1_node
+        ct:fail({on_process_registered_not_called_on, SlaveNode1})
     end,
     receive
         {on_process_registered, SlaveNode2, default, "proc-handler", Pid, <<"my-new-meta">>} -> ok
     after 1000 ->
-        ok = on_process_registered_not_called_on_slave_2_node
+        ct:fail({on_process_registered_not_called_on, SlaveNode2})
     end,
+    %% no other messages
+    {message_queue_len, 0} = process_info(global:whereis_name(syn_test_main_process), message_queue_len),
+
+    %% ---> on unregister
+    ok = syn:unregister("proc-handler"),
+
+    %% check callbacks on_process_unregistered called on all nodes
+    receive
+        {on_process_unregistered, CurrentNode, default, "proc-handler", Pid, <<"my-new-meta">>} -> ok
+    after 1000 ->
+        ct:fail({on_process_unregistered_not_called_on, node()})
+    end,
+    receive
+        {on_process_unregistered, SlaveNode1, default, "proc-handler", Pid, <<"my-new-meta">>} -> ok
+    after 1000 ->
+        ct:fail({on_process_unregistered_not_called_on, SlaveNode1})
+    end,
+    receive
+        {on_process_unregistered, SlaveNode2, default, "proc-handler", Pid, <<"my-new-meta">>} -> ok
+    after 1000 ->
+        ct:fail({on_process_unregistered_not_called_on, SlaveNode2})
+    end,
+    %% no other messages
+    {message_queue_len, 0} = process_info(global:whereis_name(syn_test_main_process), message_queue_len),
 
     %% clean
+    syn_test_suite_helper:kill_process(Pid),
+    timer:sleep(500),
+    syn_test_suite_helper:flush_inbox(),
+
+    %% ---> after a netsplit
+    PidRemoteOn1 = syn_test_suite_helper:start_process(SlaveNode1),
+    syn:register(remote_on_1, PidRemoteOn1, {some, meta}),
+    timer:sleep(500),
+
+    %% flush inbox
+    syn_test_suite_helper:flush_inbox(),
+
+    %% partial netsplit (main cannot see 1)
+    syn_test_suite_helper:disconnect_node(SlaveNode1),
+    timer:sleep(500),
+
+    %% check callbacks on_process_unregistered called on all nodes
+    receive
+        {on_process_unregistered, CurrentNode, default, remote_on_1, PidRemoteOn1, {some, meta}} -> ok
+    after 1000 ->
+        ct:fail({on_process_unregistered_not_called_on, node()})
+    end,
+    %% no other messages
+    {message_queue_len, 0} = process_info(global:whereis_name(syn_test_main_process), message_queue_len),
+
+    %% ---> after a re-join
+    %% re-join
+    syn_test_suite_helper:connect_node(SlaveNode1),
+    timer:sleep(500),
+
+    %% check callbacks on_process_registered called on all nodes
+    receive
+        {on_process_registered, CurrentNode, default, remote_on_1, PidRemoteOn1, {some, meta}} -> ok
+    after 1000 ->
+        ct:fail({on_process_registered_not_called_on, node()})
+    end,
+    %% no other messages
+    {message_queue_len, 0} = process_info(global:whereis_name(syn_test_main_process), message_queue_len),
+
+    %% clean
+    syn_test_suite_helper:kill_process(PidRemoteOn1),
+    timer:sleep(1000),
+    syn_test_suite_helper:flush_inbox(),
+
+    %% ---> after a conflict resolution
+    %% partial netsplit (1 cannot see 2)
+    rpc:call(SlaveNode1, syn_test_suite_helper, disconnect_node, [SlaveNode2]),
+    timer:sleep(1000),
+
+    %% check
+    syn_test_suite_helper:assert_scope_subcluster(SlaveNode1, default, [node()]),
+    syn_test_suite_helper:assert_scope_subcluster(SlaveNode2, default, [node()]),
+
+    %% start conflict processes
+    Pid2RemoteOn1 = syn_test_suite_helper:start_process(SlaveNode1),
+    Pid2RemoteOn2 = syn_test_suite_helper:start_process(SlaveNode2),
+    ok = rpc:call(SlaveNode1, syn, register, ["proc-confict", Pid2RemoteOn1, <<"meta-1">>]),
+    ok = rpc:call(SlaveNode2, syn, register, ["proc-confict", Pid2RemoteOn2, <<"meta-2">>]),
+    timer:sleep(500),
+
+    %% flush inbox
+    syn_test_suite_helper:flush_inbox(),
+
+    %% re-join
+    rpc:call(SlaveNode1, syn_test_suite_helper, connect_node, [SlaveNode2]),
+    syn_test_suite_helper:wait_cluster_mesh_connected([node(), SlaveNode1, SlaveNode2]),
+    timer:sleep(500),
+
+    %% check callbacks on_process_unregistered called on all nodes
+    receive
+        {on_process_unregistered, SlaveNode1, default, "proc-confict", Pid2RemoteOn1, <<"meta-1">>} -> ok
+    after 1000 ->
+        ct:fail({on_process_unregistered_not_called_on, SlaveNode1})
+    end,
+    receive
+        {on_process_registered, SlaveNode1, default, "proc-confict", Pid2RemoteOn2, <<"meta-2">>} -> ok
+    after 1000 ->
+        ct:fail({on_process_registered_not_called_on, SlaveNode1})
+    end,
+    %% no other messages
+    {message_queue_len, 0} = process_info(global:whereis_name(syn_test_main_process), message_queue_len),
+
+    %% clean
+    syn_test_suite_helper:kill_process(Pid2RemoteOn1),
+    syn_test_suite_helper:kill_process(Pid2RemoteOn2),
+    timer:sleep(500),
+    syn_test_suite_helper:flush_inbox(),
+
+    %% ---> don't call on monitor rebuild
+    %% crash the scope process on local
+    syn_test_suite_helper:kill_process(syn_registry_default),
+    timer:sleep(500),
+
+    %% no messages
+    {message_queue_len, 0} = process_info(global:whereis_name(syn_test_main_process), message_queue_len),
+
+    %% unregister test process
     global:unregister_name(syn_test_main_process).
 
-%% ===================================================================
-%% Internal
-%% ===================================================================
-assert_scope_subcluster(Node, Scope, ExpectedNodes) ->
-    NodesMap = rpc:call(Node, syn_registry, get_subcluster_nodes, [Scope]),
-    Nodes = maps:keys(NodesMap),
-    ExpectedCount = length(ExpectedNodes),
-    ExpectedCount = length(Nodes),
-    lists:foreach(fun(RemoteNode) -> true = lists:member(RemoteNode, Nodes) end, ExpectedNodes).

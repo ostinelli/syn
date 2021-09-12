@@ -31,9 +31,17 @@
 %% API
 -export([ensure_event_handler_loaded/0]).
 -export([do_on_process_registered/4]).
+-export([do_on_process_unregistered/4]).
 -export([do_resolve_registry_conflict/4]).
 
 -callback on_process_registered(
+    Scope :: any(),
+    Name :: any(),
+    Pid :: pid(),
+    Meta :: any()
+) -> any().
+
+-callback on_process_unregistered(
     Scope :: any(),
     Name :: any(),
     Pid :: pid(),
@@ -46,7 +54,7 @@
     {Pid2 :: pid(), Meta2 :: any()}
 ) -> PidToKeep :: pid() | undefined.
 
--optional_callbacks([on_process_registered/4, resolve_registry_conflict/3]).
+-optional_callbacks([on_process_registered/4, on_process_unregistered/4, resolve_registry_conflict/3]).
 
 %% ===================================================================
 %% API
@@ -61,24 +69,22 @@ ensure_event_handler_loaded() ->
 -spec do_on_process_registered(
     Scope :: atom(),
     Name :: any(),
-    Pid :: pid(),
-    Meta :: any()
+    {TablePid :: pid(), TableMeta :: any()},
+    {Pid :: pid(), Meta :: any()}
 ) -> any().
-do_on_process_registered(Scope, Name, Pid, Meta) ->
-    CustomEventHandler = get_custom_event_handler(),
-    case erlang:function_exported(CustomEventHandler, on_process_registered, 4) of
-        true ->
-            try CustomEventHandler:on_process_registered(Scope, Name, Pid, Meta)
-            catch Class:Reason:Stacktrace ->
-                error_logger:error_msg(
-                    "Syn(~p): Error ~p:~p in custom handler on_process_registered: ~p~n",
-                    [node(), Class, Reason, Stacktrace]
-                )
-            end;
+do_on_process_registered(_Scope, _Name, {TablePid, TableMeta}, {Pid, Meta})
+    when TablePid =:= Pid, TableMeta =:= Meta -> ok;
+do_on_process_registered(Scope, Name, {_TablePid, _TableMeta}, {Pid, Meta}) ->
+    call_callback_event(on_process_registered, Scope, Name, Pid, Meta).
 
-        _ ->
-            ok
-    end.
+-spec do_on_process_unregistered(
+    Scope :: atom(),
+    Name :: any(),
+    TablePid :: pid(),
+    TableMeta :: any()
+) -> any().
+do_on_process_unregistered(Scope, Name, Pid, Meta) ->
+    call_callback_event(on_process_unregistered, Scope, Name, Pid, Meta).
 
 -spec do_resolve_registry_conflict(
     Scope :: atom(),
@@ -119,3 +125,26 @@ do_resolve_registry_conflict(Scope, Name, {Pid1, Meta1, Time1}, {Pid2, Meta2, Ti
 -spec get_custom_event_handler() -> undefined | {ok, CustomEventHandler :: atom()}.
 get_custom_event_handler() ->
     application:get_env(syn, event_handler, undefined).
+
+-spec call_callback_event(
+    CallbackMethod :: atom(),
+    Scope :: atom(),
+    Name :: any(),
+    Pid :: pid(),
+    Meta :: any()
+) -> any().
+call_callback_event(CallbackMethod, Scope, Name, Pid, Meta) ->
+    CustomEventHandler = get_custom_event_handler(),
+    case erlang:function_exported(CustomEventHandler, CallbackMethod, 4) of
+        true ->
+            try CustomEventHandler:CallbackMethod(Scope, Name, Pid, Meta)
+            catch Class:Reason:Stacktrace ->
+                error_logger:error_msg(
+                    "Syn(~p): Error ~p:~p in custom handler ~p: ~p~n",
+                    [node(), Class, Reason, CallbackMethod, Stacktrace]
+                )
+            end;
+
+        _ ->
+            ok
+    end.
