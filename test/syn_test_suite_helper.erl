@@ -26,8 +26,7 @@
 -module(syn_test_suite_helper).
 
 %% API
--export([start_slave/1, start_slave/4]).
--export([stop_slave/1, stop_slave/2]).
+-export([start_slave/1, stop_slave/1]).
 -export([connect_node/1, disconnect_node/1]).
 -export([use_custom_handler/0]).
 -export([clean_after_test/0]).
@@ -35,7 +34,11 @@
 -export([kill_process/1]).
 -export([flush_inbox/0]).
 -export([wait_cluster_mesh_connected/1]).
+-export([assert_cluster/2]).
 -export([assert_scope_subcluster/3]).
+-export([assert_received_messages/1]).
+-export([assert_empty_queue/1]).
+-export([wait_process_name_ready/1, wait_process_name_ready/2]).
 -export([send_error_logger_to_disk/0]).
 
 %% internal
@@ -45,15 +48,9 @@
 %% API
 %% ===================================================================
 start_slave(NodeShortName) ->
-    {ok, Node} = ct_slave:start(NodeShortName, [{boot_timeout, 10}]),
-    CodePath = code:get_path(),
-    true = rpc:call(Node, code, set_path, [CodePath]),
-    {ok, Node}.
-start_slave(NodeShortName, Host, Username, Password) ->
-    {ok, Node} = ct_slave:start(Host, NodeShortName, [
+    {ok, Node} = ct_slave:start(NodeShortName, [
         {boot_timeout, 10},
-        {username, Username},
-        {password, Password}
+        {erl_flags, "-connect_all false"}
     ]),
     CodePath = code:get_path(),
     true = rpc:call(Node, code, set_path, [CodePath]),
@@ -61,8 +58,6 @@ start_slave(NodeShortName, Host, Username, Password) ->
 
 stop_slave(NodeShortName) ->
     {ok, _} = ct_slave:stop(NodeShortName).
-stop_slave(Host, NodeShortName) ->
-    {ok, _} = ct_slave:stop(Host, NodeShortName).
 
 connect_node(Node) ->
     net_kernel:connect_node(Node).
@@ -96,16 +91,31 @@ start_process(Node, Loop) ->
     Pid = spawn(Node, Loop),
     Pid.
 
-kill_process(Pid) when is_pid(Pid) ->
-    exit(Pid, kill);
 kill_process(RegisteredName) when is_atom(RegisteredName) ->
-    exit(whereis(RegisteredName), kill).
+    case whereis(RegisteredName) of
+        undefined -> ok;
+        Pid -> kill_process(Pid)
+    end;
+kill_process(Pid) when is_pid(Pid) ->
+    case rpc:call(node(Pid), erlang, is_process_alive, [Pid]) of
+        true ->
+            MRef = monitor(process, Pid),
+            exit(Pid, kill),
+            receive
+                {'DOWN', MRef, process, Pid, _Reason} -> ok
+            after 5000 ->
+                ct:fail("~n\tCould not kill process ~p~n", [Pid])
+            end;
+
+        false ->
+            ok
+    end.
 
 flush_inbox() ->
     receive
         _ -> flush_inbox()
-    after
-        0 -> ok
+    after 0 ->
+        ok
     end.
 
 wait_cluster_mesh_connected(Nodes) ->
@@ -126,37 +136,89 @@ wait_cluster_mesh_connected(Nodes, StartAt) ->
                 true ->
                     {error, {could_not_init_cluster, Nodes}};
                 false ->
-                    timer:sleep(100),
+                    timer:sleep(50),
                     wait_cluster_mesh_connected(Nodes, StartAt)
             end
     end.
 
+assert_cluster(Node, ExpectedNodes) ->
+    assert_cluster(Node, ExpectedNodes, os:system_time(millisecond)).
+assert_cluster(Node, ExpectedNodes, StartAt) ->
+    Nodes = rpc:call(Node, erlang, nodes, []),
+    case do_assert_cluster(Nodes, ExpectedNodes, StartAt) of
+        continue -> assert_cluster(Node, ExpectedNodes, StartAt);
+        _ -> ok
+    end.
+
 assert_scope_subcluster(Node, Scope, ExpectedNodes) ->
+    assert_scope_subcluster(Node, Scope, ExpectedNodes, os:system_time(millisecond)).
+assert_scope_subcluster(Node, Scope, ExpectedNodes, StartAt) ->
     NodesMap = rpc:call(Node, syn_registry, get_subcluster_nodes, [Scope]),
     Nodes = maps:keys(NodesMap),
-    ExpectedCount = length(ExpectedNodes),
-    %% count nodes
-    case length(Nodes) of
-        ExpectedCount ->
+    case do_assert_cluster(Nodes, ExpectedNodes, StartAt) of
+        continue -> assert_scope_subcluster(Node, Scope, ExpectedNodes, StartAt);
+        _ -> ok
+    end.
+
+assert_received_messages(Messages) ->
+    assert_received_messages(Messages, []).
+assert_received_messages([], UnexpectedMessages) ->
+    do_assert_received_messages([], UnexpectedMessages);
+assert_received_messages(Messages, UnexpectedMessages) ->
+    receive
+        Message ->
+            case lists:member(Message, Messages) of
+                true ->
+                    Messages1 = lists:delete(Message, Messages),
+                    assert_received_messages(Messages1, UnexpectedMessages);
+
+                false ->
+                    assert_received_messages(Messages, [Message | UnexpectedMessages])
+            end
+    after 5000 ->
+        do_assert_received_messages(Messages, UnexpectedMessages)
+    end.
+
+assert_empty_queue(Pid) when is_pid(Pid) ->
+    case process_info(Pid, message_queue_len) of
+        {message_queue_len, 0} ->
             ok;
 
         _ ->
-            ct:fail("~n\tInvalid subcluster~n\tExpected: ~p~n\tActual: ~p~n\tLine: ~p~n",
-                [ExpectedNodes, Nodes, get_line_from_stacktrace(2)]
-            )
-    end,
-    %% loop nodes
-    lists:foreach(fun(RemoteNode) ->
-        case lists:member(RemoteNode, Nodes) of
-            true ->
-                ok;
+            {messages, Messages} = process_info(Pid, messages),
+            ct:fail("~n\tMessage queue was not empty, got:~n\t~p~n", [Messages])
+    end.
 
-            _ ->
-                ct:fail("~n\tInvalid subcluster~n\tExpected: ~p~n\tActual: ~p~n\tLine: ~p~n",
-                    [ExpectedNodes, Nodes, get_line_from_stacktrace(3)]
-                )
-        end
-    end, ExpectedNodes).
+wait_process_name_ready(Name) ->
+    wait_process_name_ready(Name, os:system_time(millisecond)).
+wait_process_name_ready(Name, StartAt) ->
+    timer:sleep(50),
+    case whereis(Name) of
+        undefined ->
+            case os:system_time(millisecond) - StartAt > 5000 of
+                true ->
+                    ct:fail("~n\tProcess with name ~p didn't come alive~n", [Name]);
+
+                false ->
+
+                    wait_process_name_ready(Name, StartAt)
+            end;
+
+        Pid ->
+            case process_info(Pid, status) of
+                {status, waiting} ->
+                    ok;
+
+                Other ->
+                    case os:system_time(millisecond) - StartAt > 5000 of
+                        true ->
+                            ct:fail("~n\tProcess with name ~p didn't come ready~n\tStatus: ~p~n", [Name, Other]);
+
+                        false ->
+                            wait_process_name_ready(Name, StartAt)
+                    end
+            end
+    end.
 
 send_error_logger_to_disk() ->
     error_logger:logfile({open, atom_to_list(node())}).
@@ -169,7 +231,52 @@ process_main() ->
         _ -> process_main()
     end.
 
-get_line_from_stacktrace(Position) ->
+do_assert_cluster(Nodes, ExpectedNodes, StartAt) ->
+    ExpectedCount = length(ExpectedNodes),
+    %% count nodes
+    case length(Nodes) of
+        ExpectedCount ->
+            %% loop nodes
+            RemainingNodes = lists:filter(fun(N) -> not lists:member(N, ExpectedNodes) end, Nodes),
+            case length(RemainingNodes) of
+                0 ->
+                    ok;
+
+                _ ->
+                    case os:system_time(millisecond) - StartAt > 5000 of
+                        true ->
+                            ct:fail("~n\tInvalid subcluster~n\tExpected: ~p~n\tActual: ~p~n\tLine: ~p~n",
+                                [ExpectedNodes, Nodes, get_line_from_stacktrace()]
+                            );
+
+                        false ->
+                            timer:sleep(50),
+                            continue
+                    end
+            end;
+
+        _ ->
+            case os:system_time(millisecond) - StartAt > 5000 of
+                true ->
+                    ct:fail("~n\tInvalid subcluster~n\tExpected: ~p~n\tActual: ~p~n\tLine: ~p~n",
+                        [ExpectedNodes, Nodes, get_line_from_stacktrace()]
+                    );
+
+                false ->
+                    timer:sleep(50),
+                    continue
+            end
+    end.
+
+do_assert_received_messages([], []) ->
+    ok;
+do_assert_received_messages(MissingMessages, UnexpectedMessages) ->
+    ct:fail("~n\tReceive messages error~n\tMissing: ~p~n\tUnexpected: ~p~n",
+        [lists:reverse(MissingMessages), lists:reverse(UnexpectedMessages)]
+    ).
+
+get_line_from_stacktrace() ->
     {current_stacktrace, Stacktrace} = process_info(self(), current_stacktrace),
-    {_, _, _, FileInfo} = lists:nth(Position, Stacktrace),
+    [{_, _, _, FileInfo} | _] = lists:dropwhile(fun({Module, _Method, _Arity, _FileInfo}) ->
+        Module =:= ?MODULE end, Stacktrace),
     proplists:get_value(line, FileInfo).
