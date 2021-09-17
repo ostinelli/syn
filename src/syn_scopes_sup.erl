@@ -49,7 +49,7 @@ get_node_scopes() ->
 
 -spec add_node_to_scope(Scope :: atom()) -> ok.
 add_node_to_scope(Scope) ->
-    error_logger:info_msg("SYN[~p] Adding node to scope: ~p", [node(), Scope]),
+    error_logger:info_msg("SYN[~s] Adding node to scope '~s'", [node(), Scope]),
     %% save to ENV (failsafe if sup is restarted)
     CustomScopes0 = case application:get_env(syn, syn_custom_scopes) of
         undefined -> #{};
