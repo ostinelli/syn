@@ -267,11 +267,7 @@ handle_call({unregister_on_node, Name, Pid}, _From, #state{scope = Scope} = Stat
 
         undefined ->
             {reply, {error, undefined}, State}
-    end;
-
-handle_call(Request, From, State) ->
-    error_logger:warning_msg("SYN[~p] Received from ~p an unknown call message: ~p", [node(), Request, From]),
-    {reply, undefined, State}.
+    end.
 
 %% ----------------------------------------------------------------------------------------------------------
 %% Cast messages
@@ -336,11 +332,7 @@ handle_cast({'3.0', sync, RemoteScopePid, RegistryTuplesOfRemoteNode}, #state{
             %% -> monitor
             _MRef = monitor(process, RemoteScopePid),
             {noreply, State#state{nodes = Nodes#{RemoteScopeNode => RemoteScopePid}}}
-    end;
-
-handle_cast(Msg, State) ->
-    error_logger:warning_msg("SYN[~p] Received an unknown cast message: ~p", [node(), Msg]),
-    {noreply, State}.
+    end.
 
 %% ----------------------------------------------------------------------------------------------------------
 %% Info messages
@@ -394,10 +386,6 @@ handle_info({nodedown, _Node}, State) ->
 handle_info({nodeup, RemoteNode}, State) ->
     error_logger:info_msg("SYN[~p] Node ~p has joined the cluster, sending announce message", [node(), RemoteNode]),
     cast_to_node(RemoteNode, {'3.0', announce, self()}, State),
-    {noreply, State};
-
-handle_info(Info, State) ->
-    error_logger:warning_msg("SYN[~p] Received an unknown info message: ~p", [node(), Info]),
     {noreply, State}.
 
 %% ----------------------------------------------------------------------------------------------------------
