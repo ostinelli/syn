@@ -24,7 +24,7 @@
 %% THE SOFTWARE.
 %% ==========================================================================================================
 -module(syn_registry).
--behaviour(gen_server).
+-behaviour(syn_gen_scope).
 
 %% API
 -export([start_link/1]).
@@ -34,28 +34,20 @@
 -export([unregister/1, unregister/2]).
 -export([count/1, count/2]).
 
-%% gen_server callbacks
+%% syn_gen_scope callbacks
 -export([
     init/1,
     handle_call/3,
-    handle_cast/2,
     handle_info/2,
-    handle_continue/2,
-    terminate/2,
-    code_change/3
+    save_remote_data/3,
+    get_local_data/1,
+    purge_local_data_for_node/2
 ]).
 
 %% tests
 -ifdef(TEST).
 -export([add_to_local_table/6, remove_from_local_table/3]).
 -endif.
-
-%% records
--record(state, {
-    scope = default :: atom(),
-    process_name = syn_registry_default :: atom(),
-    nodes = #{} :: #{node() => pid()}
-}).
 
 %% includes
 -include("syn.hrl").
@@ -66,14 +58,11 @@
 -spec start_link(Scope :: atom()) ->
     {ok, Pid :: pid()} | {error, {already_started, Pid :: pid()}} | {error, Reason :: any()}.
 start_link(Scope) when is_atom(Scope) ->
-    ProcessName = get_process_name_for_scope(Scope),
-    Args = [Scope, ProcessName],
-    gen_server:start_link({local, ProcessName}, ?MODULE, Args, []).
+    syn_gen_scope:start_link(?MODULE, Scope, [Scope]).
 
--spec get_subcluster_nodes(Scope :: atom()) -> [node()].
-get_subcluster_nodes(Scope) ->
-    ProcessName = get_process_name_for_scope(Scope),
-    gen_server:call(ProcessName, get_subcluster_nodes).
+-spec get_subcluster_nodes(#state{}) -> [node()].
+get_subcluster_nodes(State) ->
+    syn_gen_scope:get_subcluster_nodes(?MODULE, State).
 
 -spec lookup(Name :: any()) -> {pid(), Meta :: any()} | undefined.
 lookup(Name) ->
@@ -101,9 +90,8 @@ register(Scope, Name, Pid) when is_pid(Pid) ->
 
 -spec register(Scope :: atom(), Name :: any(), Pid :: pid(), Meta :: any()) -> ok | {error, Reason :: any()}.
 register(Scope, Name, Pid, Meta) ->
-    ProcessName = get_process_name_for_scope(Scope),
     Node = node(Pid),
-    try gen_server:call({ProcessName, Node}, {register_on_owner, node(), Name, Pid, Meta}) of
+    try syn_gen_scope:call(?MODULE, Node, Scope, {register_on_owner, node(), Name, Pid, Meta}) of
         {ok, {TablePid, TableMeta, Time}} when Node =/= node() ->
             %% update table on caller node immediately so that subsequent calls have an updated registry
             add_to_local_table(Scope, Name, Pid, Meta, Time, undefined),
@@ -130,9 +118,8 @@ unregister(Scope, Name) ->
             {error, undefined};
 
         {{Name, Pid}, Meta, _, _, _} ->
-            ProcessName = get_process_name_for_scope(Scope),
             Node = node(Pid),
-            case gen_server:call({ProcessName, Node}, {unregister_on_owner, node(), Name, Pid}) of
+            case syn_gen_scope:call(?MODULE, Node, Scope, {unregister_on_owner, node(), Name, Pid}) of
                 ok when Node =/= node() ->
                     %% remove table on caller node immediately so that subsequent calls have an updated registry
                     remove_from_local_table(Scope, Name, Pid),
@@ -174,21 +161,13 @@ count(Scope, Node) ->
 %% ----------------------------------------------------------------------------------------------------------
 %% Init
 %% ----------------------------------------------------------------------------------------------------------
--spec init(Args :: term()) ->
-    {ok, State :: term()} | {ok, State :: term(), timeout() | hibernate | {continue, term()}} |
-    {stop, Reason :: term()} | ignore.
-init([Scope, ProcessName]) ->
-    %% monitor nodes
-    ok = net_kernel:monitor_nodes(true),
-    %% rebuild monitors (if after crash)
+-spec init(Args :: term()) -> {ok, State :: term()}.
+init([Scope]) ->
+    HandlerState = #{},
+    %% rebuild
     rebuild_monitors(Scope),
-    %% build state
-    State = #state{
-        scope = Scope,
-        process_name = ProcessName
-    },
     %% init
-    {ok, State, {continue, after_init}}.
+    {ok, HandlerState}.
 
 %% ----------------------------------------------------------------------------------------------------------
 %% Call messages
@@ -201,11 +180,6 @@ init([Scope, ProcessName]) ->
     {noreply, NewState :: term(), timeout() | hibernate | {continue, term()}} |
     {stop, Reason :: term(), Reply :: term(), NewState :: term()} |
     {stop, Reason :: term(), NewState :: term()}.
-handle_call(get_subcluster_nodes, _From, #state{
-    nodes = Nodes
-} = State) ->
-    {reply, Nodes, State};
-
 handle_call({register_on_owner, RequesterNode, Name, Pid, Meta}, _From, #state{
     scope = Scope
 } = State) ->
@@ -224,7 +198,7 @@ handle_call({register_on_owner, RequesterNode, Name, Pid, Meta}, _From, #state{
                     %% callback
                     syn_event_handler:do_on_process_registered(Scope, Name, {undefined, undefined}, {Pid, Meta}),
                     %% broadcast
-                    broadcast({'3.0', sync_register, Scope, Name, Pid, Meta, Time}, [RequesterNode], State),
+                    syn_gen_scope:broadcast({'3.0', sync_register, Scope, Name, Pid, Meta, Time}, [RequesterNode], State),
                     %% return
                     {reply, {ok, {undefined, undefined, Time}}, State};
 
@@ -235,7 +209,7 @@ handle_call({register_on_owner, RequesterNode, Name, Pid, Meta}, _From, #state{
                     %% callback
                     syn_event_handler:do_on_process_registered(Scope, Name, {Pid, TableMeta}, {Pid, Meta}),
                     %% broadcast
-                    broadcast({'3.0', sync_register, Scope, Name, Pid, Meta, Time}, State),
+                    syn_gen_scope:broadcast({'3.0', sync_register, Scope, Name, Pid, Meta, Time}, State),
                     %% return
                     {reply, {ok, {Pid, TableMeta, Time}}, State};
 
@@ -257,7 +231,7 @@ handle_call({unregister_on_owner, RequesterNode, Name, Pid}, _From, #state{scope
             %% callback
             syn_event_handler:do_on_process_unregistered(Scope, Name, Pid, Meta),
             %% broadcast
-            broadcast({'3.0', sync_unregister, Name, Pid, Meta}, [RequesterNode], State),
+            syn_gen_scope:broadcast({'3.0', sync_unregister, Name, Pid, Meta}, [RequesterNode], State),
             %% return
             {reply, ok, State};
 
@@ -272,17 +246,6 @@ handle_call({unregister_on_owner, RequesterNode, Name, Pid}, _From, #state{scope
 handle_call(Request, From, State) ->
     error_logger:warning_msg("SYN[~s] Received from ~p an unknown call message: ~p", [node(), Request, From]),
     {reply, undefined, State}.
-
-%% ----------------------------------------------------------------------------------------------------------
-%% Cast messages
-%% ----------------------------------------------------------------------------------------------------------
--spec handle_cast(Request :: term(), State :: term()) ->
-    {noreply, NewState :: term()} |
-    {noreply, NewState :: term(), timeout() | hibernate | {continue, term()}} |
-    {stop, Reason :: term(), NewState :: term()}.
-handle_cast(Msg, State) ->
-    error_logger:warning_msg("SYN[~s] Received an unknown cast message: ~p", [node(), Msg]),
-    {noreply, State}.
 
 %% ----------------------------------------------------------------------------------------------------------
 %% Info messages
@@ -301,73 +264,6 @@ handle_info({'3.0', sync_unregister, Name, Pid, Meta}, #state{scope = Scope} = S
     syn_event_handler:do_on_process_unregistered(Scope, Name, Pid, Meta),
     %% return
     {noreply, State};
-
-handle_info({'3.0', discover, RemoteScopePid}, #state{
-    scope = Scope,
-    nodes = Nodes
-} = State) ->
-    RemoteScopeNode = node(RemoteScopePid),
-    error_logger:info_msg("SYN[~s] Received DISCOVER request from node '~s' and scope '~s'", [node(), RemoteScopeNode, Scope]),
-    %% send data
-    RegistryTuplesOfLocalNode = get_registry_tuples_for_node(Scope, node()),
-    send_to_node(RemoteScopeNode, {'3.0', ack_sync, self(), RegistryTuplesOfLocalNode}, State),
-    %% is this a new node?
-    case maps:is_key(RemoteScopeNode, Nodes) of
-        true ->
-            %% already known, ignore
-            {noreply, State};
-
-        false ->
-            %% monitor
-            _MRef = monitor(process, RemoteScopePid),
-            {noreply, State#state{nodes = Nodes#{RemoteScopeNode => RemoteScopePid}}}
-    end;
-
-handle_info({'3.0', ack_sync, RemoteScopePid, RegistryTuplesOfRemoteNode}, #state{
-    scope = Scope,
-    nodes = Nodes
-} = State) ->
-    RemoteScopeNode = node(RemoteScopePid),
-    error_logger:info_msg("SYN[~s] Received ACK SYNC (~w entries) from node '~s' and scope '~s'",
-        [node(), length(RegistryTuplesOfRemoteNode), RemoteScopeNode, Scope]
-    ),
-    %% insert tuples
-    lists:foreach(fun({Name, Pid, Meta, Time}) ->
-        handle_registry_sync(Scope, Name, Pid, Meta, Time, State)
-    end, RegistryTuplesOfRemoteNode),
-    %% is this a new node?
-    case maps:is_key(RemoteScopeNode, Nodes) of
-        true ->
-            %% already known, ignore
-            {noreply, State};
-
-        false ->
-            %% monitor
-            _MRef = monitor(process, RemoteScopePid),
-            %% send data
-            RegistryTuplesOfLocalNode = get_registry_tuples_for_node(Scope, node()),
-            send_to_node(RemoteScopeNode, {'3.0', ack_sync, self(), RegistryTuplesOfLocalNode}, State),
-            %% return
-            {noreply, State#state{nodes = Nodes#{RemoteScopeNode => RemoteScopePid}}}
-    end;
-
-handle_info({'DOWN', _MRef, process, Pid, _Reason}, #state{
-    scope = Scope,
-    nodes = Nodes
-} = State) when node(Pid) =/= node() ->
-    %% scope process down
-    RemoteNode = node(Pid),
-    case maps:take(RemoteNode, Nodes) of
-        {Pid, Nodes1} ->
-            error_logger:info_msg("SYN[~s] Scope Process ~p is DOWN on node '~s'", [node(), Scope, RemoteNode]),
-            purge_registry_for_remote_node(Scope, RemoteNode),
-            {noreply, State#state{nodes = Nodes1}};
-
-        error ->
-            error_logger:warning_msg("SYN[~s] Received DOWN message from unknown pid: ~p", [node(), Pid]),
-            {noreply, State}
-    end;
-
 handle_info({'DOWN', _MRef, process, Pid, Reason}, #state{scope = Scope} = State) ->
     case find_registry_entries_by_pid(Scope, Pid) of
         [] ->
@@ -383,21 +279,10 @@ handle_info({'DOWN', _MRef, process, Pid, Reason}, #state{scope = Scope} = State
                 %% callback
                 syn_event_handler:do_on_process_unregistered(Scope, Name, Pid, Meta),
                 %% broadcast
-                broadcast({'3.0', sync_unregister, Name, Pid, Meta}, State)
+                syn_gen_scope:broadcast({'3.0', sync_unregister, Name, Pid, Meta}, State)
             end, Entries)
     end,
     %% return
-    {noreply, State};
-
-handle_info({nodedown, _Node}, State) ->
-    %% ignore & wait for monitor DOWN message
-    {noreply, State};
-
-handle_info({nodeup, RemoteNode}, #state{scope = Scope} = State) ->
-    error_logger:info_msg("SYN[~s] Node '~s' has joined the cluster, sending discover message for scope '~s'",
-        [node(), RemoteNode, Scope]
-    ),
-    send_to_node(RemoteNode, {'3.0', discover, self()}, State),
     {noreply, State};
 
 handle_info(Info, State) ->
@@ -405,43 +290,26 @@ handle_info(Info, State) ->
     {noreply, State}.
 
 %% ----------------------------------------------------------------------------------------------------------
-%% Continue messages
+%% Data
 %% ----------------------------------------------------------------------------------------------------------
--spec handle_continue(Info :: term(), State :: term()) ->
-    {noreply, NewState :: term()} |
-    {noreply, NewState :: term(), timeout() | hibernate | {continue, term()}} |
-    {stop, Reason :: term(), NewState :: term()}.
-handle_continue(after_init, #state{scope = Scope} = State) ->
-    error_logger:info_msg("SYN[~s] Discovering the cluster with scope '~s'", [node(), Scope]),
-    broadcast_all({'3.0', discover, self()}, State),
-    {noreply, State}.
+-spec get_local_data(State :: term()) -> {ok, Data :: any()} | undefined.
+get_local_data(#state{scope = Scope}) ->
+    {ok, get_registry_tuples_for_node(Scope, node())}.
 
-%% ----------------------------------------------------------------------------------------------------------
-%% Terminate
-%% ----------------------------------------------------------------------------------------------------------
--spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()), State :: term()) -> term().
-terminate(Reason, _State) ->
-    error_logger:info_msg("SYN[~s] Terminating with reason: ~p", [node(), Reason]),
-    terminated.
+-spec save_remote_data(RemoteScopePid :: pid(), RemoteData :: any(), State :: term()) -> any().
+save_remote_data(RemoteScopePid, RegistryTuplesOfRemoteNode, #state{scope = Scope} = State) ->
+    %% insert tuples
+    lists:foreach(fun({Name, Pid, Meta, Time}) ->
+        handle_registry_sync(Scope, Name, Pid, Meta, Time, State)
+    end, RegistryTuplesOfRemoteNode).
 
-%% ----------------------------------------------------------------------------------------------------------
-%% Convert process state when code is changed.
-%% ----------------------------------------------------------------------------------------------------------
--spec code_change(OldVsn :: (term() | {down, term()}), State :: term(),
-    Extra :: term()) ->
-    {ok, NewState :: term()} | {error, Reason :: term()}.
-code_change(_OldVsn, State, _Extra) ->
-    {ok, State}.
+-spec purge_local_data_for_node(Node :: node(), State :: term()) -> any().
+purge_local_data_for_node(Node, #state{scope = Scope}) ->
+    purge_registry_for_remote_node(Scope, Node).
 
 %% ===================================================================
 %% Internal
 %% ===================================================================
--spec get_process_name_for_scope(Scope :: atom()) -> atom().
-get_process_name_for_scope(Scope) ->
-    ModuleBin = atom_to_binary(?MODULE),
-    ScopeBin = atom_to_binary(Scope),
-    binary_to_atom(<<ModuleBin/binary, "_", ScopeBin/binary>>).
-
 -spec rebuild_monitors(Scope :: atom()) -> ok.
 rebuild_monitors(Scope) ->
     RegistryTuples = get_registry_tuples_for_node(Scope, node()),
@@ -456,26 +324,6 @@ rebuild_monitors(Scope) ->
                 ok
         end
     end, RegistryTuples).
-
--spec broadcast(Message :: any(), #state{}) -> any().
-broadcast(Message, State) ->
-    broadcast(Message, [], State).
-
--spec broadcast(Message :: any(), ExcludedNodes :: [node()], #state{}) -> any().
-broadcast(Message, ExcludedNodes, #state{process_name = ProcessName, nodes = Nodes}) ->
-    lists:foreach(fun(RemoteNode) ->
-        erlang:send({ProcessName, RemoteNode}, Message, [noconnect])
-    end, maps:keys(Nodes) -- ExcludedNodes).
-
--spec broadcast_all(Message :: any(), #state{}) -> any().
-broadcast_all(Message, #state{process_name = ProcessName}) ->
-    lists:foreach(fun(RemoteNode) ->
-        erlang:send({ProcessName, RemoteNode}, Message, [noconnect])
-    end, nodes()).
-
--spec send_to_node(RemoteNode :: node(), Message :: any(), #state{}) -> any().
-send_to_node(RemoteNode, Message, #state{process_name = ProcessName}) ->
-    erlang:send({ProcessName, RemoteNode}, Message, [noconnect]).
 
 -spec get_registry_tuples_for_node(Scope :: atom(), Node :: node()) -> [syn_registry_tuple()].
 get_registry_tuples_for_node(Scope, Node) ->
@@ -661,7 +509,7 @@ resolve_conflict(Scope, Name, {Pid, Meta, Time}, {TablePid, TableMeta, TableTime
             ResolveTime = erlang:system_time(),
             add_to_local_table(Scope, Name, TablePid, TableMeta, ResolveTime, TableMRef),
             %% broadcast
-            broadcast({'3.0', sync_register, Scope, Name, TablePid, TableMeta, ResolveTime}, State),
+            syn_gen_scope:broadcast({'3.0', sync_register, Scope, Name, TablePid, TableMeta, ResolveTime}, State),
             error_logger:info_msg("SYN[~s] Registry CONFLICT for name ~p@~s: ~p ~p -> chosen: ~p",
                 [node(), Name, Scope, Pid, TablePid, TablePid]
             );

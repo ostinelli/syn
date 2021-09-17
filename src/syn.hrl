@@ -56,3 +56,12 @@
     Pid :: pid(),
     Meta :: any()
 }.
+
+%% records
+-record(state, {
+    handler = undefined :: undefined | module(),
+    handler_state = undefined :: any(),
+    scope = default :: atom(),
+    process_name = syn_registry_default :: atom(),
+    nodes = #{} :: #{node() => pid()}
+}).

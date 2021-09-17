@@ -34,9 +34,6 @@
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
-%% records
--record(state, {}).
-
 %% includes
 -include("syn.hrl").
 
@@ -66,24 +63,24 @@ get_table_name(TableName, Scope) ->
 %% Init
 %% ----------------------------------------------------------------------------------------------------------
 -spec init([]) ->
-    {ok, #state{}} |
-    {ok, #state{}, Timeout :: non_neg_integer()} |
+    {ok, State :: map()} |
+    {ok, State :: map(), Timeout :: non_neg_integer()} |
     ignore |
     {stop, Reason :: any()}.
 init([]) ->
     %% init
-    {ok, #state{}}.
+    {ok, #{}}.
 
 %% ----------------------------------------------------------------------------------------------------------
 %% Call messages
 %% ----------------------------------------------------------------------------------------------------------
--spec handle_call(Request :: any(), From :: any(), #state{}) ->
-    {reply, Reply :: any(), #state{}} |
-    {reply, Reply :: any(), #state{}, Timeout :: non_neg_integer()} |
-    {noreply, #state{}} |
-    {noreply, #state{}, Timeout :: non_neg_integer()} |
-    {stop, Reason :: any(), Reply :: any(), #state{}} |
-    {stop, Reason :: any(), #state{}}.
+-spec handle_call(Request :: any(), From :: any(), State :: map()) ->
+    {reply, Reply :: any(), State :: map()} |
+    {reply, Reply :: any(), State :: map(), Timeout :: non_neg_integer()} |
+    {noreply, State :: map()} |
+    {noreply, State :: map(), Timeout :: non_neg_integer()} |
+    {stop, Reason :: any(), Reply :: any(), State :: map()} |
+    {stop, Reason :: any(), State :: map()}.
 handle_call({create_tables_for_scope, Scope}, _From, State) ->
     error_logger:warning_msg("SYN[~p] Creating tables for scope: ~p", [node(), Scope]),
     ensure_table_exists(get_table_name(syn_registry_by_name, Scope)),
@@ -99,10 +96,10 @@ handle_call(Request, From, State) ->
 %% ----------------------------------------------------------------------------------------------------------
 %% Cast messages
 %% ----------------------------------------------------------------------------------------------------------
--spec handle_cast(Msg :: any(), #state{}) ->
-    {noreply, #state{}} |
-    {noreply, #state{}, Timeout :: non_neg_integer()} |
-    {stop, Reason :: any(), #state{}}.
+-spec handle_cast(Msg :: any(), State :: map()) ->
+    {noreply, State :: map()} |
+    {noreply, State :: map(), Timeout :: non_neg_integer()} |
+    {stop, Reason :: any(), State :: map()}.
 handle_cast(Msg, State) ->
     error_logger:warning_msg("SYN[~p] Received an unknown cast message: ~p", [node(), Msg]),
     {noreply, State}.
@@ -110,10 +107,10 @@ handle_cast(Msg, State) ->
 %% ----------------------------------------------------------------------------------------------------------
 %% All non Call / Cast messages
 %% ----------------------------------------------------------------------------------------------------------
--spec handle_info(Info :: any(), #state{}) ->
-    {noreply, #state{}} |
-    {noreply, #state{}, Timeout :: non_neg_integer()} |
-    {stop, Reason :: any(), #state{}}.
+-spec handle_info(Info :: any(), State :: map()) ->
+    {noreply, State :: map()} |
+    {noreply, State :: map(), Timeout :: non_neg_integer()} |
+    {stop, Reason :: any(), State :: map()}.
 handle_info(Info, State) ->
     error_logger:warning_msg("SYN[~p] Received an unknown info message: ~p", [node(), Info]),
     {noreply, State}.
@@ -121,7 +118,7 @@ handle_info(Info, State) ->
 %% ----------------------------------------------------------------------------------------------------------
 %% Terminate
 %% ----------------------------------------------------------------------------------------------------------
--spec terminate(Reason :: any(), #state{}) -> terminated.
+-spec terminate(Reason :: any(), State :: map()) -> terminated.
 terminate(Reason, _State) ->
     error_logger:info_msg("SYN[~p] Terminating with reason: ~p", [node(), Reason]),
     %% return
@@ -130,7 +127,7 @@ terminate(Reason, _State) ->
 %% ----------------------------------------------------------------------------------------------------------
 %% Convert process state when code is changed.
 %% ----------------------------------------------------------------------------------------------------------
--spec code_change(OldVsn :: any(), #state{}, Extra :: any()) -> {ok, #state{}}.
+-spec code_change(OldVsn :: any(), State :: map(), Extra :: any()) -> {ok, State :: map()}.
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
