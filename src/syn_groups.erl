@@ -76,7 +76,7 @@ init([]) ->
     {stop, Reason :: any(), Reply :: any(), #state{}} |
     {stop, Reason :: any(), #state{}}.
 handle_call(Request, From, State) ->
-    error_logger:warning_msg("Syn(~p): Received from ~p an unknown call message: ~p~n", [node(), Request, From]),
+    error_logger:warning_msg("Syn(~p): Received from ~p an unknown call message: ~p", [node(), Request, From]),
     {reply, undefined, State}.
 
 %% ----------------------------------------------------------------------------------------------------------
@@ -87,7 +87,7 @@ handle_call(Request, From, State) ->
     {noreply, #state{}, Timeout :: non_neg_integer()} |
     {stop, Reason :: any(), #state{}}.
 handle_cast(Msg, State) ->
-    error_logger:warning_msg("Syn(~p): Received an unknown cast message: ~p~n", [node(), Msg]),
+    error_logger:warning_msg("Syn(~p): Received an unknown cast message: ~p", [node(), Msg]),
     {noreply, State}.
 
 %% ----------------------------------------------------------------------------------------------------------
@@ -99,7 +99,7 @@ handle_cast(Msg, State) ->
     {stop, Reason :: any(), #state{}}.
 
 handle_info(Info, State) ->
-    error_logger:warning_msg("Syn(~p): Received an unknown info message: ~p~n", [node(), Info]),
+    error_logger:warning_msg("Syn(~p): Received an unknown info message: ~p", [node(), Info]),
     {noreply, State}.
 
 %% ----------------------------------------------------------------------------------------------------------
@@ -107,7 +107,7 @@ handle_info(Info, State) ->
 %% ----------------------------------------------------------------------------------------------------------
 -spec terminate(Reason :: any(), #state{}) -> terminated.
 terminate(Reason, _State) ->
-    error_logger:info_msg("Syn(~p): Terminating with reason: ~p~n", [node(), Reason]),
+    error_logger:info_msg("Syn(~p): Terminating with reason: ~p", [node(), Reason]),
     terminated.
 
 %% ----------------------------------------------------------------------------------------------------------

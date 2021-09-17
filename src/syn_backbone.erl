@@ -85,7 +85,7 @@ init([]) ->
     {stop, Reason :: any(), Reply :: any(), #state{}} |
     {stop, Reason :: any(), #state{}}.
 handle_call({create_tables_for_scope, Scope}, _From, State) ->
-    error_logger:warning_msg("SYN[~p] Creating tables for scope: ~p~n", [node(), Scope]),
+    error_logger:warning_msg("SYN[~p] Creating tables for scope: ~p", [node(), Scope]),
     ensure_table_exists(get_table_name(syn_registry_by_name, Scope)),
     ensure_table_exists(get_table_name(syn_registry_by_pid, Scope)),
     ensure_table_exists(get_table_name(syn_groups_by_name, Scope)),
@@ -93,7 +93,7 @@ handle_call({create_tables_for_scope, Scope}, _From, State) ->
     {reply, ok, State};
 
 handle_call(Request, From, State) ->
-    error_logger:warning_msg("SYN[~p] Received from ~p an unknown call message: ~p~n", [node(), Request, From]),
+    error_logger:warning_msg("SYN[~p] Received from ~p an unknown call message: ~p", [node(), Request, From]),
     {reply, undefined, State}.
 
 %% ----------------------------------------------------------------------------------------------------------
@@ -104,7 +104,7 @@ handle_call(Request, From, State) ->
     {noreply, #state{}, Timeout :: non_neg_integer()} |
     {stop, Reason :: any(), #state{}}.
 handle_cast(Msg, State) ->
-    error_logger:warning_msg("SYN[~p] Received an unknown cast message: ~p~n", [node(), Msg]),
+    error_logger:warning_msg("SYN[~p] Received an unknown cast message: ~p", [node(), Msg]),
     {noreply, State}.
 
 %% ----------------------------------------------------------------------------------------------------------
@@ -115,7 +115,7 @@ handle_cast(Msg, State) ->
     {noreply, #state{}, Timeout :: non_neg_integer()} |
     {stop, Reason :: any(), #state{}}.
 handle_info(Info, State) ->
-    error_logger:warning_msg("SYN[~p] Received an unknown info message: ~p~n", [node(), Info]),
+    error_logger:warning_msg("SYN[~p] Received an unknown info message: ~p", [node(), Info]),
     {noreply, State}.
 
 %% ----------------------------------------------------------------------------------------------------------
@@ -123,7 +123,7 @@ handle_info(Info, State) ->
 %% ----------------------------------------------------------------------------------------------------------
 -spec terminate(Reason :: any(), #state{}) -> terminated.
 terminate(Reason, _State) ->
-    error_logger:info_msg("SYN[~p] Terminating with reason: ~p~n", [node(), Reason]),
+    error_logger:info_msg("SYN[~p] Terminating with reason: ~p", [node(), Reason]),
     %% return
     terminated.
 

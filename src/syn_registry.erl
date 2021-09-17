@@ -262,7 +262,7 @@ handle_call({unregister_on_node, Name, Pid}, _From, #state{scope = Scope} = Stat
     end;
 
 handle_call(Request, From, State) ->
-    error_logger:warning_msg("SYN[~p] Received from ~p an unknown call message: ~p~n", [node(), Request, From]),
+    error_logger:warning_msg("SYN[~p] Received from ~p an unknown call message: ~p", [node(), Request, From]),
     {reply, undefined, State}.
 
 %% ----------------------------------------------------------------------------------------------------------
@@ -288,7 +288,7 @@ handle_cast({'3.0', announce, RemoteScopePid}, #state{
     nodes = Nodes
 } = State) ->
     RemoteScopeNode = node(RemoteScopePid),
-    error_logger:info_msg("SYN[~p] Received announce request from node ~p and scope ~p~n", [node(), RemoteScopeNode, Scope]),
+    error_logger:info_msg("SYN[~p] Received announce request from node ~p and scope ~p", [node(), RemoteScopeNode, Scope]),
     %% send data
     RegistryTuplesOfLocalNode = get_registry_tuples_for_node(Scope, node()),
     cast_to_node(RemoteScopeNode, {'3.0', sync, self(), RegistryTuplesOfLocalNode}, State),
@@ -310,7 +310,7 @@ handle_cast({'3.0', sync, RemoteScopePid, RegistryTuplesOfRemoteNode}, #state{
     nodes = Nodes
 } = State) ->
     RemoteScopeNode = node(RemoteScopePid),
-    error_logger:info_msg("SYN[~p] Received sync data (~p entries) from node ~p and scope ~p~n",
+    error_logger:info_msg("SYN[~p] Received sync data (~p entries) from node ~p and scope ~p",
         [node(), length(RegistryTuplesOfRemoteNode), RemoteScopeNode, Scope]
     ),
     %% insert tuples
@@ -331,7 +331,7 @@ handle_cast({'3.0', sync, RemoteScopePid, RegistryTuplesOfRemoteNode}, #state{
     end;
 
 handle_cast(Msg, State) ->
-    error_logger:warning_msg("SYN[~p] Received an unknown cast message: ~p~n", [node(), Msg]),
+    error_logger:warning_msg("SYN[~p] Received an unknown cast message: ~p", [node(), Msg]),
     {noreply, State}.
 
 %% ----------------------------------------------------------------------------------------------------------
@@ -344,7 +344,7 @@ handle_cast(Msg, State) ->
 handle_info(timeout, #state{
     scope = Scope
 } = State) ->
-    error_logger:info_msg("SYN[~p] Announcing to all nodes in the cluster with scope: ~p~n", [node(), Scope]),
+    error_logger:info_msg("SYN[~p] Announcing to all nodes in the cluster with scope: ~p", [node(), Scope]),
     broadcast_all({'3.0', announce, self()}, State),
     {noreply, State};
 
@@ -356,12 +356,12 @@ handle_info({'DOWN', _MRef, process, Pid, _Reason}, #state{
     RemoteNode = node(Pid),
     case maps:take(RemoteNode, Nodes) of
         {Pid, Nodes1} ->
-            error_logger:info_msg("SYN[~p] Scope Process ~p is DOWN on node ~p~n", [node(), Scope, RemoteNode]),
+            error_logger:info_msg("SYN[~p] Scope Process ~p is DOWN on node ~p", [node(), Scope, RemoteNode]),
             purge_registry_for_remote_node(Scope, RemoteNode),
             {noreply, State#state{nodes = Nodes1}};
 
         error ->
-            error_logger:warning_msg("SYN[~p] Received DOWN message from unknown pid: ~p~n", [node(), Pid]),
+            error_logger:warning_msg("SYN[~p] Received DOWN message from unknown pid: ~p", [node(), Pid]),
             {noreply, State}
     end;
 
@@ -369,7 +369,7 @@ handle_info({'DOWN', _MRef, process, Pid, Reason}, #state{scope = Scope} = State
     case find_registry_entries_by_pid(Scope, Pid) of
         [] ->
             error_logger:warning_msg(
-                "SYN[~p] Received a DOWN message from an unknown process ~p with reason: ~p~n",
+                "SYN[~p] Received a DOWN message from an unknown process ~p with reason: ~p",
                 [node(), Pid, Reason]
             );
 
@@ -391,12 +391,12 @@ handle_info({nodedown, _Node}, State) ->
     {noreply, State};
 
 handle_info({nodeup, RemoteNode}, State) ->
-    error_logger:info_msg("SYN[~p] Node ~p has joined the cluster, sending announce message~n", [node(), RemoteNode]),
+    error_logger:info_msg("SYN[~p] Node ~p has joined the cluster, sending announce message", [node(), RemoteNode]),
     cast_to_node(RemoteNode, {'3.0', announce, self()}, State),
     {noreply, State};
 
 handle_info(Info, State) ->
-    error_logger:warning_msg("SYN[~p] Received an unknown info message: ~p~n", [node(), Info]),
+    error_logger:warning_msg("SYN[~p] Received an unknown info message: ~p", [node(), Info]),
     {noreply, State}.
 
 %% ----------------------------------------------------------------------------------------------------------
@@ -404,7 +404,7 @@ handle_info(Info, State) ->
 %% ----------------------------------------------------------------------------------------------------------
 -spec terminate(Reason :: any(), #state{}) -> terminated.
 terminate(Reason, _State) ->
-    error_logger:info_msg("SYN[~p] Terminating with reason: ~p~n", [node(), Reason]),
+    error_logger:info_msg("SYN[~p] Terminating with reason: ~p", [node(), Reason]),
     terminated.
 
 %% ----------------------------------------------------------------------------------------------------------
@@ -626,7 +626,7 @@ resolve_conflict(Scope, Name, {Pid, Meta, Time}, {TablePid, TableMeta, TableTime
             syn_event_handler:do_on_process_registered(Scope, Name, {TablePid, TableMeta}, {Pid, Meta}),
             %% kill
             exit(TablePid, {syn_resolve_kill, Name, TableMeta}),
-            error_logger:info_msg("SYN[~p] Registry CONFLICT for name ~p@~p: ~p ~p -> chosen: ~p~n",
+            error_logger:info_msg("SYN[~p] Registry CONFLICT for name ~p@~p: ~p ~p -> chosen: ~p",
                 [node(), Name, Scope, Pid, TablePid, Pid]
             );
 
@@ -637,7 +637,7 @@ resolve_conflict(Scope, Name, {Pid, Meta, Time}, {TablePid, TableMeta, TableTime
             add_to_local_table(Scope, Name, TablePid, TableMeta, ResolveTime, TableMRef),
             %% broadcast
             broadcast({'3.0', sync_register, Scope, Name, TablePid, TableMeta, ResolveTime}, State),
-            error_logger:info_msg("SYN[~p] Registry CONFLICT for name ~p@~p: ~p ~p -> chosen: ~p~n",
+            error_logger:info_msg("SYN[~p] Registry CONFLICT for name ~p@~p: ~p ~p -> chosen: ~p",
                 [node(), Name, Scope, Pid, TablePid, TablePid]
             );
 
@@ -649,7 +649,7 @@ resolve_conflict(Scope, Name, {Pid, Meta, Time}, {TablePid, TableMeta, TableTime
             syn_event_handler:do_on_process_unregistered(Scope, Name, TablePid, TableMeta),
             %% kill local, remote will be killed by other node performing the same resolve
             exit(TablePid, {syn_resolve_kill, Name, TableMeta}),
-            error_logger:info_msg("SYN[~p] Registry CONFLICT for name ~p@~p: ~p ~p -> none chosen (got: ~p)~n",
+            error_logger:info_msg("SYN[~p] Registry CONFLICT for name ~p@~p: ~p ~p -> none chosen (got: ~p)",
                 [node(), Name, Scope, Pid, TablePid, Invalid]
             )
     end.
