@@ -63,7 +63,8 @@
 %% ===================================================================
 %% API
 %% ===================================================================
--spec start_link(Scope :: atom()) -> {ok, pid()} | {error, any()}.
+-spec start_link(Scope :: atom()) ->
+    {ok, Pid :: pid()} | {error, {already_started, Pid :: pid()}} | {error, Reason :: any()}.
 start_link(Scope) when is_atom(Scope) ->
     ProcessName = get_process_name_for_scope(Scope),
     Args = [Scope, ProcessName],
@@ -173,11 +174,9 @@ count(Scope, Node) ->
 %% ----------------------------------------------------------------------------------------------------------
 %% Init
 %% ----------------------------------------------------------------------------------------------------------
--spec init([term()]) ->
-    {ok, #state{}} |
-    {ok, #state{}, Timeout :: non_neg_integer()} |
-    ignore |
-    {stop, Reason :: any()}.
+-spec init(Args :: term()) ->
+    {ok, State :: term()} | {ok, State :: term(), timeout() | hibernate | {continue, term()}} |
+    {stop, Reason :: term()} | ignore.
 init([Scope, ProcessName]) ->
     %% monitor nodes
     ok = net_kernel:monitor_nodes(true),
@@ -194,13 +193,14 @@ init([Scope, ProcessName]) ->
 %% ----------------------------------------------------------------------------------------------------------
 %% Call messages
 %% ----------------------------------------------------------------------------------------------------------
--spec handle_call(Request :: any(), From :: any(), #state{}) ->
-    {reply, Reply :: any(), #state{}} |
-    {reply, Reply :: any(), #state{}, Timeout :: non_neg_integer()} |
-    {noreply, #state{}} |
-    {noreply, #state{}, Timeout :: non_neg_integer()} |
-    {stop, Reason :: any(), Reply :: any(), #state{}} |
-    {stop, Reason :: any(), #state{}}.
+-spec handle_call(Request :: term(), From :: {pid(), Tag :: term()},
+    State :: term()) ->
+    {reply, Reply :: term(), NewState :: term()} |
+    {reply, Reply :: term(), NewState :: term(), timeout() | hibernate | {continue, term()}} |
+    {noreply, NewState :: term()} |
+    {noreply, NewState :: term(), timeout() | hibernate | {continue, term()}} |
+    {stop, Reason :: term(), Reply :: term(), NewState :: term()} |
+    {stop, Reason :: term(), NewState :: term()}.
 handle_call(get_subcluster_nodes, _From, #state{
     nodes = Nodes
 } = State) ->
@@ -276,10 +276,10 @@ handle_call(Request, From, State) ->
 %% ----------------------------------------------------------------------------------------------------------
 %% Cast messages
 %% ----------------------------------------------------------------------------------------------------------
--spec handle_cast(Msg :: any(), #state{}) ->
-    {noreply, #state{}} |
-    {noreply, #state{}, Timeout :: non_neg_integer()} |
-    {stop, Reason :: any(), #state{}}.
+-spec handle_cast(Request :: term(), State :: term()) ->
+    {noreply, NewState :: term()} |
+    {noreply, NewState :: term(), timeout() | hibernate | {continue, term()}} |
+    {stop, Reason :: term(), NewState :: term()}.
 handle_cast(Msg, State) ->
     error_logger:warning_msg("SYN[~s] Received an unknown cast message: ~p", [node(), Msg]),
     {noreply, State}.
@@ -287,10 +287,10 @@ handle_cast(Msg, State) ->
 %% ----------------------------------------------------------------------------------------------------------
 %% Info messages
 %% ----------------------------------------------------------------------------------------------------------
--spec handle_info(Info :: any(), #state{}) ->
-    {noreply, #state{}} |
-    {noreply, #state{}, Timeout :: non_neg_integer()} |
-    {stop, Reason :: any(), #state{}}.
+-spec handle_info(Info :: timeout | term(), State :: term()) ->
+    {noreply, NewState :: term()} |
+    {noreply, NewState :: term(), timeout() | hibernate | {continue, term()}} |
+    {stop, Reason :: term(), NewState :: term()}.
 handle_info({'3.0', sync_register, Scope, Name, Pid, Meta, Time}, State) ->
     handle_registry_sync(Scope, Name, Pid, Meta, Time, State),
     {noreply, State};
@@ -407,6 +407,10 @@ handle_info(Info, State) ->
 %% ----------------------------------------------------------------------------------------------------------
 %% Continue messages
 %% ----------------------------------------------------------------------------------------------------------
+-spec handle_continue(Info :: term(), State :: term()) ->
+    {noreply, NewState :: term()} |
+    {noreply, NewState :: term(), timeout() | hibernate | {continue, term()}} |
+    {stop, Reason :: term(), NewState :: term()}.
 handle_continue(after_init, #state{scope = Scope} = State) ->
     error_logger:info_msg("SYN[~s] Discovering the cluster with scope '~s'", [node(), Scope]),
     broadcast_all({'3.0', discover, self()}, State),
@@ -415,7 +419,7 @@ handle_continue(after_init, #state{scope = Scope} = State) ->
 %% ----------------------------------------------------------------------------------------------------------
 %% Terminate
 %% ----------------------------------------------------------------------------------------------------------
--spec terminate(Reason :: any(), #state{}) -> terminated.
+-spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()), State :: term()) -> term().
 terminate(Reason, _State) ->
     error_logger:info_msg("SYN[~s] Terminating with reason: ~p", [node(), Reason]),
     terminated.
@@ -423,7 +427,9 @@ terminate(Reason, _State) ->
 %% ----------------------------------------------------------------------------------------------------------
 %% Convert process state when code is changed.
 %% ----------------------------------------------------------------------------------------------------------
--spec code_change(OldVsn :: any(), #state{}, Extra :: any()) -> {ok, #state{}}.
+-spec code_change(OldVsn :: (term() | {down, term()}), State :: term(),
+    Extra :: term()) ->
+    {ok, NewState :: term()} | {error, Reason :: term()}.
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 

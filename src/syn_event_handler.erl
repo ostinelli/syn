@@ -69,7 +69,7 @@ ensure_event_handler_loaded() ->
 -spec do_on_process_registered(
     Scope :: atom(),
     Name :: any(),
-    {TablePid :: pid(), TableMeta :: any()},
+    {TablePid :: pid() | undefined, TableMeta :: any()},
     {Pid :: pid(), Meta :: any()}
 ) -> any().
 do_on_process_registered(_Scope, _Name, {TablePid, TableMeta}, {Pid, Meta})
