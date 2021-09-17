@@ -35,7 +35,15 @@
 -export([count/1, count/2]).
 
 %% gen_server callbacks
--export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
+-export([
+    init/1,
+    handle_call/3,
+    handle_cast/2,
+    handle_info/2,
+    handle_continue/2,
+    terminate/2,
+    code_change/3
+]).
 
 %% tests
 -ifdef(TEST).
@@ -180,8 +188,8 @@ init([Scope, ProcessName]) ->
         scope = Scope,
         process_name = ProcessName
     },
-    %% init with 0 timeout
-    {ok, State, 0}.
+    %% init
+    {ok, State, {continue, after_init}}.
 
 %% ----------------------------------------------------------------------------------------------------------
 %% Call messages
@@ -341,13 +349,6 @@ handle_cast(Msg, State) ->
     {noreply, #state{}} |
     {noreply, #state{}, Timeout :: non_neg_integer()} |
     {stop, Reason :: any(), #state{}}.
-handle_info(timeout, #state{
-    scope = Scope
-} = State) ->
-    error_logger:info_msg("SYN[~p] Announcing to all nodes in the cluster with scope: ~p", [node(), Scope]),
-    broadcast_all({'3.0', announce, self()}, State),
-    {noreply, State};
-
 handle_info({'DOWN', _MRef, process, Pid, _Reason}, #state{
     scope = Scope,
     nodes = Nodes
@@ -397,6 +398,14 @@ handle_info({nodeup, RemoteNode}, State) ->
 
 handle_info(Info, State) ->
     error_logger:warning_msg("SYN[~p] Received an unknown info message: ~p", [node(), Info]),
+    {noreply, State}.
+
+%% ----------------------------------------------------------------------------------------------------------
+%% Continue messages
+%% ----------------------------------------------------------------------------------------------------------
+handle_continue(after_init, #state{scope = Scope} = State) ->
+    error_logger:info_msg("SYN[~p] Announcing to all nodes in the cluster with scope: ~p", [node(), Scope]),
+    broadcast_all({'3.0', announce, self()}, State),
     {noreply, State}.
 
 %% ----------------------------------------------------------------------------------------------------------
