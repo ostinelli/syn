@@ -64,7 +64,7 @@
     {noreply, NewState :: term()} |
     {noreply, NewState :: term(), timeout() | hibernate | {continue, term()}} |
     {stop, Reason :: term(), NewState :: term()}.
--callback save_remote_data(RemoteScopePid :: pid(), RemoteData :: any(), State :: term()) -> any().
+-callback save_remote_data(RemoteData :: any(), State :: term()) -> any().
 -callback get_local_data(State :: term()) -> {ok, Data :: any()} | undefined.
 -callback purge_local_data_for_node(Node :: node(), State :: term()) -> any().
 
@@ -90,7 +90,7 @@ call(Handler, Scope, Message) ->
     call(Handler, node(), Scope, Message).
 
 -spec call(Handler :: module(), Node :: atom(), Scope :: atom(), Message :: any()) -> Response :: any().
-call(Handler,Node, Scope, Message) ->
+call(Handler, Node, Scope, Message) ->
     ProcessName = get_process_name_for_scope(Handler, Scope),
     gen_server:call({ProcessName, Node}, Message).
 
@@ -214,7 +214,7 @@ handle_info({'3.0', ack_sync, RemoteScopePid, Data}, #state{
         [node(), RemoteScopeNode, Scope]
     ),
     %% save remote data
-    Handler:save_remote_data(RemoteScopePid, Data, State),
+    Handler:save_remote_data(Data, State),
     %% is this a new node?
     case maps:is_key(RemoteScopeNode, Nodes) of
         true ->

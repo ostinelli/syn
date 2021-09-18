@@ -28,6 +28,7 @@
 
 %% API
 -export([start_link/0]).
+-export([get_node_scopes/0, add_node_to_scope/1]).
 
 %% Supervisor callbacks
 -export([init/1]).
@@ -39,28 +40,65 @@
 start_link() ->
     supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
+-spec get_node_scopes() -> [atom()].
+get_node_scopes() ->
+    %% always have a default scope for all nodes
+    case application:get_env(syn, syn_custom_scopes) of
+        undefined -> [default];
+        {ok, Scopes} -> [default] ++ maps:keys(Scopes)
+    end.
+
+-spec add_node_to_scope(Scope :: atom()) -> ok.
+add_node_to_scope(Scope) ->
+    error_logger:info_msg("SYN[~s] Adding node to scope '~s'", [node(), Scope]),
+    %% save to ENV (failsafe if sup is restarted)
+    CustomScopes0 = case application:get_env(syn, syn_custom_scopes) of
+        undefined -> #{};
+        {ok, Scopes} -> Scopes
+    end,
+    CustomScopes = CustomScopes0#{Scope => #{}},
+    application:set_env(syn, syn_custom_scopes, CustomScopes),
+    %% start child
+    supervisor:start_child(?MODULE, child_spec(Scope)),
+    ok.
+
 %% ===================================================================
 %% Callbacks
 %% ===================================================================
 -spec init([]) ->
     {ok, {{supervisor:strategy(), non_neg_integer(), pos_integer()}, [supervisor:child_spec()]}}.
 init([]) ->
-    Children = [
-        child_spec(syn_backbone, worker),
-        child_spec(syn_scopes_sup, supervisor)
-    ],
+    %% backbone
+    BackboneChildSpec = #{
+        id => syn_backbone,
+        start => {syn_backbone, start_link, []},
+        type => worker,
+        shutdown => 10000,
+        restart => permanent,
+        modules => [syn_backbone]
+    },
+
+    %% build children
+    Children = [BackboneChildSpec] ++
+        %% add scopes sup
+        lists:foldl(fun(Scope, Acc) ->
+            %% add to specs
+            [child_spec(Scope) | Acc]
+        end, [], get_node_scopes()),
+
+    %% return
     {ok, {{one_for_one, 10, 10}, Children}}.
 
 %% ===================================================================
 %% Internals
 %% ===================================================================
--spec child_spec(module(), worker | supervisor) -> supervisor:child_spec().
-child_spec(Module, Type) ->
+-spec child_spec(Scope :: atom()) -> supervisor:child_spec().
+child_spec(Scope) ->
     #{
-        id => Module,
-        start => {Module, start_link, []},
-        type => Type,
+        id => {syn_scope_sup, Scope},
+        start => {syn_scope_sup, start_link, [Scope]},
+        type => supervisor,
         shutdown => 10000,
         restart => permanent,
-        modules => [Module]
+        modules => [syn_scope_sup]
     }.

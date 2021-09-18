@@ -48,16 +48,16 @@ stop() ->
 %% ----- \/ scopes ---------------------------------------------------
 -spec get_node_scopes() -> [atom()].
 get_node_scopes() ->
-    syn_scopes_sup:get_node_scopes().
+    syn_sup:get_node_scopes().
 
 -spec add_node_to_scope(Scope :: atom()) -> ok.
 add_node_to_scope(Scope) ->
-    syn_scopes_sup:add_node_to_scope(Scope).
+    syn_sup:add_node_to_scope(Scope).
 
 -spec add_node_to_scopes(Scopes :: [atom()]) -> ok.
 add_node_to_scopes(Scopes) ->
     lists:foreach(fun(Scope) ->
-        syn_scopes_sup:add_node_to_scope(Scope)
+        syn_sup:add_node_to_scope(Scope)
     end, Scopes).
 
 %% ----- \/ registry -------------------------------------------------

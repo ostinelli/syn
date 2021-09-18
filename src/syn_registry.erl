@@ -39,7 +39,7 @@
     init/1,
     handle_call/3,
     handle_info/2,
-    save_remote_data/3,
+    save_remote_data/2,
     get_local_data/1,
     purge_local_data_for_node/2
 ]).
@@ -296,8 +296,8 @@ handle_info(Info, State) ->
 get_local_data(#state{scope = Scope}) ->
     {ok, get_registry_tuples_for_node(Scope, node())}.
 
--spec save_remote_data(RemoteScopePid :: pid(), RemoteData :: any(), State :: term()) -> any().
-save_remote_data(RemoteScopePid, RegistryTuplesOfRemoteNode, #state{scope = Scope} = State) ->
+-spec save_remote_data(RemoteData :: any(), State :: term()) -> any().
+save_remote_data(RegistryTuplesOfRemoteNode, #state{scope = Scope} = State) ->
     %% insert tuples
     lists:foreach(fun({Name, Pid, Meta, Time}) ->
         handle_registry_sync(Scope, Name, Pid, Meta, Time, State)
