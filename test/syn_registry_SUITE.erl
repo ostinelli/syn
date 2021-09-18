@@ -828,6 +828,7 @@ three_nodes_cluster_conflicts(Config) ->
     syn_test_suite_helper:assert_cluster(node(), [SlaveNode1, SlaveNode2]),
     syn_test_suite_helper:assert_cluster(SlaveNode1, [node(), SlaveNode2]),
     syn_test_suite_helper:assert_cluster(SlaveNode2, [node(), SlaveNode1]),
+    timer:sleep(500),
 
     %% retrieve
     {Pid2RemoteOn2, "meta-2"} = syn:lookup("proc-confict"),

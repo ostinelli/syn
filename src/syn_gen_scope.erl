@@ -49,6 +49,9 @@
     code_change/3
 ]).
 
+%% internal
+-export([multicast_loop/0]).
+
 %% callbacks
 -callback init(Args :: term()) ->
     {ok, State :: term()}.
@@ -102,16 +105,12 @@ broadcast(Message, State) ->
     broadcast(Message, [], State).
 
 -spec broadcast(Message :: any(), ExcludedNodes :: [node()], #state{}) -> any().
-broadcast(Message, ExcludedNodes, #state{process_name = ProcessName, nodes = Nodes}) ->
-    lists:foreach(fun(RemoteNode) ->
-        erlang:send({ProcessName, RemoteNode}, Message, [noconnect])
-    end, maps:keys(Nodes) -- ExcludedNodes).
+broadcast(Message, ExcludedNodes, #state{multicast_pid = MulticastPid} = State) ->
+    MulticastPid ! {broadcast, Message, ExcludedNodes, State}.
 
 -spec broadcast_all_cluster(Message :: any(), #state{}) -> any().
-broadcast_all_cluster(Message, #state{process_name = ProcessName}) ->
-    lists:foreach(fun(RemoteNode) ->
-        erlang:send({ProcessName, RemoteNode}, Message, [noconnect])
-    end, nodes()).
+broadcast_all_cluster(Message, #state{multicast_pid = MulticastPid} = State) ->
+    MulticastPid ! {broadcast_all_cluster, Message, State}.
 
 -spec send_to_node(RemoteNode :: node(), Message :: any(), #state{}) -> any().
 send_to_node(RemoteNode, Message, #state{process_name = ProcessName}) ->
@@ -131,6 +130,8 @@ send_to_node(RemoteNode, Message, #state{process_name = ProcessName}) ->
     {stop, Reason :: any()} |
     {continue, any()}.
 init([Handler, Scope, ProcessName, Args]) ->
+    %% start multicast process
+    MulticastPid = spawn_link(?MODULE, multicast_loop, []),
     %% call init
     {ok, HandlerState} = Handler:init(Args),
     %% monitor nodes
@@ -140,7 +141,8 @@ init([Handler, Scope, ProcessName, Args]) ->
         handler = Handler,
         handler_state = HandlerState,
         scope = Scope,
-        process_name = ProcessName
+        process_name = ProcessName,
+        multicast_pid = MulticastPid
     },
     {ok, State, {continue, after_init}}.
 
@@ -296,3 +298,23 @@ get_process_name_for_scope(Handler, Scope) ->
     ModuleBin = atom_to_binary(Handler),
     ScopeBin = atom_to_binary(Scope),
     binary_to_atom(<<ModuleBin/binary, "_", ScopeBin/binary>>).
+
+
+-spec multicast_loop() -> terminated.
+multicast_loop() ->
+    receive
+        {broadcast, Message, ExcludedNodes, #state{process_name = ProcessName, nodes = Nodes}} ->
+            lists:foreach(fun(RemoteNode) ->
+                erlang:send({ProcessName, RemoteNode}, Message, [noconnect])
+            end, maps:keys(Nodes) -- ExcludedNodes),
+            multicast_loop();
+
+        {broadcast_all_cluster, Message, #state{process_name = ProcessName}} ->
+            lists:foreach(fun(RemoteNode) ->
+                erlang:send({ProcessName, RemoteNode}, Message, [noconnect])
+            end, nodes()),
+            multicast_loop();
+
+        terminate ->
+            terminated
+    end.

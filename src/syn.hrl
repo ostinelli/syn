@@ -62,6 +62,7 @@
     handler = undefined :: undefined | module(),
     handler_state = undefined :: any(),
     scope = default :: atom(),
-    process_name = syn_registry_default :: atom(),
-    nodes = #{} :: #{node() => pid()}
+    process_name :: atom(),
+    nodes = #{} :: #{node() => pid()},
+    multicast_pid :: pid()
 }).
