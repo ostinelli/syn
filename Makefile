@@ -18,14 +18,13 @@ dialyzer:
 run: all
 	@erl -pa `rebar3 path` \
 	-name syn@127.0.0.1 \
-	+K true \
 	-eval 'syn:start().'
 
-console: all
-	@# 'make console sname=syn1'
+node: all
+	@# 'make node sname=syn1'
 	@erl -pa `rebar3 path` \
 	-name $(sname)@127.0.0.1 \
-	+K true
+	-eval 'syn:start().'
 
 test: compile_test
 ifdef suite
@@ -37,6 +36,14 @@ else
 	ct_run -dir $(PROJECT_DIR)/test -logdir $(PROJECT_DIR)/test/results \
 	-pa `rebar3 as test path`
 endif
+
+bench: compile_test
+	@erl -pa `rebar3 as test path` \
+	-pa `rebar3 as test path`/../test \
+	-name syn_bench_master@127.0.0.1 \
+	-noshell \
+	+P 5000000 \
+	-eval 'syn_benchmark:start().'
 
 travis:
 	@$(PROJECT_DIR)/rebar3 as test compile

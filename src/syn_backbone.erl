@@ -82,7 +82,7 @@ init([]) ->
     {stop, Reason :: any(), Reply :: any(), State :: map()} |
     {stop, Reason :: any(), State :: map()}.
 handle_call({create_tables_for_scope, Scope}, _From, State) ->
-    error_logger:warning_msg("SYN[~p] Creating tables for scope: ~p", [node(), Scope]),
+    error_logger:info_msg("SYN[~p] Creating tables for scope: ~p", [node(), Scope]),
     ensure_table_exists(get_table_name(syn_registry_by_name, Scope)),
     ensure_table_exists(get_table_name(syn_registry_by_pid, Scope)),
     ensure_table_exists(get_table_name(syn_groups_by_name, Scope)),
