@@ -865,13 +865,30 @@ three_nodes_cluster_changes(Config) ->
     syn_test_suite_helper:assert_cluster(SlaveNode1, [node(), SlaveNode2]),
     syn_test_suite_helper:assert_cluster(SlaveNode2, [node(), SlaveNode1]),
     syn_test_suite_helper:wait_process_name_ready(syn_registry_default),
-
-    {PidRemoteOn1, "meta-1"} = syn:lookup("proc-1"),
-    {PidRemoteOn1, "meta-1"} = rpc:call(SlaveNode1, syn, lookup, ["proc-1"]),
-    {PidRemoteOn1, "meta-1"} = rpc:call(SlaveNode2, syn, lookup, ["proc-1"]),
-    {PidRemoteOn2, "meta-2"} = syn:lookup("proc-2"),
-    {PidRemoteOn2, "meta-2"} = rpc:call(SlaveNode1, syn, lookup, ["proc-2"]),
-    {PidRemoteOn2, "meta-2"} = rpc:call(SlaveNode2, syn, lookup, ["proc-2"]),
+    syn_test_suite_helper:assert_wait(
+        {PidRemoteOn1, "meta-1"},
+        fun() -> syn:lookup("proc-1") end
+    ),
+    syn_test_suite_helper:assert_wait(
+        {PidRemoteOn1, "meta-1"},
+        fun() -> rpc:call(SlaveNode1, syn, lookup, ["proc-1"]) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        {PidRemoteOn1, "meta-1"},
+        fun() -> rpc:call(SlaveNode2, syn, lookup, ["proc-1"]) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        {PidRemoteOn2, "meta-2"},
+        fun() -> syn:lookup("proc-2") end
+    ),
+    syn_test_suite_helper:assert_wait(
+        {PidRemoteOn2, "meta-2"},
+        fun() -> rpc:call(SlaveNode1, syn, lookup, ["proc-2"]) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        {PidRemoteOn2, "meta-2"},
+        fun() -> rpc:call(SlaveNode2, syn, lookup, ["proc-2"]) end
+    ),
     2 = syn:registry_count(default),
     0 = syn:registry_count(default, node()),
     1 = syn:registry_count(default, SlaveNode1),
@@ -886,11 +903,23 @@ three_nodes_cluster_changes(Config) ->
     1 = rpc:call(SlaveNode2, syn, registry_count, [default, SlaveNode2]),
 
     {'EXIT', {{invalid_scope, custom_scope_bc}, _}} = catch syn:lookup(custom_scope_bc, "BC-proc-1"),
-    {PidRemoteOn1, "meta-1"} = rpc:call(SlaveNode1, syn, lookup, [custom_scope_bc, "BC-proc-1"]),
-    {PidRemoteOn1, "meta-1"} = rpc:call(SlaveNode2, syn, lookup, [custom_scope_bc, "BC-proc-1"]),
+    syn_test_suite_helper:assert_wait(
+        {PidRemoteOn1, "meta-1"},
+        fun() -> rpc:call(SlaveNode1, syn, lookup, [custom_scope_bc, "BC-proc-1"]) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        {PidRemoteOn1, "meta-1"},
+        fun() -> rpc:call(SlaveNode2, syn, lookup, [custom_scope_bc, "BC-proc-1"]) end
+    ),
     {'EXIT', {{invalid_scope, custom_scope_bc}, _}} = catch syn:lookup(custom_scope_bc, "BC-proc-1 alias"),
-    {PidRemoteOn1, "meta-1 alias"} = rpc:call(SlaveNode1, syn, lookup, [custom_scope_bc, "BC-proc-1 alias"]),
-    {PidRemoteOn1, "meta-1 alias"} = rpc:call(SlaveNode2, syn, lookup, [custom_scope_bc, "BC-proc-1 alias"]),
+    syn_test_suite_helper:assert_wait(
+        {PidRemoteOn1, "meta-1 alias"},
+        fun() -> rpc:call(SlaveNode1, syn, lookup, [custom_scope_bc, "BC-proc-1 alias"]) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        {PidRemoteOn1, "meta-1 alias"},
+        fun() -> rpc:call(SlaveNode2, syn, lookup, [custom_scope_bc, "BC-proc-1 alias"]) end
+    ),
     {'EXIT', {{invalid_scope, custom_scope_bc}, _}} = catch syn:registry_count(custom_scope_bc),
     2 = rpc:call(SlaveNode1, syn, registry_count, [custom_scope_bc]),
     0 = rpc:call(SlaveNode1, syn, registry_count, [custom_scope_bc, node()]),
@@ -908,12 +937,30 @@ three_nodes_cluster_changes(Config) ->
     syn_test_suite_helper:assert_cluster(SlaveNode2, [node()]),
 
     %% retrieve
-    {PidRemoteOn1, "meta-1"} = syn:lookup("proc-1"),
-    {PidRemoteOn1, "meta-1"} = rpc:call(SlaveNode1, syn, lookup, ["proc-1"]),
-    undefined = rpc:call(SlaveNode2, syn, lookup, ["proc-1"]),
-    {PidRemoteOn2, "meta-2"} = syn:lookup("proc-2"),
-    undefined = rpc:call(SlaveNode1, syn, lookup, ["proc-2"]),
-    {PidRemoteOn2, "meta-2"} = rpc:call(SlaveNode2, syn, lookup, ["proc-2"]),
+    syn_test_suite_helper:assert_wait(
+        {PidRemoteOn1, "meta-1"},
+        fun() -> syn:lookup("proc-1") end
+    ),
+    syn_test_suite_helper:assert_wait(
+        {PidRemoteOn1, "meta-1"},
+        fun() -> rpc:call(SlaveNode1, syn, lookup, ["proc-1"]) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        undefined,
+        fun() -> rpc:call(SlaveNode2, syn, lookup, ["proc-1"]) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        {PidRemoteOn2, "meta-2"},
+        fun() -> syn:lookup("proc-2") end
+    ),
+    syn_test_suite_helper:assert_wait(
+        undefined,
+        fun() -> rpc:call(SlaveNode1, syn, lookup, ["proc-2"]) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        {PidRemoteOn2, "meta-2"},
+        fun() -> rpc:call(SlaveNode2, syn, lookup, ["proc-2"]) end
+    ),
     2 = syn:registry_count(default),
     0 = syn:registry_count(default, node()),
     1 = syn:registry_count(default, SlaveNode1),
@@ -928,11 +975,23 @@ three_nodes_cluster_changes(Config) ->
     1 = rpc:call(SlaveNode2, syn, registry_count, [default, SlaveNode2]),
 
     {'EXIT', {{invalid_scope, custom_scope_bc}, _}} = catch syn:lookup(custom_scope_bc, "BC-proc-1"),
-    {PidRemoteOn1, "meta-1"} = rpc:call(SlaveNode1, syn, lookup, [custom_scope_bc, "BC-proc-1"]),
-    undefined = rpc:call(SlaveNode2, syn, lookup, [custom_scope_bc, "BC-proc-1"]),
+    syn_test_suite_helper:assert_wait(
+        {PidRemoteOn1, "meta-1"},
+        fun() -> rpc:call(SlaveNode1, syn, lookup, [custom_scope_bc, "BC-proc-1"]) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        undefined,
+        fun() -> rpc:call(SlaveNode2, syn, lookup, [custom_scope_bc, "BC-proc-1"]) end
+    ),
     {'EXIT', {{invalid_scope, custom_scope_bc}, _}} = catch syn:lookup(custom_scope_bc, "BC-proc-1 alias"),
-    {PidRemoteOn1, "meta-1 alias"} = rpc:call(SlaveNode1, syn, lookup, [custom_scope_bc, "BC-proc-1 alias"]),
-    undefined = rpc:call(SlaveNode2, syn, lookup, [custom_scope_bc, "BC-proc-1 alias"]),
+    syn_test_suite_helper:assert_wait(
+        {PidRemoteOn1, "meta-1 alias"},
+        fun() -> rpc:call(SlaveNode1, syn, lookup, [custom_scope_bc, "BC-proc-1 alias"]) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        undefined,
+        fun() -> rpc:call(SlaveNode2, syn, lookup, [custom_scope_bc, "BC-proc-1 alias"]) end
+    ),
     {'EXIT', {{invalid_scope, custom_scope_bc}, _}} = catch syn:registry_count(custom_scope_bc),
     2 = rpc:call(SlaveNode1, syn, registry_count, [custom_scope_bc]),
     0 = rpc:call(SlaveNode1, syn, registry_count, [custom_scope_bc, node()]),
@@ -950,12 +1009,30 @@ three_nodes_cluster_changes(Config) ->
     syn_test_suite_helper:assert_cluster(SlaveNode2, [node(), SlaveNode1]),
 
     %% retrieve
-    {PidRemoteOn1, "meta-1"} = syn:lookup("proc-1"),
-    {PidRemoteOn1, "meta-1"} = rpc:call(SlaveNode1, syn, lookup, ["proc-1"]),
-    {PidRemoteOn1, "meta-1"} = rpc:call(SlaveNode2, syn, lookup, ["proc-1"]),
-    {PidRemoteOn2, "meta-2"} = syn:lookup("proc-2"),
-    {PidRemoteOn2, "meta-2"} = rpc:call(SlaveNode1, syn, lookup, ["proc-2"]),
-    {PidRemoteOn2, "meta-2"} = rpc:call(SlaveNode2, syn, lookup, ["proc-2"]),
+    syn_test_suite_helper:assert_wait(
+        {PidRemoteOn1, "meta-1"},
+        fun() -> syn:lookup("proc-1") end
+    ),
+    syn_test_suite_helper:assert_wait(
+        {PidRemoteOn1, "meta-1"},
+        fun() -> rpc:call(SlaveNode1, syn, lookup, ["proc-1"]) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        {PidRemoteOn1, "meta-1"},
+        fun() -> rpc:call(SlaveNode2, syn, lookup, ["proc-1"]) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        {PidRemoteOn2, "meta-2"},
+        fun() -> syn:lookup("proc-2") end
+    ),
+    syn_test_suite_helper:assert_wait(
+        {PidRemoteOn2, "meta-2"},
+        fun() -> rpc:call(SlaveNode1, syn, lookup, ["proc-2"]) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        {PidRemoteOn2, "meta-2"},
+        fun() -> rpc:call(SlaveNode2, syn, lookup, ["proc-2"]) end
+    ),
     2 = syn:registry_count(default),
     0 = syn:registry_count(default, node()),
     1 = syn:registry_count(default, SlaveNode1),
@@ -970,11 +1047,23 @@ three_nodes_cluster_changes(Config) ->
     1 = rpc:call(SlaveNode2, syn, registry_count, [default, SlaveNode2]),
 
     {'EXIT', {{invalid_scope, custom_scope_bc}, _}} = catch syn:lookup(custom_scope_bc, "BC-proc-1"),
-    {PidRemoteOn1, "meta-1"} = rpc:call(SlaveNode1, syn, lookup, [custom_scope_bc, "BC-proc-1"]),
-    {PidRemoteOn1, "meta-1"} = rpc:call(SlaveNode2, syn, lookup, [custom_scope_bc, "BC-proc-1"]),
+    syn_test_suite_helper:assert_wait(
+        {PidRemoteOn1, "meta-1"},
+        fun() -> rpc:call(SlaveNode1, syn, lookup, [custom_scope_bc, "BC-proc-1"]) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        {PidRemoteOn1, "meta-1"},
+        fun() -> rpc:call(SlaveNode2, syn, lookup, [custom_scope_bc, "BC-proc-1"]) end
+    ),
     {'EXIT', {{invalid_scope, custom_scope_bc}, _}} = catch syn:lookup(custom_scope_bc, "BC-proc-1 alias"),
-    {PidRemoteOn1, "meta-1 alias"} = rpc:call(SlaveNode1, syn, lookup, [custom_scope_bc, "BC-proc-1 alias"]),
-    {PidRemoteOn1, "meta-1 alias"} = rpc:call(SlaveNode2, syn, lookup, [custom_scope_bc, "BC-proc-1 alias"]),
+    syn_test_suite_helper:assert_wait(
+        {PidRemoteOn1, "meta-1 alias"},
+        fun() -> rpc:call(SlaveNode1, syn, lookup, [custom_scope_bc, "BC-proc-1 alias"]) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        {PidRemoteOn1, "meta-1 alias"},
+        fun() -> rpc:call(SlaveNode2, syn, lookup, [custom_scope_bc, "BC-proc-1 alias"]) end
+    ),
     {'EXIT', {{invalid_scope, custom_scope_bc}, _}} = catch syn:registry_count(custom_scope_bc),
     2 = rpc:call(SlaveNode1, syn, registry_count, [custom_scope_bc]),
     0 = rpc:call(SlaveNode1, syn, registry_count, [custom_scope_bc, node()]),
@@ -1022,7 +1111,10 @@ three_nodes_cluster_conflicts(Config) ->
     syn_test_suite_helper:assert_cluster(SlaveNode2, [node(), SlaveNode1]),
 
     %% retrieve
-    {Pid2RemoteOn2, "meta-2"} = syn:lookup("proc-confict"),
+    syn_test_suite_helper:assert_wait(
+        {Pid2RemoteOn2, "meta-2"},
+        fun() -> syn:lookup("proc-confict") end
+    ),
     syn_test_suite_helper:assert_wait(
         {Pid2RemoteOn2, "meta-2"},
         fun() -> rpc:call(SlaveNode1, syn, lookup, ["proc-confict"]) end
@@ -1043,8 +1135,14 @@ three_nodes_cluster_conflicts(Config) ->
     0 = rpc:call(SlaveNode2, syn, registry_count, [default, node()]),
     0 = rpc:call(SlaveNode2, syn, registry_count, [default, SlaveNode1]),
     1 = rpc:call(SlaveNode2, syn, registry_count, [default, SlaveNode2]),
-    {Pid2RemoteOn2, "meta-2"} = rpc:call(SlaveNode1, syn, lookup, [custom_scope_bc, "proc-confict"]),
-    {Pid2RemoteOn2, "meta-2"} = rpc:call(SlaveNode2, syn, lookup, [custom_scope_bc, "proc-confict"]),
+    syn_test_suite_helper:assert_wait(
+        {Pid2RemoteOn2, "meta-2"},
+        fun() -> rpc:call(SlaveNode1, syn, lookup, [custom_scope_bc, "proc-confict"]) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        {Pid2RemoteOn2, "meta-2"},
+        fun() -> rpc:call(SlaveNode2, syn, lookup, [custom_scope_bc, "proc-confict"]) end
+    ),
     1 = rpc:call(SlaveNode1, syn, registry_count, [custom_scope_bc]),
     0 = rpc:call(SlaveNode1, syn, registry_count, [custom_scope_bc, node()]),
     0 = rpc:call(SlaveNode1, syn, registry_count, [custom_scope_bc, SlaveNode1]),
@@ -1059,8 +1157,10 @@ three_nodes_cluster_conflicts(Config) ->
     Pid2 = syn_test_suite_helper:start_process(SlaveNode1),
     rpc:call(SlaveNode1, syn_registry, add_to_local_table, [default, <<"my proc">>, Pid2, "meta-2", erlang:system_time(), undefined]),
     ok = syn:register(<<"my proc">>, Pid1, "meta-1"),
-
-    {Pid1, "meta-1"} = syn:lookup(<<"my proc">>),
+    syn_test_suite_helper:assert_wait(
+        {Pid1, "meta-1"},
+        fun() -> syn:lookup(<<"my proc">>) end
+    ),
     syn_test_suite_helper:assert_wait(
         {Pid1, "meta-1"},
         fun() -> rpc:call(SlaveNode1, syn, lookup, [<<"my proc">>]) end
