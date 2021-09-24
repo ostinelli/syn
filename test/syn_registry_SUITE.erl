@@ -219,9 +219,9 @@ three_nodes_discover_default_scope(Config) ->
     ok = rpc:call(SlaveNode2, syn, start, []),
 
     %% check
-    syn_test_suite_helper:assert_scope_subcluster(node(), default, [SlaveNode1, SlaveNode2]),
-    syn_test_suite_helper:assert_scope_subcluster(SlaveNode1, default, [node(), SlaveNode2]),
-    syn_test_suite_helper:assert_scope_subcluster(SlaveNode2, default, [node(), SlaveNode1]),
+    syn_test_suite_helper:assert_registry_scope_subcluster(node(), default, [SlaveNode1, SlaveNode2]),
+    syn_test_suite_helper:assert_registry_scope_subcluster(SlaveNode1, default, [node(), SlaveNode2]),
+    syn_test_suite_helper:assert_registry_scope_subcluster(SlaveNode2, default, [node(), SlaveNode1]),
 
     %% simulate full netsplit
     rpc:call(SlaveNode1, syn_test_suite_helper, disconnect_node, [SlaveNode2]),
@@ -230,7 +230,7 @@ three_nodes_discover_default_scope(Config) ->
     syn_test_suite_helper:assert_cluster(node(), []),
 
     %% check
-    syn_test_suite_helper:assert_scope_subcluster(node(), default, []),
+    syn_test_suite_helper:assert_registry_scope_subcluster(node(), default, []),
 
     %% reconnect slave 1
     syn_test_suite_helper:connect_node(SlaveNode1),
@@ -238,8 +238,8 @@ three_nodes_discover_default_scope(Config) ->
     syn_test_suite_helper:assert_cluster(SlaveNode1, [node()]),
 
     %% check
-    syn_test_suite_helper:assert_scope_subcluster(node(), default, [SlaveNode1]),
-    syn_test_suite_helper:assert_scope_subcluster(SlaveNode1, default, [node()]),
+    syn_test_suite_helper:assert_registry_scope_subcluster(node(), default, [SlaveNode1]),
+    syn_test_suite_helper:assert_registry_scope_subcluster(SlaveNode1, default, [node()]),
 
     %% reconnect all
     syn_test_suite_helper:connect_node(SlaveNode2),
@@ -249,9 +249,9 @@ three_nodes_discover_default_scope(Config) ->
     syn_test_suite_helper:assert_cluster(SlaveNode2, [node(), SlaveNode1]),
 
     %% check
-    syn_test_suite_helper:assert_scope_subcluster(node(), default, [SlaveNode1, SlaveNode2]),
-    syn_test_suite_helper:assert_scope_subcluster(SlaveNode1, default, [node(), SlaveNode2]),
-    syn_test_suite_helper:assert_scope_subcluster(SlaveNode2, default, [node(), SlaveNode1]),
+    syn_test_suite_helper:assert_registry_scope_subcluster(node(), default, [SlaveNode1, SlaveNode2]),
+    syn_test_suite_helper:assert_registry_scope_subcluster(SlaveNode1, default, [node(), SlaveNode2]),
+    syn_test_suite_helper:assert_registry_scope_subcluster(SlaveNode2, default, [node(), SlaveNode1]),
 
     %% simulate full netsplit, again
     rpc:call(SlaveNode1, syn_test_suite_helper, disconnect_node, [SlaveNode2]),
@@ -260,7 +260,7 @@ three_nodes_discover_default_scope(Config) ->
     syn_test_suite_helper:assert_cluster(node(), []),
 
     %% check
-    syn_test_suite_helper:assert_scope_subcluster(node(), default, []),
+    syn_test_suite_helper:assert_registry_scope_subcluster(node(), default, []),
     %% reconnect all, again
     syn_test_suite_helper:connect_node(SlaveNode2),
     rpc:call(SlaveNode1, syn_test_suite_helper, connect_node, [SlaveNode2]),
@@ -269,27 +269,27 @@ three_nodes_discover_default_scope(Config) ->
     syn_test_suite_helper:assert_cluster(SlaveNode2, [node(), SlaveNode1]),
 
     %% check
-    syn_test_suite_helper:assert_scope_subcluster(node(), default, [SlaveNode1, SlaveNode2]),
-    syn_test_suite_helper:assert_scope_subcluster(SlaveNode1, default, [node(), SlaveNode2]),
-    syn_test_suite_helper:assert_scope_subcluster(SlaveNode2, default, [node(), SlaveNode1]),
+    syn_test_suite_helper:assert_registry_scope_subcluster(node(), default, [SlaveNode1, SlaveNode2]),
+    syn_test_suite_helper:assert_registry_scope_subcluster(SlaveNode1, default, [node(), SlaveNode2]),
+    syn_test_suite_helper:assert_registry_scope_subcluster(SlaveNode2, default, [node(), SlaveNode1]),
 
     %% crash the scope process on local
     syn_test_suite_helper:kill_process(syn_registry_default),
     syn_test_suite_helper:wait_process_name_ready(syn_registry_default),
 
     %% check, it should have rebuilt after supervisor restarts it
-    syn_test_suite_helper:assert_scope_subcluster(node(), default, [SlaveNode1, SlaveNode2]),
-    syn_test_suite_helper:assert_scope_subcluster(SlaveNode1, default, [node(), SlaveNode2]),
-    syn_test_suite_helper:assert_scope_subcluster(SlaveNode2, default, [node(), SlaveNode1]),
+    syn_test_suite_helper:assert_registry_scope_subcluster(node(), default, [SlaveNode1, SlaveNode2]),
+    syn_test_suite_helper:assert_registry_scope_subcluster(SlaveNode1, default, [node(), SlaveNode2]),
+    syn_test_suite_helper:assert_registry_scope_subcluster(SlaveNode2, default, [node(), SlaveNode1]),
 
     %% crash scopes supervisor on local
     syn_test_suite_helper:kill_process(syn_scopes_sup),
     syn_test_suite_helper:wait_process_name_ready(syn_registry_default),
 
     %% check
-    syn_test_suite_helper:assert_scope_subcluster(node(), default, [SlaveNode1, SlaveNode2]),
-    syn_test_suite_helper:assert_scope_subcluster(SlaveNode1, default, [node(), SlaveNode2]),
-    syn_test_suite_helper:assert_scope_subcluster(SlaveNode2, default, [node(), SlaveNode1]).
+    syn_test_suite_helper:assert_registry_scope_subcluster(node(), default, [SlaveNode1, SlaveNode2]),
+    syn_test_suite_helper:assert_registry_scope_subcluster(SlaveNode1, default, [node(), SlaveNode2]),
+    syn_test_suite_helper:assert_registry_scope_subcluster(SlaveNode2, default, [node(), SlaveNode1]).
 
 three_nodes_discover_custom_scope(Config) ->
     %% get slaves
@@ -311,19 +311,19 @@ three_nodes_discover_custom_scope(Config) ->
     {'EXIT', {{invalid_scope, custom_abcdef}, _}} = catch syn_registry:get_subcluster_nodes(custom_abcdef),
 
     %% check
-    syn_test_suite_helper:assert_scope_subcluster(node(), custom_scope_ab, [SlaveNode1]),
-    syn_test_suite_helper:assert_scope_subcluster(node(), custom_scope_all, [SlaveNode1, SlaveNode2]),
-    syn_test_suite_helper:assert_scope_subcluster(SlaveNode1, custom_scope_ab, [node()]),
-    syn_test_suite_helper:assert_scope_subcluster(SlaveNode1, custom_scope_bc, [SlaveNode2]),
-    syn_test_suite_helper:assert_scope_subcluster(SlaveNode1, custom_scope_all, [node(), SlaveNode2]),
-    syn_test_suite_helper:assert_scope_subcluster(SlaveNode2, custom_scope_bc, [SlaveNode1]),
-    syn_test_suite_helper:assert_scope_subcluster(SlaveNode2, custom_scope_c, []),
-    syn_test_suite_helper:assert_scope_subcluster(SlaveNode2, custom_scope_all, [node(), SlaveNode1]),
+    syn_test_suite_helper:assert_registry_scope_subcluster(node(), custom_scope_ab, [SlaveNode1]),
+    syn_test_suite_helper:assert_registry_scope_subcluster(node(), custom_scope_all, [SlaveNode1, SlaveNode2]),
+    syn_test_suite_helper:assert_registry_scope_subcluster(SlaveNode1, custom_scope_ab, [node()]),
+    syn_test_suite_helper:assert_registry_scope_subcluster(SlaveNode1, custom_scope_bc, [SlaveNode2]),
+    syn_test_suite_helper:assert_registry_scope_subcluster(SlaveNode1, custom_scope_all, [node(), SlaveNode2]),
+    syn_test_suite_helper:assert_registry_scope_subcluster(SlaveNode2, custom_scope_bc, [SlaveNode1]),
+    syn_test_suite_helper:assert_registry_scope_subcluster(SlaveNode2, custom_scope_c, []),
+    syn_test_suite_helper:assert_registry_scope_subcluster(SlaveNode2, custom_scope_all, [node(), SlaveNode1]),
 
     %% check default
-    syn_test_suite_helper:assert_scope_subcluster(node(), default, [SlaveNode1, SlaveNode2]),
-    syn_test_suite_helper:assert_scope_subcluster(SlaveNode1, default, [node(), SlaveNode2]),
-    syn_test_suite_helper:assert_scope_subcluster(SlaveNode2, default, [node(), SlaveNode1]),
+    syn_test_suite_helper:assert_registry_scope_subcluster(node(), default, [SlaveNode1, SlaveNode2]),
+    syn_test_suite_helper:assert_registry_scope_subcluster(SlaveNode1, default, [node(), SlaveNode2]),
+    syn_test_suite_helper:assert_registry_scope_subcluster(SlaveNode2, default, [node(), SlaveNode1]),
 
     %% disconnect node 2 (node 1 can still see node 2)
     syn_test_suite_helper:disconnect_node(SlaveNode2),
@@ -331,11 +331,11 @@ three_nodes_discover_custom_scope(Config) ->
     syn_test_suite_helper:assert_cluster(SlaveNode1, [node(), SlaveNode2]),
 
     %% check
-    syn_test_suite_helper:assert_scope_subcluster(node(), custom_scope_ab, [SlaveNode1]),
-    syn_test_suite_helper:assert_scope_subcluster(node(), custom_scope_all, [SlaveNode1]),
-    syn_test_suite_helper:assert_scope_subcluster(SlaveNode1, custom_scope_ab, [node()]),
-    syn_test_suite_helper:assert_scope_subcluster(SlaveNode1, custom_scope_bc, [SlaveNode2]),
-    syn_test_suite_helper:assert_scope_subcluster(SlaveNode1, custom_scope_all, [node(), SlaveNode2]),
+    syn_test_suite_helper:assert_registry_scope_subcluster(node(), custom_scope_ab, [SlaveNode1]),
+    syn_test_suite_helper:assert_registry_scope_subcluster(node(), custom_scope_all, [SlaveNode1]),
+    syn_test_suite_helper:assert_registry_scope_subcluster(SlaveNode1, custom_scope_ab, [node()]),
+    syn_test_suite_helper:assert_registry_scope_subcluster(SlaveNode1, custom_scope_bc, [SlaveNode2]),
+    syn_test_suite_helper:assert_registry_scope_subcluster(SlaveNode1, custom_scope_all, [node(), SlaveNode2]),
 
     %% reconnect node 2
     syn_test_suite_helper:connect_node(SlaveNode2),
@@ -344,42 +344,42 @@ three_nodes_discover_custom_scope(Config) ->
     syn_test_suite_helper:assert_cluster(SlaveNode2, [node(), SlaveNode1]),
 
     %% check
-    syn_test_suite_helper:assert_scope_subcluster(node(), custom_scope_ab, [SlaveNode1]),
-    syn_test_suite_helper:assert_scope_subcluster(node(), custom_scope_all, [SlaveNode1, SlaveNode2]),
-    syn_test_suite_helper:assert_scope_subcluster(SlaveNode1, custom_scope_ab, [node()]),
-    syn_test_suite_helper:assert_scope_subcluster(SlaveNode1, custom_scope_bc, [SlaveNode2]),
-    syn_test_suite_helper:assert_scope_subcluster(SlaveNode1, custom_scope_all, [node(), SlaveNode2]),
-    syn_test_suite_helper:assert_scope_subcluster(SlaveNode2, custom_scope_bc, [SlaveNode1]),
-    syn_test_suite_helper:assert_scope_subcluster(SlaveNode2, custom_scope_c, []),
-    syn_test_suite_helper:assert_scope_subcluster(SlaveNode2, custom_scope_all, [node(), SlaveNode1]),
+    syn_test_suite_helper:assert_registry_scope_subcluster(node(), custom_scope_ab, [SlaveNode1]),
+    syn_test_suite_helper:assert_registry_scope_subcluster(node(), custom_scope_all, [SlaveNode1, SlaveNode2]),
+    syn_test_suite_helper:assert_registry_scope_subcluster(SlaveNode1, custom_scope_ab, [node()]),
+    syn_test_suite_helper:assert_registry_scope_subcluster(SlaveNode1, custom_scope_bc, [SlaveNode2]),
+    syn_test_suite_helper:assert_registry_scope_subcluster(SlaveNode1, custom_scope_all, [node(), SlaveNode2]),
+    syn_test_suite_helper:assert_registry_scope_subcluster(SlaveNode2, custom_scope_bc, [SlaveNode1]),
+    syn_test_suite_helper:assert_registry_scope_subcluster(SlaveNode2, custom_scope_c, []),
+    syn_test_suite_helper:assert_registry_scope_subcluster(SlaveNode2, custom_scope_all, [node(), SlaveNode1]),
 
     %% crash a scope process on 2
     rpc:call(SlaveNode2, syn_test_suite_helper, kill_process, [syn_registry_custom_scope_bc]),
     rpc:call(SlaveNode2, syn_test_suite_helper, wait_process_name_ready, [syn_registry_default]),
 
     %% check
-    syn_test_suite_helper:assert_scope_subcluster(node(), custom_scope_ab, [SlaveNode1]),
-    syn_test_suite_helper:assert_scope_subcluster(node(), custom_scope_all, [SlaveNode1, SlaveNode2]),
-    syn_test_suite_helper:assert_scope_subcluster(SlaveNode1, custom_scope_ab, [node()]),
-    syn_test_suite_helper:assert_scope_subcluster(SlaveNode1, custom_scope_bc, [SlaveNode2]),
-    syn_test_suite_helper:assert_scope_subcluster(SlaveNode1, custom_scope_all, [node(), SlaveNode2]),
-    syn_test_suite_helper:assert_scope_subcluster(SlaveNode2, custom_scope_bc, [SlaveNode1]),
-    syn_test_suite_helper:assert_scope_subcluster(SlaveNode2, custom_scope_c, []),
-    syn_test_suite_helper:assert_scope_subcluster(SlaveNode2, custom_scope_all, [node(), SlaveNode1]),
+    syn_test_suite_helper:assert_registry_scope_subcluster(node(), custom_scope_ab, [SlaveNode1]),
+    syn_test_suite_helper:assert_registry_scope_subcluster(node(), custom_scope_all, [SlaveNode1, SlaveNode2]),
+    syn_test_suite_helper:assert_registry_scope_subcluster(SlaveNode1, custom_scope_ab, [node()]),
+    syn_test_suite_helper:assert_registry_scope_subcluster(SlaveNode1, custom_scope_bc, [SlaveNode2]),
+    syn_test_suite_helper:assert_registry_scope_subcluster(SlaveNode1, custom_scope_all, [node(), SlaveNode2]),
+    syn_test_suite_helper:assert_registry_scope_subcluster(SlaveNode2, custom_scope_bc, [SlaveNode1]),
+    syn_test_suite_helper:assert_registry_scope_subcluster(SlaveNode2, custom_scope_c, []),
+    syn_test_suite_helper:assert_registry_scope_subcluster(SlaveNode2, custom_scope_all, [node(), SlaveNode1]),
 
     %% crash scopes supervisor on local
     syn_test_suite_helper:kill_process(syn_scopes_sup),
     syn_test_suite_helper:wait_process_name_ready(syn_registry_default),
 
     %% check
-    syn_test_suite_helper:assert_scope_subcluster(node(), custom_scope_ab, [SlaveNode1]),
-    syn_test_suite_helper:assert_scope_subcluster(node(), custom_scope_all, [SlaveNode1, SlaveNode2]),
-    syn_test_suite_helper:assert_scope_subcluster(SlaveNode1, custom_scope_ab, [node()]),
-    syn_test_suite_helper:assert_scope_subcluster(SlaveNode1, custom_scope_bc, [SlaveNode2]),
-    syn_test_suite_helper:assert_scope_subcluster(SlaveNode1, custom_scope_all, [node(), SlaveNode2]),
-    syn_test_suite_helper:assert_scope_subcluster(SlaveNode2, custom_scope_bc, [SlaveNode1]),
-    syn_test_suite_helper:assert_scope_subcluster(SlaveNode2, custom_scope_c, []),
-    syn_test_suite_helper:assert_scope_subcluster(SlaveNode2, custom_scope_all, [node(), SlaveNode1]).
+    syn_test_suite_helper:assert_registry_scope_subcluster(node(), custom_scope_ab, [SlaveNode1]),
+    syn_test_suite_helper:assert_registry_scope_subcluster(node(), custom_scope_all, [SlaveNode1, SlaveNode2]),
+    syn_test_suite_helper:assert_registry_scope_subcluster(SlaveNode1, custom_scope_ab, [node()]),
+    syn_test_suite_helper:assert_registry_scope_subcluster(SlaveNode1, custom_scope_bc, [SlaveNode2]),
+    syn_test_suite_helper:assert_registry_scope_subcluster(SlaveNode1, custom_scope_all, [node(), SlaveNode2]),
+    syn_test_suite_helper:assert_registry_scope_subcluster(SlaveNode2, custom_scope_bc, [SlaveNode1]),
+    syn_test_suite_helper:assert_registry_scope_subcluster(SlaveNode2, custom_scope_c, []),
+    syn_test_suite_helper:assert_registry_scope_subcluster(SlaveNode2, custom_scope_all, [node(), SlaveNode1]).
 
 three_nodes_register_unregister_and_monitor_default_scope(Config) ->
     %% get slaves

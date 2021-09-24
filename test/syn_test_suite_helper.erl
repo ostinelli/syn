@@ -35,7 +35,7 @@
 -export([wait_cluster_mesh_connected/1]).
 -export([wait_process_name_ready/1, wait_process_name_ready/2]).
 -export([assert_cluster/2]).
--export([assert_scope_subcluster/3]).
+-export([assert_registry_scope_subcluster/3, assert_groups_scope_subcluster/3]).
 -export([assert_received_messages/1]).
 -export([assert_empty_queue/1]).
 -export([assert_wait/2]).
@@ -179,15 +179,11 @@ assert_cluster(Node, ExpectedNodes, StartAt) ->
         _ -> ok
     end.
 
-assert_scope_subcluster(Node, Scope, ExpectedNodes) ->
-    assert_scope_subcluster(Node, Scope, ExpectedNodes, os:system_time(millisecond)).
-assert_scope_subcluster(Node, Scope, ExpectedNodes, StartAt) ->
-    NodesMap = rpc:call(Node, syn_registry, get_subcluster_nodes, [Scope]),
-    Nodes = maps:keys(NodesMap),
-    case do_assert_cluster(Nodes, ExpectedNodes, StartAt) of
-        continue -> assert_scope_subcluster(Node, Scope, ExpectedNodes, StartAt);
-        _ -> ok
-    end.
+assert_registry_scope_subcluster(Node, Scope, ExpectedNodes) ->
+    do_assert_scope_subcluster(syn_registry, Node, Scope, ExpectedNodes).
+
+assert_groups_scope_subcluster(Node, Scope, ExpectedNodes) ->
+    do_assert_scope_subcluster(syn_groups, Node, Scope, ExpectedNodes).
 
 assert_received_messages(Messages) ->
     assert_received_messages(Messages, []).
@@ -245,6 +241,16 @@ send_error_logger_to_disk() ->
 process_main() ->
     receive
         _ -> process_main()
+    end.
+
+do_assert_scope_subcluster(Module, Node, Scope, ExpectedNodes) ->
+    do_assert_scope_subcluster(Module, Node, Scope, ExpectedNodes, os:system_time(millisecond)).
+do_assert_scope_subcluster(Module, Node, Scope, ExpectedNodes, StartAt) ->
+    NodesMap = rpc:call(Node, Module, get_subcluster_nodes, [Scope]),
+    Nodes = maps:keys(NodesMap),
+    case do_assert_cluster(Nodes, ExpectedNodes, StartAt) of
+        continue -> do_assert_scope_subcluster(Module, Node, Scope, ExpectedNodes, StartAt);
+        _ -> ok
     end.
 
 do_assert_cluster(Nodes, ExpectedNodes, StartAt) ->

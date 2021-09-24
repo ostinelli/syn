@@ -49,7 +49,8 @@ init([Scope]) ->
     ok = syn_backbone:create_tables_for_scope(Scope),
     %% set children
     Children = [
-        scope_child_spec(syn_registry, Scope)
+        scope_child_spec(syn_registry, Scope),
+        scope_child_spec(syn_groups, Scope)
     ],
     {ok, {{one_for_one, 10, 10}, Children}}.
 
