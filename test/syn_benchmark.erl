@@ -26,7 +26,21 @@
 -module(syn_benchmark).
 
 %% API
--compile([export_all]).
+-export([
+    start/0,
+    start_processes/1,
+    process_loop/0,
+    register_on_node/3,
+    do_register_on_node/2,
+    unregister_on_node/3,
+    do_unregister_on_node/2,
+    wait_registration_propagation/1,
+    wait_unregistration_propagation/1
+]).
+-export([
+    start_profiling/0,
+    stop_profiling/0
+]).
 
 %% ===================================================================
 %% API
@@ -76,9 +90,6 @@ start() ->
         maps:put(Node, Pids, Acc)
     end, #{}, NodesInfo),
 
-%%    {ok, P} = eprof:start(),
-%%    eprof:start_profiling(erlang:processes() -- [P]),
-
     %% start registration
     lists:foreach(fun({Node, FromName, _ToName}) ->
         Pids = maps:get(Node, PidsMap),
@@ -100,9 +111,6 @@ start() ->
     RegTakenTime = (lists:max(RegRemoteNodesTimes) + RegPropagationTime),
     RegistrationRate = ProcessCount / RegTakenTime,
     io:format("====> Registeration rate (with propagation): ~p/sec.~n~n", [RegistrationRate]),
-
-%%    eprof:stop_profiling(),
-%%    eprof:analyze(total),
 
     timer:sleep(1000),
 
@@ -228,3 +236,11 @@ wait_unregistration_propagation([{_Node, _FromName, ToName} | NodeInfosTail] = N
             timer:sleep(50),
             wait_unregistration_propagation(NodesInfo)
     end.
+
+start_profiling() ->
+    {ok, P} = eprof:start(),
+    eprof:start_profiling(erlang:processes() -- [P]).
+
+stop_profiling() ->
+    eprof:stop_profiling(),
+    eprof:analyze(total).

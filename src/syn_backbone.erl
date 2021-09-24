@@ -152,7 +152,7 @@ ensure_table_exists(TableId, Scope) ->
             %% regarding decentralized_counters: <https://blog.erlang.org/scalable-ets-counters/>
             ets:new(TableName, [
                 ordered_set, public, named_table,
-                {read_concurrency, true}, {write_concurrency, true}, {decentralized_counters, true}
+                {read_concurrency, true}, {decentralized_counters, true}
             ]),
             ok;
 
