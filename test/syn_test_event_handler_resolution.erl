@@ -23,25 +23,22 @@
 %% OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 %% THE SOFTWARE.
 %% ==========================================================================================================
--module(syn_test_event_handler).
+-module(syn_test_event_handler_resolution).
 -behaviour(syn_event_handler).
 
--export([on_process_registered/4]).
--export([on_process_unregistered/4]).
+-export([resolve_registry_conflict/4]).
 
-on_process_registered(Scope, Name, Pid, {recipient, RecipientPid, AdditionalMeta}) ->
-    RecipientPid ! {on_process_registered, node(), Scope, Name, Pid, AdditionalMeta}.
-
-on_process_unregistered(Scope, Name, Pid, {recipient, RecipientPid, AdditionalMeta}) ->
-    RecipientPid ! {on_process_unregistered, node(), Scope, Name, Pid, AdditionalMeta}.
-
-%%-export([resolve_registry_conflict/4]).
-%%
-%%-spec resolve_registry_conflict(
-%%    Scope ::atom(),
-%%    Name :: any(),
-%%    {LocalPid :: pid(), LocalMeta :: any()},
-%%    {RemotePid :: pid(), RemoteMeta :: any()}
-%%) -> PidToKeep :: pid().
-%%resolve_registry_conflict(_Scope, _Name, {Pid1, _Meta1, _Time1}, {_Pid2, _Meta2, _Time2}) ->
-%%    Pid1.
+-spec resolve_registry_conflict(
+    Scope :: atom(),
+    Name :: any(),
+    {LocalPid :: pid(), LocalMeta :: any()},
+    {RemotePid :: pid(), RemoteMeta :: any()}
+) -> PidToKeep :: pid().
+resolve_registry_conflict(default, _Name, {Pid1, keepthis, _Time1}, {_Pid2, _Meta2, _Time2}) ->
+    Pid1;
+resolve_registry_conflict(custom_scope_bc, _Name, {Pid1, keepthis, _Time1}, {_Pid2, _Meta2, _Time2}) ->
+    Pid1;
+resolve_registry_conflict(default, _Name, {_Pid1, _Meta1, _Time1}, {Pid2, keepthis, _Time2}) ->
+    Pid2;
+resolve_registry_conflict(custom_scope_bc, _Name, {_Pid1, _Meta1, _Time1}, {Pid2, keepthis, _Time2}) ->
+    Pid2.

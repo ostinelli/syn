@@ -46,7 +46,7 @@
 
 %% tests
 -ifdef(TEST).
--export([add_to_local_table/6, remove_from_local_table/3]).
+-export([add_to_local_table/7, remove_from_local_table/4]).
 -endif.
 
 %% includes
@@ -566,29 +566,3 @@ resolve_conflict(Scope, Name, {Pid, Meta, Time}, {TablePid, TableMeta, TableTime
                 [node(), Name, Scope, Pid, TablePid, Invalid]
             )
     end.
-
-%% ===================================================================
-%% Test support
-%% ===================================================================
--spec add_to_local_table(
-    Scope :: atom(),
-    Name :: any(),
-    Pid :: pid(),
-    Meta :: any(),
-    Time :: integer(),
-    MRef :: undefined | reference()
-) -> true.
-add_to_local_table(Scope, Name, Pid, Meta, Time, MRef) ->
-    TableByName = syn_backbone:get_table_name(syn_registry_by_name, Scope),
-    TableByPid = syn_backbone:get_table_name(syn_registry_by_pid, Scope),
-    add_to_local_table(Name, Pid, Meta, Time, MRef, TableByName, TableByPid).
-
--spec remove_from_local_table(
-    Scope :: atom(),
-    Name :: any(),
-    Pid :: pid()
-) -> true.
-remove_from_local_table(Scope, Name, Pid) ->
-    TableByName = syn_backbone:get_table_name(syn_registry_by_name, Scope),
-    TableByPid = syn_backbone:get_table_name(syn_registry_by_pid, Scope),
-    remove_from_local_table(Name, Pid, TableByName, TableByPid).

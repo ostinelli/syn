@@ -28,7 +28,6 @@
 %% API
 -export([start_slave/1, stop_slave/1]).
 -export([connect_node/1, disconnect_node/1]).
--export([use_custom_handler/0]).
 -export([clean_after_test/0]).
 -export([start_process/0, start_process/1, start_process/2]).
 -export([kill_process/1]).
@@ -65,9 +64,6 @@ connect_node(Node) ->
 
 disconnect_node(Node) ->
     erlang:disconnect_node(Node).
-
-use_custom_handler() ->
-    syn:set_event_handler(syn_test_event_handler).
 
 clean_after_test() ->
     Nodes = [node() | nodes()],

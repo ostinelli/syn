@@ -42,7 +42,8 @@
     three_nodes_register_unregister_and_monitor_custom_scope/1,
     three_nodes_cluster_changes/1,
     three_nodes_cluster_conflicts/1,
-    three_nodes_custom_event_handler_reg_unreg/1
+    three_nodes_custom_event_handler_reg_unreg/1,
+    three_nodes_custom_event_handler_conflict_resolution/1
 ]).
 
 %% include
@@ -90,7 +91,8 @@ groups() ->
             three_nodes_register_unregister_and_monitor_custom_scope,
             three_nodes_cluster_changes,
             three_nodes_cluster_conflicts,
-            three_nodes_custom_event_handler_reg_unreg
+            three_nodes_custom_event_handler_reg_unreg,
+            three_nodes_custom_event_handler_conflict_resolution
         ]}
     ].
 %% -------------------------------------------------------------------
@@ -585,8 +587,8 @@ three_nodes_register_unregister_and_monitor_default_scope(Config) ->
         {Pid1, undefined},
         fun() -> rpc:call(SlaveNode1, syn, lookup, [<<"my proc">>]) end
     ),
-    syn_registry:remove_from_local_table(default, <<"my proc">>, Pid1),
-    syn_registry:add_to_local_table(default, <<"my proc">>, Pid2, undefined, 0, undefined),
+    remove_from_local_table(default, <<"my proc">>, Pid1),
+    add_to_local_table(default, <<"my proc">>, Pid2, undefined, 0, undefined),
     {error, race_condition} = rpc:call(SlaveNode1, syn, unregister, [<<"my proc">>]).
 
 three_nodes_register_unregister_and_monitor_custom_scope(Config) ->
@@ -825,8 +827,8 @@ three_nodes_register_unregister_and_monitor_custom_scope(Config) ->
         {Pid1, undefined},
         fun() -> rpc:call(SlaveNode1, syn, lookup, [custom_scope_ab, <<"my proc">>]) end
     ),
-    syn_registry:remove_from_local_table(custom_scope_ab, <<"my proc">>, Pid1),
-    syn_registry:add_to_local_table(custom_scope_ab, <<"my proc">>, Pid2, undefined, 0, undefined),
+    remove_from_local_table(custom_scope_ab, <<"my proc">>, Pid1),
+    add_to_local_table(custom_scope_ab, <<"my proc">>, Pid2, undefined, 0, undefined),
     {error, race_condition} = rpc:call(SlaveNode1, syn, unregister, [custom_scope_ab, <<"my proc">>]).
 
 three_nodes_cluster_changes(Config) ->
@@ -1152,29 +1154,47 @@ three_nodes_cluster_conflicts(Config) ->
     0 = rpc:call(SlaveNode2, syn, registry_count, [custom_scope_bc, SlaveNode1]),
     1 = rpc:call(SlaveNode2, syn, registry_count, [custom_scope_bc, SlaveNode2]),
 
-    %% --> conflict by race condition
-    Pid1 = syn_test_suite_helper:start_process(),
-    Pid2 = syn_test_suite_helper:start_process(SlaveNode1),
-    rpc:call(SlaveNode1, syn_registry, add_to_local_table, [default, <<"my proc">>, Pid2, "meta-2", erlang:system_time(), undefined]),
-    ok = syn:register(<<"my proc">>, Pid1, "meta-1"),
+    %% process alive
     syn_test_suite_helper:assert_wait(
-        {Pid1, "meta-1"},
+        false,
+        fun() -> rpc:call(SlaveNode1, erlang, is_process_alive, [Pid2RemoteOn1]) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        true,
+        fun() -> rpc:call(SlaveNode2, erlang, is_process_alive, [Pid2RemoteOn2]) end
+    ),
+
+    %% --> conflict by race condition
+    PidOnMaster = syn_test_suite_helper:start_process(),
+    PidOn1 = syn_test_suite_helper:start_process(SlaveNode1),
+    rpc:call(SlaveNode1, syn_registry, add_to_local_table,
+        [default, <<"my proc">>, PidOn1, "meta-2", erlang:system_time(), undefined]
+    ),
+    ok = syn:register(<<"my proc">>, PidOnMaster, "meta-1"),
+
+    %% retrieve
+    syn_test_suite_helper:assert_wait(
+        {PidOnMaster, "meta-1"},
         fun() -> syn:lookup(<<"my proc">>) end
     ),
     syn_test_suite_helper:assert_wait(
-        {Pid1, "meta-1"},
+        {PidOnMaster, "meta-1"},
         fun() -> rpc:call(SlaveNode1, syn, lookup, [<<"my proc">>]) end
     ),
     syn_test_suite_helper:assert_wait(
-        {Pid1, "meta-1"},
+        {PidOnMaster, "meta-1"},
         fun() -> rpc:call(SlaveNode2, syn, lookup, [<<"my proc">>]) end
     ),
-    true = is_process_alive(Pid1),
-    false = rpc:call(SlaveNode1, erlang, is_process_alive, [Pid2]),
 
+    %% NB: we can't check for process alive here because we injected the conflictinf process in the DB
+    %% -> it's not actually monitored
+
+    %% same, but custom scope
     PidCustom1 = syn_test_suite_helper:start_process(SlaveNode1),
     PidCustom2 = syn_test_suite_helper:start_process(SlaveNode2),
-    rpc:call(SlaveNode2, syn_registry, add_to_local_table, [custom_scope_bc, <<"my proc">>, PidCustom2, "meta-2", erlang:system_time(), undefined]),
+    rpc:call(SlaveNode2, syn_registry, add_to_local_table,
+        [custom_scope_bc, <<"my proc">>, PidCustom2, "meta-2", erlang:system_time(), undefined]
+    ),
     ok = rpc:call(SlaveNode1, syn, register, [custom_scope_bc, <<"my proc">>, PidCustom1, "meta-1"]),
 
     syn_test_suite_helper:assert_wait(
@@ -1184,19 +1204,17 @@ three_nodes_cluster_conflicts(Config) ->
     syn_test_suite_helper:assert_wait(
         {PidCustom1, "meta-1"},
         fun() -> rpc:call(SlaveNode2, syn, lookup, [custom_scope_bc, <<"my proc">>]) end
-    ),
-    true = rpc:call(SlaveNode1, erlang, is_process_alive, [PidCustom1]),
-    false = rpc:call(SlaveNode2, erlang, is_process_alive, [PidCustom2]).
+    ).
 
 three_nodes_custom_event_handler_reg_unreg(Config) ->
     %% get slaves
     SlaveNode1 = proplists:get_value(slave_node_1, Config),
     SlaveNode2 = proplists:get_value(slave_node_2, Config),
 
-    %% add custom handler
-    syn_test_suite_helper:use_custom_handler(),
-    rpc:call(SlaveNode1, syn_test_suite_helper, use_custom_handler, []),
-    rpc:call(SlaveNode2, syn_test_suite_helper, use_custom_handler, []),
+    %% add custom handler for callbacks
+    syn:set_event_handler(syn_test_event_handler_callbacks),
+    rpc:call(SlaveNode1, syn, set_event_handler, [syn_test_event_handler_callbacks]),
+    rpc:call(SlaveNode2, syn, set_event_handler, [syn_test_event_handler_callbacks]),
 
     %% start syn on nodes
     ok = syn:start(),
@@ -1352,3 +1370,109 @@ three_nodes_custom_event_handler_reg_unreg(Config) ->
         ok,
         fun() -> syn_test_suite_helper:assert_empty_queue(self()) end
     ).
+
+three_nodes_custom_event_handler_conflict_resolution(Config) ->
+    %% get slaves
+    SlaveNode1 = proplists:get_value(slave_node_1, Config),
+    SlaveNode2 = proplists:get_value(slave_node_2, Config),
+
+    %% add custom handler for resolution
+    syn:set_event_handler(syn_test_event_handler_resolution),
+    rpc:call(SlaveNode1, syn, set_event_handler, [syn_test_event_handler_resolution]),
+    rpc:call(SlaveNode2, syn, set_event_handler, [syn_test_event_handler_resolution]),
+
+    %% start syn on nodes
+    ok = syn:start(),
+    ok = rpc:call(SlaveNode1, syn, start, []),
+    ok = rpc:call(SlaveNode2, syn, start, []),
+
+    %% add custom scopes
+    ok = rpc:call(SlaveNode1, syn, add_node_to_scopes, [[custom_scope_bc]]),
+    ok = rpc:call(SlaveNode2, syn, add_node_to_scopes, [[custom_scope_bc]]),
+
+    %% partial netsplit (1 cannot see 2)
+    rpc:call(SlaveNode1, syn_test_suite_helper, disconnect_node, [SlaveNode2]),
+    syn_test_suite_helper:assert_cluster(node(), [SlaveNode1, SlaveNode2]),
+    syn_test_suite_helper:assert_cluster(SlaveNode1, [node()]),
+    syn_test_suite_helper:assert_cluster(SlaveNode2, [node()]),
+
+    %% start conflict processes
+    PidOn1 = syn_test_suite_helper:start_process(SlaveNode1),
+    PidOn2 = syn_test_suite_helper:start_process(SlaveNode2),
+
+    %% --> conflict by netsplit
+    ok = rpc:call(SlaveNode1, syn, register, ["proc-confict", PidOn1, keepthis]),
+    ok = rpc:call(SlaveNode2, syn, register, ["proc-confict", PidOn2, "meta-2"]),
+    ok = rpc:call(SlaveNode1, syn, register, [custom_scope_bc, "proc-confict", PidOn1, keepthis]),
+    ok = rpc:call(SlaveNode2, syn, register, [custom_scope_bc, "proc-confict", PidOn2, "meta-2"]),
+
+    %% re-join
+    rpc:call(SlaveNode1, syn_test_suite_helper, connect_node, [SlaveNode2]),
+    syn_test_suite_helper:assert_cluster(node(), [SlaveNode1, SlaveNode2]),
+    syn_test_suite_helper:assert_cluster(SlaveNode1, [node(), SlaveNode2]),
+    syn_test_suite_helper:assert_cluster(SlaveNode2, [node(), SlaveNode1]),
+
+    %% retrieve
+    syn_test_suite_helper:assert_wait(
+        {PidOn1, keepthis},
+        fun() -> syn:lookup("proc-confict") end
+    ),
+    syn_test_suite_helper:assert_wait(
+        {PidOn1, keepthis},
+        fun() -> rpc:call(SlaveNode1, syn, lookup, ["proc-confict"]) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        {PidOn1, keepthis},
+        fun() -> rpc:call(SlaveNode2, syn, lookup, ["proc-confict"]) end
+    ),
+    1 = syn:registry_count(default),
+    0 = syn:registry_count(default, node()),
+    1 = syn:registry_count(default, SlaveNode1),
+    0 = syn:registry_count(default, SlaveNode2),
+    1 = rpc:call(SlaveNode1, syn, registry_count, [default]),
+    0 = rpc:call(SlaveNode1, syn, registry_count, [default, node()]),
+    1 = rpc:call(SlaveNode1, syn, registry_count, [default, SlaveNode1]),
+    0 = rpc:call(SlaveNode1, syn, registry_count, [default, SlaveNode2]),
+    1 = rpc:call(SlaveNode2, syn, registry_count, [default]),
+    0 = rpc:call(SlaveNode2, syn, registry_count, [default, node()]),
+    1 = rpc:call(SlaveNode2, syn, registry_count, [default, SlaveNode1]),
+    0 = rpc:call(SlaveNode2, syn, registry_count, [default, SlaveNode2]),
+    syn_test_suite_helper:assert_wait(
+        {PidOn1, keepthis},
+        fun() -> rpc:call(SlaveNode1, syn, lookup, [custom_scope_bc, "proc-confict"]) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        {PidOn1, keepthis},
+        fun() -> rpc:call(SlaveNode2, syn, lookup, [custom_scope_bc, "proc-confict"]) end
+    ),
+    1 = rpc:call(SlaveNode1, syn, registry_count, [custom_scope_bc]),
+    0 = rpc:call(SlaveNode1, syn, registry_count, [custom_scope_bc, node()]),
+    1 = rpc:call(SlaveNode1, syn, registry_count, [custom_scope_bc, SlaveNode1]),
+    0 = rpc:call(SlaveNode1, syn, registry_count, [custom_scope_bc, SlaveNode2]),
+    1 = rpc:call(SlaveNode2, syn, registry_count, [custom_scope_bc]),
+    0 = rpc:call(SlaveNode2, syn, registry_count, [custom_scope_bc, node()]),
+    1 = rpc:call(SlaveNode2, syn, registry_count, [custom_scope_bc, SlaveNode1]),
+    0 = rpc:call(SlaveNode2, syn, registry_count, [custom_scope_bc, SlaveNode2]),
+
+    %% process alive
+    syn_test_suite_helper:assert_wait(
+        true,
+        fun() -> rpc:call(SlaveNode1, erlang, is_process_alive, [PidOn1]) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        false,
+        fun() -> rpc:call(SlaveNode2, erlang, is_process_alive, [PidOn2]) end
+    ).
+
+%% ===================================================================
+%% Internal
+%% ===================================================================
+add_to_local_table(Scope, Name, Pid, Meta, Time, MRef) ->
+    TableByName = syn_backbone:get_table_name(syn_registry_by_name, Scope),
+    TableByPid = syn_backbone:get_table_name(syn_registry_by_pid, Scope),
+    syn_registry:add_to_local_table(Name, Pid, Meta, Time, MRef, TableByName, TableByPid).
+
+remove_from_local_table(Scope, Name, Pid) ->
+    TableByName = syn_backbone:get_table_name(syn_registry_by_name, Scope),
+    TableByPid = syn_backbone:get_table_name(syn_registry_by_pid, Scope),
+    syn_registry:remove_from_local_table(Name, Pid, TableByName, TableByPid).
