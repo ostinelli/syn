@@ -528,37 +528,37 @@ resolve_conflict(Scope, Name, {Pid, Meta, Time}, {TablePid, TableMeta, TableTime
     case PidToKeep of
         Pid ->
             %% -> we keep the remote pid
+            error_logger:info_msg("SYN[~s] Registry CONFLICT for name ~p@~s: ~p vs ~p -> keeping remote: ~p",
+                [node(), Name, Scope, Pid, TablePid, Pid]
+            ),
             %% update locally, the incoming sync_register will update with the time coming from remote node
             update_local_table(Name, TablePid, {Pid, Meta, Time, undefined}, TableByName, TableByPid),
-            %% callbacks
-            syn_event_handler:do_on_process_unregistered(Scope, Name, TablePid, TableMeta),
-            syn_event_handler:do_on_process_registered(Scope, Name, {TablePid, TableMeta}, {Pid, Meta}),
             %% kill
             exit(TablePid, {syn_resolve_kill, Name, TableMeta}),
-            error_logger:info_msg("SYN[~s] Registry CONFLICT for name ~p@~s: ~p ~p -> chosen: ~p",
-                [node(), Name, Scope, Pid, TablePid, Pid]
-            );
+            %% callbacks
+            syn_event_handler:do_on_process_unregistered(Scope, Name, TablePid, TableMeta),
+            syn_event_handler:do_on_process_registered(Scope, Name, {TablePid, TableMeta}, {Pid, Meta});
 
         TablePid ->
             %% -> we keep the local pid
+            error_logger:info_msg("SYN[~s] Registry CONFLICT for name ~p@~s: ~p vs ~p -> keeping local: ~p",
+                [node(), Name, Scope, Pid, TablePid, TablePid]
+            ),
             %% overwrite with updated time
             ResolveTime = erlang:system_time(),
             add_to_local_table(Name, TablePid, TableMeta, ResolveTime, TableMRef, TableByName, TableByPid),
-            %% broadcast
-            syn_gen_scope:broadcast({'3.0', sync_register, Scope, Name, TablePid, TableMeta, ResolveTime}, State),
-            error_logger:info_msg("SYN[~s] Registry CONFLICT for name ~p@~s: ~p ~p -> chosen: ~p",
-                [node(), Name, Scope, Pid, TablePid, TablePid]
-            );
+            %% broadcast to all but remote node
+            syn_gen_scope:broadcast({'3.0', sync_register, Scope, Name, TablePid, TableMeta, ResolveTime}, State);
 
         Invalid ->
+            error_logger:info_msg("SYN[~s] Registry CONFLICT for name ~p@~s: ~p vs ~p -> none chosen (got: ~p)",
+                [node(), Name, Scope, Pid, TablePid, Invalid]
+            ),
             %% remove
             maybe_demonitor(TablePid, TableByPid),
             remove_from_local_table(Name, TablePid, TableByName, TableByPid),
-            %% callback
-            syn_event_handler:do_on_process_unregistered(Scope, Name, TablePid, TableMeta),
             %% kill local, remote will be killed by other node performing the same resolve
             exit(TablePid, {syn_resolve_kill, Name, TableMeta}),
-            error_logger:info_msg("SYN[~s] Registry CONFLICT for name ~p@~s: ~p ~p -> none chosen (got: ~p)",
-                [node(), Name, Scope, Pid, TablePid, Invalid]
-            )
+            %% callback
+            syn_event_handler:do_on_process_unregistered(Scope, Name, TablePid, TableMeta)
     end.

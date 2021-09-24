@@ -228,8 +228,8 @@ handle_info({'3.0', ack_sync, RemoteScopePid, Data}, #state{
     scope = Scope
 } = State) ->
     RemoteScopeNode = node(RemoteScopePid),
-    error_logger:info_msg("SYN[~s] Received ACK SYNC from node '~s' for ~s and scope '~s'",
-        [node(), RemoteScopeNode, Handler, Scope]
+    error_logger:info_msg("SYN[~s] Received ACK SYNC (~w entries) from node '~s' for ~s and scope '~s'",
+        [node(), length(Data), RemoteScopeNode, Handler, Scope]
     ),
     %% save remote data
     Handler:save_remote_data(Data, State),

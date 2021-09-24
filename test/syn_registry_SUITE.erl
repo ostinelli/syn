@@ -1101,10 +1101,10 @@ three_nodes_cluster_conflicts(Config) ->
     Pid2RemoteOn2 = syn_test_suite_helper:start_process(SlaveNode2),
 
     %% --> conflict by netsplit
-    ok = rpc:call(SlaveNode1, syn, register, ["proc-confict", Pid2RemoteOn1, "meta-1"]),
-    ok = rpc:call(SlaveNode2, syn, register, ["proc-confict", Pid2RemoteOn2, "meta-2"]),
-    ok = rpc:call(SlaveNode1, syn, register, [custom_scope_bc, "proc-confict", Pid2RemoteOn1, "meta-1"]),
-    ok = rpc:call(SlaveNode2, syn, register, [custom_scope_bc, "proc-confict", Pid2RemoteOn2, "meta-2"]),
+    ok = rpc:call(SlaveNode1, syn, register, ["proc-confict-by-netsplit", Pid2RemoteOn1, "meta-1"]),
+    ok = rpc:call(SlaveNode2, syn, register, ["proc-confict-by-netsplit", Pid2RemoteOn2, "meta-2"]),
+    ok = rpc:call(SlaveNode1, syn, register, [custom_scope_bc, "proc-confict-by-netsplit-scoped", Pid2RemoteOn1, "meta-1"]),
+    ok = rpc:call(SlaveNode2, syn, register, [custom_scope_bc, "proc-confict-by-netsplit-scoped", Pid2RemoteOn2, "meta-2"]),
 
     %% re-join
     rpc:call(SlaveNode1, syn_test_suite_helper, connect_node, [SlaveNode2]),
@@ -1115,15 +1115,15 @@ three_nodes_cluster_conflicts(Config) ->
     %% retrieve
     syn_test_suite_helper:assert_wait(
         {Pid2RemoteOn2, "meta-2"},
-        fun() -> syn:lookup("proc-confict") end
+        fun() -> syn:lookup("proc-confict-by-netsplit") end
     ),
     syn_test_suite_helper:assert_wait(
         {Pid2RemoteOn2, "meta-2"},
-        fun() -> rpc:call(SlaveNode1, syn, lookup, ["proc-confict"]) end
+        fun() -> rpc:call(SlaveNode1, syn, lookup, ["proc-confict-by-netsplit"]) end
     ),
     syn_test_suite_helper:assert_wait(
         {Pid2RemoteOn2, "meta-2"},
-        fun() -> rpc:call(SlaveNode2, syn, lookup, ["proc-confict"]) end
+        fun() -> rpc:call(SlaveNode2, syn, lookup, ["proc-confict-by-netsplit"]) end
     ),
     1 = syn:registry_count(default),
     0 = syn:registry_count(default, node()),
@@ -1139,11 +1139,11 @@ three_nodes_cluster_conflicts(Config) ->
     1 = rpc:call(SlaveNode2, syn, registry_count, [default, SlaveNode2]),
     syn_test_suite_helper:assert_wait(
         {Pid2RemoteOn2, "meta-2"},
-        fun() -> rpc:call(SlaveNode1, syn, lookup, [custom_scope_bc, "proc-confict"]) end
+        fun() -> rpc:call(SlaveNode1, syn, lookup, [custom_scope_bc, "proc-confict-by-netsplit-scoped"]) end
     ),
     syn_test_suite_helper:assert_wait(
         {Pid2RemoteOn2, "meta-2"},
-        fun() -> rpc:call(SlaveNode2, syn, lookup, [custom_scope_bc, "proc-confict"]) end
+        fun() -> rpc:call(SlaveNode2, syn, lookup, [custom_scope_bc, "proc-confict-by-netsplit-scoped"]) end
     ),
     1 = rpc:call(SlaveNode1, syn, registry_count, [custom_scope_bc]),
     0 = rpc:call(SlaveNode1, syn, registry_count, [custom_scope_bc, node()]),

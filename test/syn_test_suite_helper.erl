@@ -45,7 +45,7 @@
 -export([process_main/0]).
 
 %% macro
--define(TIMEOUT, 10000).
+-define(TIMEOUT, 5000).
 
 %% ===================================================================
 %% API
