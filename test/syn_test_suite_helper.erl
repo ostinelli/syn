@@ -34,11 +34,12 @@
 -export([kill_process/1]).
 -export([flush_inbox/0]).
 -export([wait_cluster_mesh_connected/1]).
+-export([wait_process_name_ready/1, wait_process_name_ready/2]).
 -export([assert_cluster/2]).
 -export([assert_scope_subcluster/3]).
 -export([assert_received_messages/1]).
 -export([assert_empty_queue/1]).
--export([wait_process_name_ready/1, wait_process_name_ready/2]).
+-export([assert_wait/2]).
 -export([send_error_logger_to_disk/0]).
 
 %% internal
@@ -135,9 +136,41 @@ wait_cluster_mesh_connected(Nodes, StartAt) ->
             case os:system_time(millisecond) - StartAt > 5000 of
                 true ->
                     {error, {could_not_init_cluster, Nodes}};
+
                 false ->
                     timer:sleep(50),
                     wait_cluster_mesh_connected(Nodes, StartAt)
+            end
+    end.
+
+wait_process_name_ready(Name) ->
+    wait_process_name_ready(Name, os:system_time(millisecond)).
+wait_process_name_ready(Name, StartAt) ->
+    timer:sleep(50),
+    case whereis(Name) of
+        undefined ->
+            case os:system_time(millisecond) - StartAt > 5000 of
+                true ->
+                    ct:fail("~n\tProcess with name ~p didn't come alive~n", [Name]);
+
+                false ->
+
+                    wait_process_name_ready(Name, StartAt)
+            end;
+
+        Pid ->
+            case process_info(Pid, status) of
+                {status, waiting} ->
+                    ok;
+
+                Other ->
+                    case os:system_time(millisecond) - StartAt > 5000 of
+                        true ->
+                            ct:fail("~n\tProcess with name ~p didn't come ready~n\tStatus: ~p~n", [Name, Other]);
+
+                        false ->
+                            wait_process_name_ready(Name, StartAt)
+                    end
             end
     end.
 
@@ -189,34 +222,21 @@ assert_empty_queue(Pid) when is_pid(Pid) ->
             ct:fail("~n\tMessage queue was not empty, got:~n\t~p~n", [Messages])
     end.
 
-wait_process_name_ready(Name) ->
-    wait_process_name_ready(Name, os:system_time(millisecond)).
-wait_process_name_ready(Name, StartAt) ->
-    timer:sleep(50),
-    case whereis(Name) of
-        undefined ->
+assert_wait(ExpectedResult, Fun) ->
+    assert_wait(ExpectedResult, Fun, os:system_time(millisecond)).
+assert_wait(ExpectedResult, Fun, StartAt) ->
+    case Fun() of
+        ExpectedResult ->
+            ok;
+
+        Result ->
             case os:system_time(millisecond) - StartAt > 5000 of
                 true ->
-                    ct:fail("~n\tProcess with name ~p didn't come alive~n", [Name]);
+                    ct:fail("~n\tExpected: ~p~n\tActual: ~p~n", [ExpectedResult, Result]);
 
                 false ->
-
-                    wait_process_name_ready(Name, StartAt)
-            end;
-
-        Pid ->
-            case process_info(Pid, status) of
-                {status, waiting} ->
-                    ok;
-
-                Other ->
-                    case os:system_time(millisecond) - StartAt > 5000 of
-                        true ->
-                            ct:fail("~n\tProcess with name ~p didn't come ready~n\tStatus: ~p~n", [Name, Other]);
-
-                        false ->
-                            wait_process_name_ready(Name, StartAt)
-                    end
+                    timer:sleep(50),
+                    assert_wait(ExpectedResult, Fun, StartAt)
             end
     end.
 

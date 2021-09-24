@@ -389,18 +389,54 @@ three_nodes_register_unregister_and_monitor_default_scope(Config) ->
     {error, not_alive} = syn:register({"pid not alive"}, list_to_pid("<0.9999.0>")),
 
     %% retrieve
-    {Pid, undefined} = syn:lookup(<<"my proc">>),
-    {Pid, undefined} = rpc:call(SlaveNode1, syn, lookup, [<<"my proc">>]),
-    {Pid, undefined} = rpc:call(SlaveNode2, syn, lookup, [<<"my proc">>]),
-    {Pid, undefined} = syn:lookup({"my proc alias"}),
-    {Pid, undefined} = rpc:call(SlaveNode1, syn, lookup, [{"my proc alias"}]),
-    {Pid, undefined} = rpc:call(SlaveNode2, syn, lookup, [{"my proc alias"}]),
-    {PidWithMeta, {meta, <<"meta">>}} = syn:lookup(<<"my proc with meta">>),
-    {PidWithMeta, {meta, <<"meta">>}} = rpc:call(SlaveNode1, syn, lookup, [<<"my proc with meta">>]),
-    {PidWithMeta, {meta, <<"meta">>}} = rpc:call(SlaveNode2, syn, lookup, [<<"my proc with meta">>]),
-    {PidRemoteOn1, undefined} = syn:lookup({remote_pid_on, slave_1}),
-    {PidRemoteOn1, undefined} = rpc:call(SlaveNode1, syn, lookup, [{remote_pid_on, slave_1}]),
-    {PidRemoteOn1, undefined} = rpc:call(SlaveNode2, syn, lookup, [{remote_pid_on, slave_1}]),
+    syn_test_suite_helper:assert_wait(
+        {Pid, undefined},
+        fun() -> syn:lookup(<<"my proc">>) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        {Pid, undefined},
+        fun() -> rpc:call(SlaveNode1, syn, lookup, [<<"my proc">>]) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        {Pid, undefined},
+        fun() -> rpc:call(SlaveNode2, syn, lookup, [<<"my proc">>]) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        {Pid, undefined},
+        fun() -> syn:lookup({"my proc alias"}) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        {Pid, undefined},
+        fun() -> rpc:call(SlaveNode1, syn, lookup, [{"my proc alias"}]) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        {Pid, undefined},
+        fun() -> rpc:call(SlaveNode2, syn, lookup, [{"my proc alias"}]) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        {PidWithMeta, {meta, <<"meta">>}},
+        fun() -> syn:lookup(<<"my proc with meta">>) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        {PidWithMeta, {meta, <<"meta">>}},
+        fun() -> rpc:call(SlaveNode1, syn, lookup, [<<"my proc with meta">>]) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        {PidWithMeta, {meta, <<"meta">>}},
+        fun() -> rpc:call(SlaveNode2, syn, lookup, [<<"my proc with meta">>]) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        {PidRemoteOn1, undefined},
+        fun() -> syn:lookup({remote_pid_on, slave_1}) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        {PidRemoteOn1, undefined},
+        fun() -> rpc:call(SlaveNode1, syn, lookup, [{remote_pid_on, slave_1}]) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        {PidRemoteOn1, undefined},
+        fun() -> rpc:call(SlaveNode2, syn, lookup, [{remote_pid_on, slave_1}]) end
+    ),
     4 = syn:registry_count(default),
     3 = syn:registry_count(default, node()),
     1 = syn:registry_count(default, SlaveNode1),
@@ -411,12 +447,30 @@ three_nodes_register_unregister_and_monitor_default_scope(Config) ->
     ok = rpc:call(SlaveNode2, syn, register, [{remote_pid_on, slave_1}, PidRemoteOn1, added_meta]), %% updated on slave 2
 
     %% retrieve
-    {PidWithMeta, {meta2, <<"meta2">>}} = syn:lookup(<<"my proc with meta">>),
-    {PidWithMeta, {meta2, <<"meta2">>}} = rpc:call(SlaveNode1, syn, lookup, [<<"my proc with meta">>]),
-    {PidWithMeta, {meta2, <<"meta2">>}} = rpc:call(SlaveNode2, syn, lookup, [<<"my proc with meta">>]),
-    {PidRemoteOn1, added_meta} = syn:lookup({remote_pid_on, slave_1}),
-    {PidRemoteOn1, added_meta} = rpc:call(SlaveNode1, syn, lookup, [{remote_pid_on, slave_1}]),
-    {PidRemoteOn1, added_meta} = rpc:call(SlaveNode2, syn, lookup, [{remote_pid_on, slave_1}]),
+    syn_test_suite_helper:assert_wait(
+        {PidWithMeta, {meta2, <<"meta2">>}},
+        fun() -> syn:lookup(<<"my proc with meta">>) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        {PidWithMeta, {meta2, <<"meta2">>}},
+        fun() -> rpc:call(SlaveNode1, syn, lookup, [<<"my proc with meta">>]) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        {PidWithMeta, {meta2, <<"meta2">>}},
+        fun() -> rpc:call(SlaveNode2, syn, lookup, [<<"my proc with meta">>]) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        {PidRemoteOn1, added_meta},
+        fun() -> syn:lookup({remote_pid_on, slave_1}) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        {PidRemoteOn1, added_meta},
+        fun() -> rpc:call(SlaveNode1, syn, lookup, [{remote_pid_on, slave_1}]) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        {PidRemoteOn1, added_meta},
+        fun() -> rpc:call(SlaveNode2, syn, lookup, [{remote_pid_on, slave_1}]) end
+    ),
     4 = syn:registry_count(default),
     3 = syn:registry_count(default, node()),
     1 = syn:registry_count(default, SlaveNode1),
@@ -433,18 +487,54 @@ three_nodes_register_unregister_and_monitor_default_scope(Config) ->
     ok = syn:unregister(<<"my proc with meta">>),
 
     %% retrieve
-    undefined = syn:lookup(<<"my proc">>),
-    undefined = rpc:call(SlaveNode1, syn, lookup, [<<"my proc">>]),
-    undefined = rpc:call(SlaveNode2, syn, lookup, [<<"my proc">>]),
-    undefined = syn:lookup({"my proc alias"}),
-    undefined = rpc:call(SlaveNode1, syn, lookup, [{"my proc alias"}]),
-    undefined = rpc:call(SlaveNode2, syn, lookup, [{"my proc alias"}]),
-    undefined = syn:lookup(<<"my proc with meta">>),
-    undefined = rpc:call(SlaveNode1, syn, lookup, [<<"my proc with meta">>]),
-    undefined = rpc:call(SlaveNode2, syn, lookup, [<<"my proc with meta">>]),
-    undefined = syn:lookup({remote_pid_on, slave_1}),
-    undefined = rpc:call(SlaveNode1, syn, lookup, [{remote_pid_on, slave_1}]),
-    undefined = rpc:call(SlaveNode2, syn, lookup, [{remote_pid_on, slave_1}]),
+    syn_test_suite_helper:assert_wait(
+        undefined,
+        fun() -> syn:lookup(<<"my proc">>) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        undefined,
+        fun() -> rpc:call(SlaveNode1, syn, lookup, [<<"my proc">>]) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        undefined,
+        fun() -> rpc:call(SlaveNode2, syn, lookup, [<<"my proc">>]) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        undefined,
+        fun() -> syn:lookup({"my proc alias"}) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        undefined,
+        fun() -> rpc:call(SlaveNode1, syn, lookup, [{"my proc alias"}]) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        undefined,
+        fun() -> rpc:call(SlaveNode2, syn, lookup, [{"my proc alias"}]) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        undefined,
+        fun() -> syn:lookup(<<"my proc with meta">>) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        undefined,
+        fun() -> rpc:call(SlaveNode1, syn, lookup, [<<"my proc with meta">>]) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        undefined,
+        fun() -> rpc:call(SlaveNode2, syn, lookup, [<<"my proc with meta">>]) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        undefined,
+        fun() -> syn:lookup({remote_pid_on, slave_1}) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        undefined,
+        fun() -> rpc:call(SlaveNode1, syn, lookup, [{remote_pid_on, slave_1}]) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        undefined,
+        fun() -> rpc:call(SlaveNode2, syn, lookup, [{remote_pid_on, slave_1}]) end
+    ),
     0 = syn:registry_count(default),
     0 = syn:registry_count(default, node()),
     0 = syn:registry_count(default, SlaveNode1),
@@ -457,7 +547,10 @@ three_nodes_register_unregister_and_monitor_default_scope(Config) ->
     Pid1 = syn_test_suite_helper:start_process(),
     Pid2 = syn_test_suite_helper:start_process(),
     ok = syn:register(<<"my proc">>, Pid1),
-    timer:sleep(100),
+    syn_test_suite_helper:assert_wait(
+        {Pid1, undefined},
+        fun() -> rpc:call(SlaveNode1, syn, lookup, [<<"my proc">>]) end
+    ),
     syn_registry:remove_from_local_table(default, <<"my proc">>, Pid1),
     syn_registry:add_to_local_table(default, <<"my proc">>, Pid2, undefined, 0, undefined),
     {error, race_condition} = rpc:call(SlaveNode1, syn, unregister, [<<"my proc">>]).
@@ -484,8 +577,8 @@ three_nodes_register_unregister_and_monitor_custom_scope(Config) ->
 
     %% retrieve
     undefined = syn:lookup("scope_a"),
-    undefined = syn:lookup("scope_a"),
     undefined = rpc:call(SlaveNode1, syn, lookup, ["scope_a"]),
+    undefined = rpc:call(SlaveNode2, syn, lookup, ["scope_a"]),
     undefined = syn:lookup(custom_scope_ab, "scope_a"),
     undefined = rpc:call(SlaveNode1, syn, lookup, [custom_scope_ab, "scope_a"]),
     {badrpc, {'EXIT', {{invalid_scope, custom_scope_ab}, _}}} = catch rpc:call(SlaveNode2, syn, lookup, [custom_scope_ab, "scope_a"]),
@@ -534,18 +627,45 @@ three_nodes_register_unregister_and_monitor_custom_scope(Config) ->
     {'EXIT', {{invalid_scope, custom_scope_bc}, _}} = catch syn:unregister(custom_scope_bc, "scope_a_noscope"),
 
     %% retrieve
-    undefined = syn:lookup("scope_a"),
-    undefined = syn:lookup("scope_a"),
-    undefined = rpc:call(SlaveNode1, syn, lookup, ["scope_a"]),
-    {Pid, undefined} = syn:lookup(custom_scope_ab, "scope_a"),
-    {Pid, undefined} = rpc:call(SlaveNode1, syn, lookup, [custom_scope_ab, "scope_a"]),
+    syn_test_suite_helper:assert_wait(
+        undefined,
+        fun() -> syn:lookup("scope_a") end
+    ),
+    syn_test_suite_helper:assert_wait(
+        undefined,
+        fun() -> rpc:call(SlaveNode1, syn, lookup, ["scope_a"]) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        undefined,
+        fun() -> rpc:call(SlaveNode2, syn, lookup, ["scope_a"]) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        {Pid, undefined},
+        fun() -> syn:lookup(custom_scope_ab, "scope_a") end
+    ),
+    syn_test_suite_helper:assert_wait(
+        {Pid, undefined},
+        fun() -> rpc:call(SlaveNode1, syn, lookup, [custom_scope_ab, "scope_a"]) end
+    ),
     {badrpc, {'EXIT', {{invalid_scope, custom_scope_ab}, _}}} = catch rpc:call(SlaveNode2, syn, lookup, [custom_scope_ab, "scope_a"]),
-    {PidWithMeta, <<"with_meta">>} = syn:lookup(custom_scope_ab, "scope_a_alias"),
-    {PidWithMeta, <<"with_meta">>} = rpc:call(SlaveNode1, syn, lookup, [custom_scope_ab, "scope_a_alias"]),
+    syn_test_suite_helper:assert_wait(
+        {PidWithMeta, <<"with_meta">>},
+        fun() -> syn:lookup(custom_scope_ab, "scope_a_alias") end
+    ),
+    syn_test_suite_helper:assert_wait(
+        {PidWithMeta, <<"with_meta">>},
+        fun() -> rpc:call(SlaveNode1, syn, lookup, [custom_scope_ab, "scope_a_alias"]) end
+    ),
     {badrpc, {'EXIT', {{invalid_scope, custom_scope_ab}, _}}} = catch rpc:call(SlaveNode2, syn, lookup, [custom_scope_ab, "scope_a_alias"]),
     {'EXIT', {{invalid_scope, custom_scope_bc}, _}} = catch syn:lookup(custom_scope_bc, {remote_scoped_bc}),
-    {PidRemoteWithMetaOn1, <<"with_meta 1">>} = rpc:call(SlaveNode1, syn, lookup, [custom_scope_bc, {remote_scoped_bc}]),
-    {PidRemoteWithMetaOn1, <<"with_meta 1">>} = rpc:call(SlaveNode2, syn, lookup, [custom_scope_bc, {remote_scoped_bc}]),
+    syn_test_suite_helper:assert_wait(
+        {PidRemoteWithMetaOn1, <<"with_meta 1">>},
+        fun() -> rpc:call(SlaveNode1, syn, lookup, [custom_scope_bc, {remote_scoped_bc}]) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        {PidRemoteWithMetaOn1, <<"with_meta 1">>},
+        fun() -> rpc:call(SlaveNode2, syn, lookup, [custom_scope_bc, {remote_scoped_bc}]) end
+    ),
     2 = syn:registry_count(custom_scope_ab),
     2 = syn:registry_count(custom_scope_ab, node()),
     0 = syn:registry_count(custom_scope_ab, SlaveNode1),
@@ -573,8 +693,14 @@ three_nodes_register_unregister_and_monitor_custom_scope(Config) ->
 
     %% re-register to edit meta
     ok = syn:register(custom_scope_ab, "scope_a_alias", PidWithMeta, <<"with_meta_updated">>),
-    {PidWithMeta, <<"with_meta_updated">>} = syn:lookup(custom_scope_ab, "scope_a_alias"),
-    {PidWithMeta, <<"with_meta_updated">>} = rpc:call(SlaveNode1, syn, lookup, [custom_scope_ab, "scope_a_alias"]),
+    syn_test_suite_helper:assert_wait(
+        {PidWithMeta, <<"with_meta_updated">>},
+        fun() -> syn:lookup(custom_scope_ab, "scope_a_alias") end
+    ),
+    syn_test_suite_helper:assert_wait(
+        {PidWithMeta, <<"with_meta_updated">>},
+        fun() -> rpc:call(SlaveNode1, syn, lookup, [custom_scope_ab, "scope_a_alias"]) end
+    ),
     {badrpc, {'EXIT', {{invalid_scope, custom_scope_ab}, _}}} = catch rpc:call(SlaveNode2, syn, lookup, [custom_scope_ab, "scope_a_alias"]),
 
     %% crash scope process to ensure that monitors get recreated
@@ -590,18 +716,45 @@ three_nodes_register_unregister_and_monitor_custom_scope(Config) ->
     ok = rpc:call(SlaveNode1, syn, unregister, [custom_scope_bc, {remote_scoped_bc}]),
 
     %% retrieve
-    undefined = syn:lookup("scope_a"),
-    undefined = syn:lookup("scope_a"),
-    undefined = rpc:call(SlaveNode1, syn, lookup, ["scope_a"]),
-    undefined = syn:lookup(custom_scope_ab, "scope_a"),
-    undefined = rpc:call(SlaveNode1, syn, lookup, [custom_scope_ab, "scope_a"]),
+    syn_test_suite_helper:assert_wait(
+        undefined,
+        fun() -> syn:lookup("scope_a") end
+    ),
+    syn_test_suite_helper:assert_wait(
+        undefined,
+        fun() -> rpc:call(SlaveNode1, syn, lookup, ["scope_a"]) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        undefined,
+        fun() -> rpc:call(SlaveNode2, syn, lookup, ["scope_a"]) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        undefined,
+        fun() -> syn:lookup(custom_scope_ab, "scope_a") end
+    ),
+    syn_test_suite_helper:assert_wait(
+        undefined,
+        fun() -> rpc:call(SlaveNode1, syn, lookup, [custom_scope_ab, "scope_a"]) end
+    ),
     {badrpc, {'EXIT', {{invalid_scope, custom_scope_ab}, _}}} = catch rpc:call(SlaveNode2, syn, lookup, [custom_scope_ab, "scope_a"]),
-    undefined = syn:lookup(custom_scope_ab, "scope_a_alias"),
-    undefined = rpc:call(SlaveNode1, syn, lookup, [custom_scope_ab, "scope_a_alias"]),
+    syn_test_suite_helper:assert_wait(
+        undefined,
+        fun() -> syn:lookup(custom_scope_ab, "scope_a_alias") end
+    ),
+    syn_test_suite_helper:assert_wait(
+        undefined,
+        fun() -> rpc:call(SlaveNode1, syn, lookup, [custom_scope_ab, "scope_a_alias"]) end
+    ),
     {badrpc, {'EXIT', {{invalid_scope, custom_scope_ab}, _}}} = catch rpc:call(SlaveNode2, syn, lookup, [custom_scope_ab, "scope_a_alias"]),
     {'EXIT', {{invalid_scope, custom_scope_bc}, _}} = catch syn:lookup(custom_scope_bc, {remote_scoped_bc}),
-    undefined = rpc:call(SlaveNode1, syn, lookup, [custom_scope_bc, {remote_scoped_bc}]),
-    undefined = rpc:call(SlaveNode2, syn, lookup, [custom_scope_bc, {remote_scoped_bc}]),
+    syn_test_suite_helper:assert_wait(
+        undefined,
+        fun() -> rpc:call(SlaveNode1, syn, lookup, [custom_scope_bc, {remote_scoped_bc}]) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        undefined,
+        fun() -> rpc:call(SlaveNode2, syn, lookup, [custom_scope_bc, {remote_scoped_bc}]) end
+    ),
     0 = syn:registry_count(custom_scope_ab),
     0 = syn:registry_count(custom_scope_ab, node()),
     0 = syn:registry_count(custom_scope_ab, SlaveNode1),
@@ -634,6 +787,10 @@ three_nodes_register_unregister_and_monitor_custom_scope(Config) ->
     Pid1 = syn_test_suite_helper:start_process(),
     Pid2 = syn_test_suite_helper:start_process(),
     ok = syn:register(custom_scope_ab, <<"my proc">>, Pid1),
+    syn_test_suite_helper:assert_wait(
+        {Pid1, undefined},
+        fun() -> rpc:call(SlaveNode1, syn, lookup, [custom_scope_ab, <<"my proc">>]) end
+    ),
     syn_registry:remove_from_local_table(custom_scope_ab, <<"my proc">>, Pid1),
     syn_registry:add_to_local_table(custom_scope_ab, <<"my proc">>, Pid2, undefined, 0, undefined),
     {error, race_condition} = rpc:call(SlaveNode1, syn, unregister, [custom_scope_ab, <<"my proc">>]).
@@ -829,12 +986,17 @@ three_nodes_cluster_conflicts(Config) ->
     syn_test_suite_helper:assert_cluster(node(), [SlaveNode1, SlaveNode2]),
     syn_test_suite_helper:assert_cluster(SlaveNode1, [node(), SlaveNode2]),
     syn_test_suite_helper:assert_cluster(SlaveNode2, [node(), SlaveNode1]),
-    timer:sleep(500),
 
     %% retrieve
     {Pid2RemoteOn2, "meta-2"} = syn:lookup("proc-confict"),
-    {Pid2RemoteOn2, "meta-2"} = rpc:call(SlaveNode1, syn, lookup, ["proc-confict"]),
-    {Pid2RemoteOn2, "meta-2"} = rpc:call(SlaveNode2, syn, lookup, ["proc-confict"]),
+    syn_test_suite_helper:assert_wait(
+        {Pid2RemoteOn2, "meta-2"},
+        fun() -> rpc:call(SlaveNode1, syn, lookup, ["proc-confict"]) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        {Pid2RemoteOn2, "meta-2"},
+        fun() -> rpc:call(SlaveNode2, syn, lookup, ["proc-confict"]) end
+    ),
     1 = syn:registry_count(default),
     0 = syn:registry_count(default, node()),
     0 = syn:registry_count(default, SlaveNode1),
@@ -863,10 +1025,16 @@ three_nodes_cluster_conflicts(Config) ->
     Pid2 = syn_test_suite_helper:start_process(SlaveNode1),
     rpc:call(SlaveNode1, syn_registry, add_to_local_table, [default, <<"my proc">>, Pid2, "meta-2", erlang:system_time(), undefined]),
     ok = syn:register(<<"my proc">>, Pid1, "meta-1"),
-    timer:sleep(500),
+
     {Pid1, "meta-1"} = syn:lookup(<<"my proc">>),
-    {Pid1, "meta-1"} = rpc:call(SlaveNode1, syn, lookup, [<<"my proc">>]),
-    {Pid1, "meta-1"} = rpc:call(SlaveNode2, syn, lookup, [<<"my proc">>]),
+    syn_test_suite_helper:assert_wait(
+        {Pid1, "meta-1"},
+        fun() -> rpc:call(SlaveNode1, syn, lookup, [<<"my proc">>]) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        {Pid1, "meta-1"},
+        fun() -> rpc:call(SlaveNode2, syn, lookup, [<<"my proc">>]) end
+    ),
     true = is_process_alive(Pid1),
     false = rpc:call(SlaveNode1, erlang, is_process_alive, [Pid2]),
 
@@ -874,9 +1042,15 @@ three_nodes_cluster_conflicts(Config) ->
     PidCustom2 = syn_test_suite_helper:start_process(SlaveNode2),
     rpc:call(SlaveNode2, syn_registry, add_to_local_table, [custom_scope_bc, <<"my proc">>, PidCustom2, "meta-2", erlang:system_time(), undefined]),
     ok = rpc:call(SlaveNode1, syn, register, [custom_scope_bc, <<"my proc">>, PidCustom1, "meta-1"]),
-    timer:sleep(500),
-    {PidCustom1, "meta-1"} = rpc:call(SlaveNode1, syn, lookup, [custom_scope_bc, <<"my proc">>]),
-    {PidCustom1, "meta-1"} = rpc:call(SlaveNode2, syn, lookup, [custom_scope_bc, <<"my proc">>]),
+
+    syn_test_suite_helper:assert_wait(
+        {PidCustom1, "meta-1"},
+        fun() -> rpc:call(SlaveNode1, syn, lookup, [custom_scope_bc, <<"my proc">>]) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        {PidCustom1, "meta-1"},
+        fun() -> rpc:call(SlaveNode2, syn, lookup, [custom_scope_bc, <<"my proc">>]) end
+    ),
     true = rpc:call(SlaveNode1, erlang, is_process_alive, [PidCustom1]),
     false = rpc:call(SlaveNode2, erlang, is_process_alive, [PidCustom2]).
 
@@ -1040,5 +1214,7 @@ three_nodes_custom_event_handler_reg_unreg(Config) ->
     syn_test_suite_helper:kill_process(syn_registry_default),
 
     %% no messages
-    timer:sleep(1000),
-    syn_test_suite_helper:assert_empty_queue(self()).
+    syn_test_suite_helper:assert_wait(
+        ok,
+        fun() -> syn_test_suite_helper:assert_empty_queue(self()) end
+    ).
