@@ -76,6 +76,9 @@ start() ->
         maps:put(Node, Pids, Acc)
     end, #{}, NodesInfo),
 
+%%    {ok, P} = eprof:start(),
+%%    eprof:start_profiling(erlang:processes() -- [P]),
+
     %% start registration
     lists:foreach(fun({Node, FromName, _ToName}) ->
         Pids = maps:get(Node, PidsMap),
@@ -155,6 +158,9 @@ start() ->
 
     KillRate = ProcessCount / KillPropagationTime,
     io:format("====> Unregistered after kill rate (with propagation): ~p/sec.~n~n", [KillRate]),
+
+%%    eprof:stop_profiling(),
+%%    eprof:analyze(total),
 
     %% stop node
     init:stop().

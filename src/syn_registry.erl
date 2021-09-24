@@ -70,11 +70,10 @@ lookup(Name) ->
 
 -spec lookup(Scope :: atom(), Name :: any()) -> {pid(), Meta :: any()} | undefined.
 lookup(Scope, Name) ->
-    try find_registry_entry_by_name(Scope, Name) of
+    case find_registry_entry_by_name(Scope, Name) of
         undefined -> undefined;
+        non_existent_table -> error({invalid_scope, Scope});
         {{Name, Pid}, Meta, _, _, _} -> {Pid, Meta}
-    catch
-        error:badarg -> error({invalid_scope, Scope})
     end.
 
 -spec register(Name :: any(), Pid :: pid()) -> ok | {error, Reason :: any()}.
@@ -91,7 +90,7 @@ register(Scope, Name, Pid) when is_pid(Pid) ->
 -spec register(Scope :: atom(), Name :: any(), Pid :: pid(), Meta :: any()) -> ok | {error, Reason :: any()}.
 register(Scope, Name, Pid, Meta) ->
     Node = node(Pid),
-    try syn_gen_scope:call(?MODULE, Node, Scope, {register_on_owner, node(), Name, Pid, Meta}) of
+    case syn_gen_scope:call(?MODULE, Node, Scope, {register_on_owner, node(), Name, Pid, Meta}) of
         {ok, {TablePid, TableMeta, Time}} when Node =/= node() ->
             %% update table on caller node immediately so that subsequent calls have an updated registry
             add_to_local_table(Scope, Name, Pid, Meta, Time, undefined),
@@ -102,8 +101,6 @@ register(Scope, Name, Pid, Meta) ->
 
         {Response, _} ->
             Response
-    catch
-        exit:{noproc, {gen_server, call, _}} -> error({invalid_scope, Scope})
     end.
 
 -spec unregister(Name :: any()) -> ok | {error, Reason :: any()}.
@@ -113,9 +110,12 @@ unregister(Name) ->
 -spec unregister(Scope :: atom(), Name :: any()) -> ok | {error, Reason :: any()}.
 unregister(Scope, Name) ->
     % get process' node
-    try find_registry_entry_by_name(Scope, Name) of
+    case find_registry_entry_by_name(Scope, Name) of
         undefined ->
             {error, undefined};
+
+        non_existent_table ->
+            error({invalid_scope, Scope});
 
         {{Name, Pid}, Meta, _, _, _} ->
             Node = node(Pid),
@@ -131,9 +131,6 @@ unregister(Scope, Name) ->
                 Response ->
                     Response
             end
-    catch
-        exit:{noproc, {gen_server, call, _}} -> error({invalid_scope, Scope});
-        error:badarg -> error({invalid_scope, Scope})
     end.
 
 -spec count(Scope :: atom()) -> non_neg_integer().
@@ -244,7 +241,7 @@ handle_call({unregister_on_owner, RequesterNode, Name, Pid}, _From, #state{scope
     end;
 
 handle_call(Request, From, State) ->
-    error_logger:warning_msg("SYN[~s] Received from ~p an unknown call message: ~p", [node(), Request, From]),
+    error_logger:warning_msg("SYN[~s] Received from ~p an unknown call message: ~p", [node(), From, Request]),
     {reply, undefined, State}.
 
 %% ----------------------------------------------------------------------------------------------------------
@@ -333,15 +330,22 @@ get_registry_tuples_for_node(Scope, Node) ->
         [{{'$1', '$2', '$3', '$4'}}]
     }]).
 
--spec find_registry_entry_by_name(Scope :: atom(), Name :: any()) -> Entry :: syn_registry_entry() | undefined.
+-spec find_registry_entry_by_name(Scope :: atom(), Name :: any()) ->
+    Entry :: syn_registry_entry() | undefined | non_existent_table.
 find_registry_entry_by_name(Scope, Name) ->
-    case ets:select(syn_backbone:get_table_name(syn_registry_by_name, Scope), [{
-        {{Name, '_'}, '_', '_', '_', '_'},
-        [],
-        ['$_']
-    }]) of
-        [RegistryEntry] -> RegistryEntry;
-        [] -> undefined
+    case syn_backbone:get_table_name(syn_registry_by_name, Scope) of
+        undefined ->
+            non_existent_table;
+
+        TableName ->
+            case ets:select(TableName, [{
+                {{Name, '_'}, '_', '_', '_', '_'},
+                [],
+                ['$_']
+            }]) of
+                [RegistryEntry] -> RegistryEntry;
+                [] -> undefined
+            end
     end.
 
 -spec find_registry_entries_by_pid(Scope :: atom(), Pid :: pid()) -> RegistryEntries :: [syn_registry_entry()].

@@ -49,11 +49,12 @@ start_link() ->
 create_tables_for_scope(Scope) ->
     gen_server:call(?MODULE, {create_tables_for_scope, Scope}).
 
--spec get_table_name(TableName :: atom(), Scope :: atom()) -> atom().
-get_table_name(TableName, Scope) ->
-    TableNameBin = atom_to_binary(TableName),
-    ScopeBin = atom_to_binary(Scope),
-    binary_to_atom(<<TableNameBin/binary, "_", ScopeBin/binary>>).
+-spec get_table_name(TableId :: atom(), Scope :: atom()) -> TableName :: atom() | undefined.
+get_table_name(TableId, Scope) ->
+    case ets:lookup(syn_table_names, {TableId, Scope}) of
+        [{_, TableName}] -> TableName;
+        [] -> undefined
+    end.
 
 %% ===================================================================
 %% Callbacks
@@ -68,6 +69,9 @@ get_table_name(TableName, Scope) ->
     ignore |
     {stop, Reason :: any()}.
 init([]) ->
+    %% create table names table
+    ets:new(syn_table_names, [set, public, named_table, {read_concurrency, true}, {decentralized_counters, true}]),
+    ets:new(syn_process_names, [set, public, named_table, {read_concurrency, true}, {decentralized_counters, true}]),
     %% init
     {ok, #{}}.
 
@@ -82,15 +86,15 @@ init([]) ->
     {stop, Reason :: any(), Reply :: any(), State :: map()} |
     {stop, Reason :: any(), State :: map()}.
 handle_call({create_tables_for_scope, Scope}, _From, State) ->
-    error_logger:info_msg("SYN[~p] Creating tables for scope: ~p", [node(), Scope]),
-    ensure_table_exists(get_table_name(syn_registry_by_name, Scope)),
-    ensure_table_exists(get_table_name(syn_registry_by_pid, Scope)),
-    ensure_table_exists(get_table_name(syn_groups_by_name, Scope)),
-    ensure_table_exists(get_table_name(syn_groups_by_pid, Scope)),
+    error_logger:info_msg("SYN[~s] Creating tables for scope '~s'", [node(), Scope]),
+    ensure_table_exists(syn_registry_by_name, Scope),
+    ensure_table_exists(syn_registry_by_pid, Scope),
+    ensure_table_exists(syn_groups_by_name, Scope),
+    ensure_table_exists(syn_groups_by_pid, Scope),
     {reply, ok, State};
 
 handle_call(Request, From, State) ->
-    error_logger:warning_msg("SYN[~p] Received from ~p an unknown call message: ~p", [node(), Request, From]),
+    error_logger:warning_msg("SYN[~s] Received from ~p an unknown call message: ~p", [node(), From, Request]),
     {reply, undefined, State}.
 
 %% ----------------------------------------------------------------------------------------------------------
@@ -134,15 +138,23 @@ code_change(_OldVsn, State, _Extra) ->
 %% ===================================================================
 %% Internal
 %% ===================================================================
--spec ensure_table_exists(Name :: atom()) -> atom().
-ensure_table_exists(Name) ->
-    case ets:whereis(Name) of
+-spec ensure_table_exists(TableId :: atom(), Scope :: atom()) -> ok.
+ensure_table_exists(TableId, Scope) ->
+    %% build name
+    TableIdBin = atom_to_binary(TableId),
+    ScopeBin = atom_to_binary(Scope),
+    TableName = binary_to_atom(<<TableIdBin/binary, "_", ScopeBin/binary>>),
+    %% save to loopkup table
+    true = ets:insert(syn_table_names, {{TableId, Scope}, TableName}),
+    %% check or create
+    case ets:whereis(TableName) of
         undefined ->
             %% regarding decentralized_counters: <https://blog.erlang.org/scalable-ets-counters/>
-            ets:new(Name, [
+            ets:new(TableName, [
                 ordered_set, public, named_table,
                 {read_concurrency, true}, {write_concurrency, true}, {decentralized_counters, true}
-            ]);
+            ]),
+            ok;
 
         _ ->
             ok

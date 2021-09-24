@@ -80,7 +80,13 @@
 -spec start_link(Handler :: module(), Scope :: atom(), Args :: [any()]) ->
     {ok, Pid :: pid()} | {error, {already_started, Pid :: pid()}} | {error, Reason :: any()}.
 start_link(Handler, Scope, Args) when is_atom(Scope) ->
-    ProcessName = get_process_name_for_scope(Handler, Scope),
+    %% build name
+    HandlerBin = atom_to_binary(Handler),
+    ScopeBin = atom_to_binary(Scope),
+    ProcessName = binary_to_atom(<<HandlerBin/binary, "_", ScopeBin/binary>>),
+    %% save to lookup table
+    true = ets:insert(syn_process_names, {{Handler, Scope}, ProcessName}),
+    %% create process
     gen_server:start_link({local, ProcessName}, ?MODULE, [Handler, Scope, ProcessName, Args], []).
 
 -spec get_subcluster_nodes(Handler :: module(), Scope :: atom()) -> [node()].
@@ -94,8 +100,10 @@ call(Handler, Scope, Message) ->
 
 -spec call(Handler :: module(), Node :: atom(), Scope :: atom(), Message :: any()) -> Response :: any().
 call(Handler, Node, Scope, Message) ->
-    ProcessName = get_process_name_for_scope(Handler, Scope),
-    gen_server:call({ProcessName, Node}, Message).
+    case get_process_name_for_scope(Handler, Scope) of
+        undefined -> error({invalid_scope, Scope});
+        ProcessName ->  gen_server:call({ProcessName, Node}, Message)
+    end.
 
 %% ===================================================================
 %% In-Process API
@@ -293,12 +301,12 @@ code_change(_OldVsn, State, _Extra) ->
 %% ===================================================================
 %% Internal
 %% ===================================================================
--spec get_process_name_for_scope(Handler :: module(), Scope :: atom()) -> atom().
+-spec get_process_name_for_scope(Handler :: module(), Scope :: atom()) -> ProcessName :: atom() | undefined.
 get_process_name_for_scope(Handler, Scope) ->
-    ModuleBin = atom_to_binary(Handler),
-    ScopeBin = atom_to_binary(Scope),
-    binary_to_atom(<<ModuleBin/binary, "_", ScopeBin/binary>>).
-
+    case ets:lookup(syn_process_names, {Handler, Scope}) of
+        [{_, ProcessName}] -> ProcessName;
+        [] -> undefined
+    end.
 
 -spec multicast_loop() -> terminated.
 multicast_loop() ->
