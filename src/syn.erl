@@ -32,6 +32,8 @@
 -export([register/2, register/3, register/4]).
 -export([unregister/1, unregister/2]).
 -export([registry_count/1, registry_count/2]).
+%% gen_server via interface
+-export([register_name/2, unregister_name/1, whereis_name/1, send/2]).
 
 %% ===================================================================
 %% API
@@ -96,3 +98,35 @@ registry_count(Scope) ->
 -spec registry_count(Scope :: atom(), Node :: node()) -> non_neg_integer().
 registry_count(Scope, Node) ->
     syn_registry:count(Scope, Node).
+
+%% ----- \/ gen_server via module interface --------------------------
+-spec register_name(Name :: any(), Pid :: pid()) -> yes | no.
+register_name(Name, Pid) ->
+    case syn_registry:register(Name, Pid) of
+        ok -> yes;
+        _ -> no
+    end.
+
+-spec unregister_name(Name :: any()) -> any().
+unregister_name(Name) ->
+    case syn_registry:unregister(Name) of
+        ok -> Name;
+        _ -> nil
+    end.
+
+-spec whereis_name(Name :: any()) -> pid() | undefined.
+whereis_name(Name) ->
+    case syn_registry:lookup(Name) of
+        {Pid, Meta} -> Pid;
+        undefined -> undefined
+    end.
+
+-spec send(Name :: any(), Message :: any()) -> pid().
+send(Name, Message) ->
+    case whereis_name(Name) of
+        undefined ->
+            {badarg, {Name, Message}};
+        Pid ->
+            Pid ! Message,
+            Pid
+    end.

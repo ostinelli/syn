@@ -33,6 +33,9 @@
 
 %% tests
 -export([
+    one_node_via_register_unregister/1
+]).
+-export([
     three_nodes_discover_default_scope/1,
     three_nodes_discover_custom_scope/1,
     three_nodes_register_unregister_and_monitor_default_scope/1,
@@ -59,6 +62,7 @@
 %% -------------------------------------------------------------------
 all() ->
     [
+        {group, one_process_registration},
         {group, three_nodes_process_registration}
     ].
 
@@ -76,6 +80,9 @@ all() ->
 %% -------------------------------------------------------------------
 groups() ->
     [
+        {one_process_registration, [shuffle], [
+            one_node_via_register_unregister
+        ]},
         {three_nodes_process_registration, [shuffle], [
             three_nodes_discover_default_scope,
             three_nodes_discover_custom_scope,
@@ -175,6 +182,30 @@ end_per_testcase(_, _Config) ->
 %% ===================================================================
 %% Tests
 %% ===================================================================
+one_node_via_register_unregister(_Config) ->
+    %% start syn
+    ok = syn:start(),
+    %% start gen server via syn
+    {ok, Pid} = syn_test_gen_server:start_link(),
+    %% retrieve
+    {Pid, undefined} = syn:lookup(syn_test_gen_server),
+    %% call
+    pong = syn_test_gen_server:ping(),
+    %% send via syn
+    syn:send(syn_test_gen_server, {self(), send_ping}),
+    syn_test_suite_helper:assert_received_messages([
+        reply_pong
+    ]),
+    %% stop server
+    syn_test_gen_server:stop(),
+    %% retrieve
+    syn_test_suite_helper:assert_wait(
+        undefined,
+        fun() -> syn:lookup(syn_test_gen_server) end
+    ),
+    %% send via syn
+    {badarg, {syn_test_gen_server, anything}} = catch syn:send(syn_test_gen_server, anything).
+
 three_nodes_discover_default_scope(Config) ->
     %% get slaves
     SlaveNode1 = proplists:get_value(slave_node_1, Config),
