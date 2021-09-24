@@ -46,7 +46,7 @@ start_link(Scope) ->
     {ok, {{supervisor:strategy(), non_neg_integer(), pos_integer()}, [supervisor:child_spec()]}}.
 init([Scope]) ->
     %% create ETS tables
-    syn_backbone:create_tables_for_scope(Scope),
+    ok = syn_backbone:create_tables_for_scope(Scope),
     %% set children
     Children = [
         scope_child_spec(syn_registry, Scope),

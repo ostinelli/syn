@@ -64,5 +64,7 @@
     scope = default :: atom(),
     process_name :: atom(),
     nodes = #{} :: #{node() => pid()},
-    multicast_pid :: pid()
+    multicast_pid :: pid(),
+    table_by_name :: atom(),
+    table_by_pid :: atom()
 }).

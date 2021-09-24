@@ -117,7 +117,7 @@ unregister_name(Name) ->
 -spec whereis_name(Name :: any()) -> pid() | undefined.
 whereis_name(Name) ->
     case syn_registry:lookup(Name) of
-        {Pid, Meta} -> Pid;
+        {Pid, _Meta} -> Pid;
         undefined -> undefined
     end.
 

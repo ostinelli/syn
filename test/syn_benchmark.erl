@@ -101,6 +101,9 @@ start() ->
     RegistrationRate = ProcessCount / RegTakenTime,
     io:format("====> Registeration rate (with propagation): ~p/sec.~n~n", [RegistrationRate]),
 
+%%    eprof:stop_profiling(),
+%%    eprof:analyze(total),
+
     timer:sleep(1000),
 
     %% start unregistration
@@ -158,9 +161,6 @@ start() ->
 
     KillRate = ProcessCount / KillPropagationTime,
     io:format("====> Unregistered after kill rate (with propagation): ~p/sec.~n~n", [KillRate]),
-
-%%    eprof:stop_profiling(),
-%%    eprof:analyze(total),
 
     %% stop node
     init:stop().

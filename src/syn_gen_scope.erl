@@ -28,7 +28,7 @@
 
 %% API
 -export([
-    start_link/3,
+    start_link/2,
     get_subcluster_nodes/2,
     call/3, call/4
 ]).
@@ -53,8 +53,8 @@
 -export([multicast_loop/0]).
 
 %% callbacks
--callback init(Args :: term()) ->
-    {ok, State :: term()}.
+-callback init(State :: term()) ->
+    {ok, HandlerState :: term()}.
 -callback handle_call(Request :: term(), From :: {pid(), Tag :: term()},
     State :: term()) ->
     {reply, Reply :: term(), NewState :: term()} |
@@ -77,9 +77,9 @@
 %% ===================================================================
 %% API
 %% ===================================================================
--spec start_link(Handler :: module(), Scope :: atom(), Args :: [any()]) ->
+-spec start_link(Handler :: module(), Scope :: atom()) ->
     {ok, Pid :: pid()} | {error, {already_started, Pid :: pid()}} | {error, Reason :: any()}.
-start_link(Handler, Scope, Args) when is_atom(Scope) ->
+start_link(Handler, Scope) when is_atom(Scope) ->
     %% build name
     HandlerBin = atom_to_binary(Handler),
     ScopeBin = atom_to_binary(Scope),
@@ -87,7 +87,7 @@ start_link(Handler, Scope, Args) when is_atom(Scope) ->
     %% save to lookup table
     true = ets:insert(syn_process_names, {{Handler, Scope}, ProcessName}),
     %% create process
-    gen_server:start_link({local, ProcessName}, ?MODULE, [Handler, Scope, ProcessName, Args], []).
+    gen_server:start_link({local, ProcessName}, ?MODULE, [Handler, Scope, ProcessName], []).
 
 -spec get_subcluster_nodes(Handler :: module(), Scope :: atom()) -> [node()].
 get_subcluster_nodes(Handler, Scope) ->
@@ -139,22 +139,28 @@ send_to_node(RemoteNode, Message, #state{process_name = ProcessName}) ->
     ignore |
     {stop, Reason :: any()} |
     {continue, any()}.
-init([Handler, Scope, ProcessName, Args]) ->
-    %% start multicast process
-    MulticastPid = spawn_link(?MODULE, multicast_loop, []),
-    %% call init
-    {ok, HandlerState} = Handler:init(Args),
+init([Handler, Scope, ProcessName]) ->
     %% monitor nodes
     ok = net_kernel:monitor_nodes(true),
+    %% start multicast process
+    MulticastPid = spawn_link(?MODULE, multicast_loop, []),
+    %% table names
+    HandlerBin = atom_to_binary(Handler),
+    TableByName = syn_backbone:get_table_name(binary_to_atom(<<HandlerBin/binary, "_by_name">>), Scope),
+    TableByPid = syn_backbone:get_table_name(binary_to_atom(<<HandlerBin/binary, "_by_pid">>), Scope),
     %% build state
     State = #state{
         handler = Handler,
-        handler_state = HandlerState,
         scope = Scope,
         process_name = ProcessName,
-        multicast_pid = MulticastPid
+        multicast_pid = MulticastPid,
+        table_by_name = TableByName,
+        table_by_pid = TableByPid
     },
-    {ok, State, {continue, after_init}}.
+    %% call init
+    {ok, HandlerState} = Handler:init(State),
+    State1 = State#state{handler_state = HandlerState},
+    {ok, State1, {continue, after_init}}.
 
 %% ----------------------------------------------------------------------------------------------------------
 %% Call messages
