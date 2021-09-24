@@ -67,7 +67,7 @@ disconnect_node(Node) ->
     erlang:disconnect_node(Node).
 
 use_custom_handler() ->
-    application:set_env(syn, event_handler, syn_test_event_handler).
+    syn:set_event_handler(syn_test_event_handler).
 
 clean_after_test() ->
     Nodes = [node() | nodes()],

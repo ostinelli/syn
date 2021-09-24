@@ -28,6 +28,7 @@
 %% API
 -export([start/0, stop/0]).
 -export([get_node_scopes/0, add_node_to_scope/1, add_node_to_scopes/1]).
+-export([set_event_handler/1]).
 -export([lookup/1, lookup/2]).
 -export([register/2, register/3, register/4]).
 -export([unregister/1, unregister/2]).
@@ -61,6 +62,10 @@ add_node_to_scopes(Scopes) ->
     lists:foreach(fun(Scope) ->
         syn_sup:add_node_to_scope(Scope)
     end, Scopes).
+
+-spec set_event_handler(module()) -> ok.
+set_event_handler(Module) ->
+    application:set_env(syn, event_handler, Module).
 
 %% ----- \/ registry -------------------------------------------------
 -spec lookup(Name :: any()) -> {pid(), Meta :: any()} | undefined.

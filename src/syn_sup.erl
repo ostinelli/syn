@@ -43,7 +43,7 @@ start_link() ->
 -spec get_node_scopes() -> [atom()].
 get_node_scopes() ->
     %% always have a default scope for all nodes
-    case application:get_env(syn, syn_custom_scopes) of
+    case application:get_env(syn, custom_scopes) of
         undefined -> [default];
         {ok, Scopes} -> [default] ++ maps:keys(Scopes)
     end.
@@ -52,12 +52,12 @@ get_node_scopes() ->
 add_node_to_scope(Scope) ->
     error_logger:info_msg("SYN[~s] Adding node to scope '~s'", [node(), Scope]),
     %% save to ENV (failsafe if sup is restarted)
-    CustomScopes0 = case application:get_env(syn, syn_custom_scopes) of
+    CustomScopes0 = case application:get_env(syn, custom_scopes) of
         undefined -> #{};
         {ok, Scopes} -> Scopes
     end,
     CustomScopes = CustomScopes0#{Scope => #{}},
-    application:set_env(syn, syn_custom_scopes, CustomScopes),
+    application:set_env(syn, custom_scopes, CustomScopes),
     %% start child
     supervisor:start_child(?MODULE, child_spec(Scope)),
     ok.
