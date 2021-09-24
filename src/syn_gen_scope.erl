@@ -91,8 +91,10 @@ start_link(Handler, Scope, Args) when is_atom(Scope) ->
 
 -spec get_subcluster_nodes(Handler :: module(), Scope :: atom()) -> [node()].
 get_subcluster_nodes(Handler, Scope) ->
-    ProcessName = get_process_name_for_scope(Handler, Scope),
-    gen_server:call(ProcessName, get_subcluster_nodes).
+    case get_process_name_for_scope(Handler, Scope) of
+        undefined -> error({invalid_scope, Scope});
+        ProcessName -> gen_server:call(ProcessName, get_subcluster_nodes)
+    end.
 
 -spec call(Handler :: module(), Scope :: atom(), Message :: any()) -> Response :: any().
 call(Handler, Scope, Message) ->
@@ -102,7 +104,7 @@ call(Handler, Scope, Message) ->
 call(Handler, Node, Scope, Message) ->
     case get_process_name_for_scope(Handler, Scope) of
         undefined -> error({invalid_scope, Scope});
-        ProcessName ->  gen_server:call({ProcessName, Node}, Message)
+        ProcessName -> gen_server:call({ProcessName, Node}, Message)
     end.
 
 %% ===================================================================

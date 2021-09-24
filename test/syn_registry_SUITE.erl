@@ -305,6 +305,9 @@ three_nodes_discover_custom_scope(Config) ->
     ok = rpc:call(SlaveNode1, syn, add_node_to_scopes, [[custom_scope_ab, custom_scope_bc, custom_scope_all]]),
     ok = rpc:call(SlaveNode2, syn, add_node_to_scopes, [[custom_scope_bc, custom_scope_c, custom_scope_all]]),
 
+    %% get_subcluster_nodes should return invalid errors
+    {'EXIT', {{invalid_scope, custom_abcdef}, _}} = catch syn_registry:get_subcluster_nodes(custom_abcdef),
+
     %% check
     syn_test_suite_helper:assert_scope_subcluster(node(), custom_scope_ab, [SlaveNode1]),
     syn_test_suite_helper:assert_scope_subcluster(node(), custom_scope_all, [SlaveNode1, SlaveNode2]),
