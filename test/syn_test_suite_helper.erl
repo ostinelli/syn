@@ -44,6 +44,9 @@
 %% internal
 -export([process_main/0]).
 
+%% macro
+-define(TIMEOUT, 10000).
+
 %% ===================================================================
 %% API
 %% ===================================================================
@@ -100,7 +103,7 @@ kill_process(Pid) when is_pid(Pid) ->
             exit(Pid, kill),
             receive
                 {'DOWN', MRef, process, Pid, _Reason} -> ok
-            after 5000 ->
+            after ?TIMEOUT ->
                 ct:fail("~n\tCould not kill process ~p~n", [Pid])
             end;
 
@@ -129,7 +132,7 @@ wait_cluster_mesh_connected(Nodes, StartAt) ->
             ok;
 
         false ->
-            case os:system_time(millisecond) - StartAt > 5000 of
+            case os:system_time(millisecond) - StartAt > ?TIMEOUT of
                 true ->
                     {error, {could_not_init_cluster, Nodes}};
 
@@ -145,7 +148,7 @@ wait_process_name_ready(Name, StartAt) ->
     timer:sleep(50),
     case whereis(Name) of
         undefined ->
-            case os:system_time(millisecond) - StartAt > 5000 of
+            case os:system_time(millisecond) - StartAt > ?TIMEOUT of
                 true ->
                     ct:fail("~n\tProcess with name ~p didn't come alive~n", [Name]);
 
@@ -160,7 +163,7 @@ wait_process_name_ready(Name, StartAt) ->
                     ok;
 
                 Other ->
-                    case os:system_time(millisecond) - StartAt > 5000 of
+                    case os:system_time(millisecond) - StartAt > ?TIMEOUT of
                         true ->
                             ct:fail("~n\tProcess with name ~p didn't come ready~n\tStatus: ~p~n", [Name, Other]);
 
@@ -200,7 +203,7 @@ assert_received_messages(Messages, UnexpectedMessages) ->
                 false ->
                     assert_received_messages(Messages, [Message | UnexpectedMessages])
             end
-    after 5000 ->
+    after ?TIMEOUT ->
         do_assert_received_messages(Messages, UnexpectedMessages)
     end.
 
@@ -222,7 +225,7 @@ assert_wait(ExpectedResult, Fun, StartAt) ->
             ok;
 
         Result ->
-            case os:system_time(millisecond) - StartAt > 5000 of
+            case os:system_time(millisecond) - StartAt > ?TIMEOUT of
                 true ->
                     ct:fail("~n\tExpected: ~p~n\tActual: ~p~n", [ExpectedResult, Result]);
 
@@ -265,7 +268,7 @@ do_assert_cluster(Nodes, ExpectedNodes, StartAt) ->
                     ok;
 
                 _ ->
-                    case os:system_time(millisecond) - StartAt > 5000 of
+                    case os:system_time(millisecond) - StartAt > ?TIMEOUT of
                         true ->
                             ct:fail("~n\tInvalid subcluster~n\tExpected: ~p~n\tActual: ~p~n\tLine: ~p~n",
                                 [ExpectedNodes, Nodes, get_line_from_stacktrace()]
@@ -278,7 +281,7 @@ do_assert_cluster(Nodes, ExpectedNodes, StartAt) ->
             end;
 
         _ ->
-            case os:system_time(millisecond) - StartAt > 5000 of
+            case os:system_time(millisecond) - StartAt > ?TIMEOUT of
                 true ->
                     ct:fail("~n\tInvalid subcluster~n\tExpected: ~p~n\tActual: ~p~n\tLine: ~p~n",
                         [ExpectedNodes, Nodes, get_line_from_stacktrace()]

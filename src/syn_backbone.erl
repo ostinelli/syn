@@ -87,10 +87,10 @@ init([]) ->
     {stop, Reason :: any(), State :: map()}.
 handle_call({create_tables_for_scope, Scope}, _From, State) ->
     error_logger:info_msg("SYN[~s] Creating tables for scope '~s'", [node(), Scope]),
-    ensure_table_exists(syn_registry_by_name, Scope),
-    ensure_table_exists(syn_registry_by_pid, Scope),
-    ensure_table_exists(syn_groups_by_name, Scope),
-    ensure_table_exists(syn_groups_by_pid, Scope),
+    ensure_table_exists(set, syn_registry_by_name, Scope),
+    ensure_table_exists(ordered_set, syn_registry_by_pid, Scope),
+    ensure_table_exists(set, syn_groups_by_name, Scope),
+    ensure_table_exists(ordered_set, syn_groups_by_pid, Scope),
     {reply, ok, State};
 
 handle_call(Request, From, State) ->
@@ -138,8 +138,8 @@ code_change(_OldVsn, State, _Extra) ->
 %% ===================================================================
 %% Internal
 %% ===================================================================
--spec ensure_table_exists(TableId :: atom(), Scope :: atom()) -> ok.
-ensure_table_exists(TableId, Scope) ->
+-spec ensure_table_exists(Type :: set | ordered_set, TableId :: atom(), Scope :: atom()) -> ok.
+ensure_table_exists(Type, TableId, Scope) ->
     %% build name
     TableIdBin = atom_to_binary(TableId),
     ScopeBin = atom_to_binary(Scope),
@@ -151,7 +151,7 @@ ensure_table_exists(TableId, Scope) ->
         undefined ->
             %% regarding decentralized_counters: <https://blog.erlang.org/scalable-ets-counters/>
             ets:new(TableName, [
-                ordered_set, public, named_table,
+                Type, public, named_table,
                 {read_concurrency, true}, {decentralized_counters, true}
             ]),
             ok;

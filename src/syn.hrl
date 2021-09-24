@@ -29,10 +29,8 @@
     Version :: atom()
 }.
 -type syn_registry_entry() :: {
-    {
-        Name :: any(),
-        Pid :: pid()
-    },
+    Name :: any(),
+    Pid :: pid(),
     Meta :: any(),
     Time :: integer(),
     MRef :: undefined | reference(),
