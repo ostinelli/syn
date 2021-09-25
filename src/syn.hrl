@@ -36,6 +36,14 @@
     MRef :: undefined | reference(),
     Node :: node()
 }.
+-type syn_registry_entry_by_pid() :: {
+    Pid :: pid(),
+    Name :: any(),
+    Meta :: any(),
+    Time :: integer(),
+    MRef :: undefined | reference(),
+    Node :: node()
+}.
 -type syn_registry_tuple() :: {
     Name :: any(),
     Pid :: pid(),

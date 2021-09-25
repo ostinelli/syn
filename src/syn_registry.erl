@@ -296,7 +296,7 @@ handle_info({'DOWN', _MRef, process, Pid, Reason}, #state{
             );
 
         Entries ->
-            lists:foreach(fun({Name, _Pid, Meta, _, _, _}) ->
+            lists:foreach(fun({_Pid, Name, Meta, _, _, _}) ->
                 %% remove from table
                 remove_from_local_table(Name, Pid, TableByName, TableByPid),
                 %% callback
@@ -371,18 +371,16 @@ find_registry_entry_by_name(Name, TableByName) ->
         [Entry] -> Entry
     end.
 
--spec find_registry_entries_by_pid(Pid :: pid(), TableByPid :: atom()) -> RegistryEntries :: [syn_registry_entry()].
+-spec find_registry_entries_by_pid(Pid :: pid(), TableByPid :: atom()) -> RegistryEntriesByPid :: [syn_registry_entry_by_pid()].
 find_registry_entries_by_pid(Pid, TableByPid) when is_pid(Pid) ->
-    ets:select(TableByPid, [{
-        {{Pid, '$2'}, '$3', '$4', '$5', '$6'},
-        [],
-        [{{'$2', Pid, '$3', '$4', '$5', '$6'}}]
-    }]).
+    ets:lookup(TableByPid, Pid).
 
 -spec find_monitor_for_pid(Pid :: pid(), TableByPid :: atom()) -> reference() | undefined.
 find_monitor_for_pid(Pid, TableByPid) when is_pid(Pid) ->
+    %% we use select instead of lookup to limit the results and thus cover the case
+    %% when a process is registered with a considerable amount of names
     case ets:select(TableByPid, [{
-        {{Pid, '_'}, '_', '_', '$5', '_'},
+        {Pid, '_', '_', '_', '$5', '_'},
         [],
         ['$5']
     }], 1) of
@@ -392,10 +390,11 @@ find_monitor_for_pid(Pid, TableByPid) when is_pid(Pid) ->
 
 -spec maybe_demonitor(Pid :: pid(), TableByPid :: atom()) -> ok.
 maybe_demonitor(Pid, TableByPid) ->
-    %% try to retrieve 2 items
-    %% if only 1 is returned it means that no other aliases exist for the Pid
+    %% select 2: if only 1 is returned it means that no other aliases exist for the Pid
+    %% we use select instead of lookup to limit the results and thus cover the case
+    %% when a process is registered with a considerable amount of names
     case ets:select(TableByPid, [{
-        {{Pid, '_'}, '_', '_', '$5', '_'},
+        {Pid, '_', '_', '_', '$5', '_'},
         [],
         ['$5']
     }], 2) of
@@ -403,6 +402,7 @@ maybe_demonitor(Pid, TableByPid) ->
             %% no other aliases, demonitor
             erlang:demonitor(MRef, [flush]),
             ok;
+
         _ ->
             ok
     end.
@@ -419,7 +419,9 @@ maybe_demonitor(Pid, TableByPid) ->
 add_to_local_table(Name, Pid, Meta, Time, MRef, TableByName, TableByPid) ->
     %% insert
     true = ets:insert(TableByName, {Name, Pid, Meta, Time, MRef, node(Pid)}),
-    true = ets:insert(TableByPid, {{Pid, Name}, Meta, Time, MRef, node(Pid)}).
+    %% since we use a table of type bag, we need to manually ensure that the key Pid, Name is unique
+    true = ets:match_delete(TableByPid, {Pid, Name, '_', '_', '_', '_'}),
+    true = ets:insert(TableByPid, {Pid, Name, Meta, Time, MRef, node(Pid)}).
 
 -spec remove_from_local_table(
     Name :: any(),
@@ -429,7 +431,7 @@ add_to_local_table(Name, Pid, Meta, Time, MRef, TableByName, TableByPid) ->
 ) -> true.
 remove_from_local_table(Name, Pid, TableByName, TableByPid) ->
     true = ets:match_delete(TableByName, {Name, Pid, '_', '_', '_', '_'}),
-    true = ets:delete(TableByPid, {Pid, Name}).
+    true = ets:match_delete(TableByPid, {Pid, Name, '_', '_', '_', '_'}).
 
 -spec update_local_table(
     Name :: any(),
@@ -459,7 +461,7 @@ purge_registry_for_remote_node(Scope, Node, TableByName, TableByPid) when Node =
     end),
     %% remove all from pid table
     true = ets:match_delete(TableByName, {'_', '_', '_', '_', '_', Node}),
-    true = ets:match_delete(TableByPid, {{'_', '_'}, '_', '_', '_', Node}).
+    true = ets:match_delete(TableByPid, {'_', '_', '_', '_', '_', Node}).
 
 -spec handle_registry_sync(
     Scope :: atom(),
