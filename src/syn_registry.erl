@@ -428,7 +428,7 @@ add_to_local_table(Name, Pid, Meta, Time, MRef, TableByName, TableByPid) ->
     TableByPid :: atom()
 ) -> true.
 remove_from_local_table(Name, Pid, TableByName, TableByPid) ->
-    true = ets:delete(TableByName, Name),
+    true = ets:match_delete(TableByName, {Name, Pid, '_', '_', '_', '_'}),
     true = ets:delete(TableByPid, {Pid, Name}).
 
 -spec update_local_table(

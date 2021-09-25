@@ -1401,10 +1401,10 @@ three_nodes_custom_event_handler_conflict_resolution(Config) ->
     PidOn2 = syn_test_suite_helper:start_process(SlaveNode2),
 
     %% --> conflict by netsplit
-    ok = rpc:call(SlaveNode1, syn, register, ["proc-confict", PidOn1, keepthis]),
-    ok = rpc:call(SlaveNode2, syn, register, ["proc-confict", PidOn2, "meta-2"]),
-    ok = rpc:call(SlaveNode1, syn, register, [custom_scope_bc, "proc-confict", PidOn1, keepthis]),
-    ok = rpc:call(SlaveNode2, syn, register, [custom_scope_bc, "proc-confict", PidOn2, "meta-2"]),
+    ok = rpc:call(SlaveNode1, syn, register, ["proc-confict-by-netsplit-custom", PidOn1, keepthis]),
+    ok = rpc:call(SlaveNode2, syn, register, ["proc-confict-by-netsplit-custom", PidOn2, "meta-2"]),
+    ok = rpc:call(SlaveNode1, syn, register, [custom_scope_bc, "proc-confict-by-netsplit-scoped-custom", PidOn1, keepthis]),
+    ok = rpc:call(SlaveNode2, syn, register, [custom_scope_bc, "proc-confict-by-netsplit-scoped-custom", PidOn2, "meta-2"]),
 
     %% re-join
     rpc:call(SlaveNode1, syn_test_suite_helper, connect_node, [SlaveNode2]),
@@ -1415,15 +1415,15 @@ three_nodes_custom_event_handler_conflict_resolution(Config) ->
     %% retrieve
     syn_test_suite_helper:assert_wait(
         {PidOn1, keepthis},
-        fun() -> syn:lookup("proc-confict") end
+        fun() -> syn:lookup("proc-confict-by-netsplit-custom") end
     ),
     syn_test_suite_helper:assert_wait(
         {PidOn1, keepthis},
-        fun() -> rpc:call(SlaveNode1, syn, lookup, ["proc-confict"]) end
+        fun() -> rpc:call(SlaveNode1, syn, lookup, ["proc-confict-by-netsplit-custom"]) end
     ),
     syn_test_suite_helper:assert_wait(
         {PidOn1, keepthis},
-        fun() -> rpc:call(SlaveNode2, syn, lookup, ["proc-confict"]) end
+        fun() -> rpc:call(SlaveNode2, syn, lookup, ["proc-confict-by-netsplit-custom"]) end
     ),
     1 = syn:registry_count(default),
     0 = syn:registry_count(default, node()),
@@ -1439,11 +1439,11 @@ three_nodes_custom_event_handler_conflict_resolution(Config) ->
     0 = rpc:call(SlaveNode2, syn, registry_count, [default, SlaveNode2]),
     syn_test_suite_helper:assert_wait(
         {PidOn1, keepthis},
-        fun() -> rpc:call(SlaveNode1, syn, lookup, [custom_scope_bc, "proc-confict"]) end
+        fun() -> rpc:call(SlaveNode1, syn, lookup, [custom_scope_bc, "proc-confict-by-netsplit-scoped-custom"]) end
     ),
     syn_test_suite_helper:assert_wait(
         {PidOn1, keepthis},
-        fun() -> rpc:call(SlaveNode2, syn, lookup, [custom_scope_bc, "proc-confict"]) end
+        fun() -> rpc:call(SlaveNode2, syn, lookup, [custom_scope_bc, "proc-confict-by-netsplit-scoped-custom"]) end
     ),
     1 = rpc:call(SlaveNode1, syn, registry_count, [custom_scope_bc]),
     0 = rpc:call(SlaveNode1, syn, registry_count, [custom_scope_bc, node()]),
