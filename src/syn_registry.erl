@@ -56,19 +56,19 @@
 %% API
 %% ===================================================================
 -spec start_link(Scope :: atom()) ->
-    {ok, Pid :: pid()} | {error, {already_started, Pid :: pid()}} | {error, Reason :: any()}.
+    {ok, Pid :: pid()} | {error, {already_started, Pid :: pid()}} | {error, Reason :: term()}.
 start_link(Scope) when is_atom(Scope) ->
     syn_gen_scope:start_link(?MODULE, Scope).
 
--spec get_subcluster_nodes(#state{}) -> [node()].
-get_subcluster_nodes(State) ->
-    syn_gen_scope:get_subcluster_nodes(?MODULE, State).
+-spec get_subcluster_nodes(Scope :: atom()) -> [node()].
+get_subcluster_nodes(Scope) ->
+    syn_gen_scope:get_subcluster_nodes(?MODULE, Scope).
 
--spec lookup(Name :: any()) -> {pid(), Meta :: any()} | undefined.
+-spec lookup(Name :: term()) -> {pid(), Meta :: term()} | undefined.
 lookup(Name) ->
     lookup(default, Name).
 
--spec lookup(Scope :: atom(), Name :: any()) -> {pid(), Meta :: any()} | undefined.
+-spec lookup(Scope :: atom(), Name :: term()) -> {pid(), Meta :: term()} | undefined.
 lookup(Scope, Name) ->
     case syn_backbone:get_table_name(syn_registry_by_name, Scope) of
         undefined ->
@@ -81,18 +81,18 @@ lookup(Scope, Name) ->
             end
     end.
 
--spec register(Name :: any(), Pid :: pid()) -> ok | {error, Reason :: any()}.
+-spec register(Name :: term(), Pid :: pid()) -> ok | {error, Reason :: term()}.
 register(Name, Pid) ->
     register(default, Name, Pid, undefined).
 
--spec register(NameOrScope :: any(), PidOrName :: any(), MetaOrPid :: any()) -> ok | {error, Reason :: any()}.
+-spec register(NameOrScope :: term(), PidOrName :: term(), MetaOrPid :: term()) -> ok | {error, Reason :: term()}.
 register(Name, Pid, Meta) when is_pid(Pid) ->
     register(default, Name, Pid, Meta);
 
 register(Scope, Name, Pid) when is_pid(Pid) ->
     register(Scope, Name, Pid, undefined).
 
--spec register(Scope :: atom(), Name :: any(), Pid :: pid(), Meta :: any()) -> ok | {error, Reason :: any()}.
+-spec register(Scope :: atom(), Name :: term(), Pid :: pid(), Meta :: term()) -> ok | {error, Reason :: term()}.
 register(Scope, Name, Pid, Meta) ->
     Node = node(Pid),
     case syn_gen_scope:call(?MODULE, Node, Scope, {register_on_owner, node(), Name, Pid, Meta}) of
@@ -108,11 +108,11 @@ register(Scope, Name, Pid, Meta) ->
             Response
     end.
 
--spec unregister(Name :: any()) -> ok | {error, Reason :: any()}.
+-spec unregister(Name :: term()) -> ok | {error, Reason :: term()}.
 unregister(Name) ->
     unregister(default, Name).
 
--spec unregister(Scope :: atom(), Name :: any()) -> ok | {error, Reason :: any()}.
+-spec unregister(Scope :: atom(), Name :: term()) -> ok | {error, Reason :: term()}.
 unregister(Scope, Name) ->
     case syn_backbone:get_table_name(syn_registry_by_name, Scope) of
         undefined ->
@@ -170,7 +170,7 @@ count(Scope, Node) ->
 %% ----------------------------------------------------------------------------------------------------------
 %% Init
 %% ----------------------------------------------------------------------------------------------------------
--spec init(State :: term()) -> {ok, State :: term()}.
+-spec init(#state{}) -> {ok, HandlerState :: term()}.
 init(State) ->
     HandlerState = #{},
     %% rebuild
@@ -181,14 +181,13 @@ init(State) ->
 %% ----------------------------------------------------------------------------------------------------------
 %% Call messages
 %% ----------------------------------------------------------------------------------------------------------
--spec handle_call(Request :: term(), From :: {pid(), Tag :: term()},
-    State :: term()) ->
-    {reply, Reply :: term(), NewState :: term()} |
-    {reply, Reply :: term(), NewState :: term(), timeout() | hibernate | {continue, term()}} |
-    {noreply, NewState :: term()} |
-    {noreply, NewState :: term(), timeout() | hibernate | {continue, term()}} |
-    {stop, Reason :: term(), Reply :: term(), NewState :: term()} |
-    {stop, Reason :: term(), NewState :: term()}.
+-spec handle_call(Request :: term(), From :: {pid(), Tag :: term()}, #state{}) ->
+    {reply, Reply :: term(), #state{}} |
+    {reply, Reply :: term(), #state{}, timeout() | hibernate | {continue, term()}} |
+    {noreply, #state{}} |
+    {noreply, #state{}, timeout() | hibernate | {continue, term()}} |
+    {stop, Reason :: term(), Reply :: term(), #state{}} |
+    {stop, Reason :: term(), #state{}}.
 handle_call({register_on_owner, RequesterNode, Name, Pid, Meta}, _From, #state{
     scope = Scope,
     table_by_name = TableByName,
@@ -265,10 +264,10 @@ handle_call(Request, From, State) ->
 %% ----------------------------------------------------------------------------------------------------------
 %% Info messages
 %% ----------------------------------------------------------------------------------------------------------
--spec handle_info(Info :: timeout | term(), State :: term()) ->
-    {noreply, NewState :: term()} |
-    {noreply, NewState :: term(), timeout() | hibernate | {continue, term()}} |
-    {stop, Reason :: term(), NewState :: term()}.
+-spec handle_info(Info :: timeout | term(), #state{}) ->
+    {noreply, #state{}} |
+    {noreply, #state{}, timeout() | hibernate | {continue, term()}} |
+    {stop, Reason :: term(), #state{}}.
 handle_info({'3.0', sync_register, Scope, Name, Pid, Meta, Time}, State) ->
     handle_registry_sync(Scope, Name, Pid, Meta, Time, State),
     {noreply, State};
@@ -315,18 +314,18 @@ handle_info(Info, State) ->
 %% ----------------------------------------------------------------------------------------------------------
 %% Data
 %% ----------------------------------------------------------------------------------------------------------
--spec get_local_data(State :: term()) -> {ok, Data :: any()} | undefined.
+-spec get_local_data(#state{}) -> {ok, Data :: term()} | undefined.
 get_local_data(#state{table_by_name = TableByName}) ->
     {ok, get_registry_tuples_for_node(node(), TableByName)}.
 
--spec save_remote_data(RemoteData :: any(), State :: term()) -> any().
+-spec save_remote_data(RemoteData :: term(), #state{}) -> any().
 save_remote_data(RegistryTuplesOfRemoteNode, #state{scope = Scope} = State) ->
     %% insert tuples
     lists:foreach(fun({Name, Pid, Meta, Time}) ->
         handle_registry_sync(Scope, Name, Pid, Meta, Time, State)
     end, RegistryTuplesOfRemoteNode).
 
--spec purge_local_data_for_node(Node :: node(), State :: term()) -> any().
+-spec purge_local_data_for_node(Node :: node(), #state{}) -> any().
 purge_local_data_for_node(Node, #state{
     scope = Scope,
     table_by_name = TableByName,
@@ -363,7 +362,7 @@ get_registry_tuples_for_node(Node, TableByName) ->
         [{{'$1', '$2', '$3', '$4'}}]
     }]).
 
--spec find_registry_entry_by_name(Name :: any(), TableByName :: atom()) ->
+-spec find_registry_entry_by_name(Name :: term(), TableByName :: atom()) ->
     Entry :: syn_registry_entry() | undefined.
 find_registry_entry_by_name(Name, TableByName) ->
     case ets:lookup(TableByName, Name) of
@@ -408,9 +407,9 @@ maybe_demonitor(Pid, TableByPid) ->
     end.
 
 -spec add_to_local_table(
-    Name :: any(),
+    Name :: term(),
     Pid :: pid(),
-    Meta :: any(),
+    Meta :: term(),
     Time :: integer(),
     MRef :: undefined | reference(),
     TableByName :: atom(),
@@ -424,7 +423,7 @@ add_to_local_table(Name, Pid, Meta, Time, MRef, TableByName, TableByPid) ->
     true = ets:insert(TableByPid, {Pid, Name, Meta, Time, MRef, node(Pid)}).
 
 -spec remove_from_local_table(
-    Name :: any(),
+    Name :: term(),
     Pid :: pid(),
     TableByName :: atom(),
     TableByPid :: atom()
@@ -434,11 +433,11 @@ remove_from_local_table(Name, Pid, TableByName, TableByPid) ->
     true = ets:match_delete(TableByPid, {Pid, Name, '_', '_', '_', '_'}).
 
 -spec update_local_table(
-    Name :: any(),
+    Name :: term(),
     PreviousPid :: pid(),
     {
         Pid :: pid(),
-        Meta :: any(),
+        Meta :: term(),
         Time :: integer(),
         MRef :: undefined | reference()
     },
@@ -465,9 +464,9 @@ purge_registry_for_remote_node(Scope, Node, TableByName, TableByPid) when Node =
 
 -spec handle_registry_sync(
     Scope :: atom(),
-    Name :: any(),
+    Name :: term(),
     Pid :: pid(),
-    Meta :: any(),
+    Meta :: term(),
     Time :: non_neg_integer(),
     #state{}
 ) -> any().
@@ -510,9 +509,9 @@ handle_registry_sync(Scope, Name, Pid, Meta, Time, #state{
 
 -spec resolve_conflict(
     Scope :: atom(),
-    Name :: any(),
-    {Pid :: pid(), Meta :: any(), Time :: non_neg_integer()},
-    {TablePid :: pid(), TableMeta :: any(), TableTime :: non_neg_integer(), TableMRef :: reference()},
+    Name :: term(),
+    {Pid :: pid(), Meta :: term(), Time :: non_neg_integer()},
+    {TablePid :: pid(), TableMeta :: term(), TableTime :: non_neg_integer(), TableMRef :: reference()},
     #state{}
 ) -> any().
 resolve_conflict(Scope, Name, {Pid, Meta, Time}, {TablePid, TableMeta, TableTime, TableMRef}, #state{

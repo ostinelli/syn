@@ -249,8 +249,7 @@ process_main() ->
 do_assert_scope_subcluster(Module, Node, Scope, ExpectedNodes) ->
     do_assert_scope_subcluster(Module, Node, Scope, ExpectedNodes, os:system_time(millisecond)).
 do_assert_scope_subcluster(Module, Node, Scope, ExpectedNodes, StartAt) ->
-    NodesMap = rpc:call(Node, Module, get_subcluster_nodes, [Scope]),
-    Nodes = maps:keys(NodesMap),
+    Nodes = rpc:call(Node, Module, get_subcluster_nodes, [Scope]),
     case do_assert_cluster(Nodes, ExpectedNodes, StartAt) of
         continue -> do_assert_scope_subcluster(Module, Node, Scope, ExpectedNodes, StartAt);
         _ -> ok

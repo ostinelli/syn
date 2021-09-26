@@ -69,7 +69,7 @@
     handler_state = undefined :: any(),
     scope = default :: atom(),
     process_name :: atom(),
-    nodes = #{} :: #{node() => pid()},
+    nodes_map = #{} :: #{node() => pid()},
     multicast_pid :: pid(),
     table_by_name :: atom(),
     table_by_pid :: atom()

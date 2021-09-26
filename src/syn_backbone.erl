@@ -150,7 +150,7 @@ code_change(_OldVsn, State, _Extra) ->
 %% ===================================================================
 %% Internal
 %% ===================================================================
--spec ensure_table_exists(Type :: set | ordered_set, TableId :: atom(), Scope :: atom()) -> ok.
+-spec ensure_table_exists(Type :: ets:type(), TableId :: atom(), Scope :: atom()) -> ok.
 ensure_table_exists(Type, TableId, Scope) ->
     %% build name
     TableIdBin = atom_to_binary(TableId),

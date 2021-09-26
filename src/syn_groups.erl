@@ -51,9 +51,9 @@
 start_link(Scope) when is_atom(Scope) ->
     syn_gen_scope:start_link(?MODULE, Scope).
 
--spec get_subcluster_nodes(#state{}) -> [node()].
-get_subcluster_nodes(State) ->
-    syn_gen_scope:get_subcluster_nodes(?MODULE, State).
+-spec get_subcluster_nodes(Scope :: atom()) -> [node()].
+get_subcluster_nodes(Scope) ->
+    syn_gen_scope:get_subcluster_nodes(?MODULE, Scope).
 
 %% ===================================================================
 %% Callbacks
@@ -62,8 +62,8 @@ get_subcluster_nodes(State) ->
 %% ----------------------------------------------------------------------------------------------------------
 %% Init
 %% ----------------------------------------------------------------------------------------------------------
--spec init(State :: term()) -> {ok, State :: term()}.
-init(State) ->
+-spec init(#state{}) -> {ok, HandlerState :: term()}.
+init(_State) ->
     HandlerState = #{},
     %% init
     {ok, HandlerState}.
@@ -71,15 +71,13 @@ init(State) ->
 %% ----------------------------------------------------------------------------------------------------------
 %% Call messages
 %% ----------------------------------------------------------------------------------------------------------
--spec handle_call(Request :: term(), From :: {pid(), Tag :: term()},
-    State :: term()) ->
-    {reply, Reply :: term(), NewState :: term()} |
-    {reply, Reply :: term(), NewState :: term(), timeout() | hibernate | {continue, term()}} |
-    {noreply, NewState :: term()} |
-    {noreply, NewState :: term(), timeout() | hibernate | {continue, term()}} |
-    {stop, Reason :: term(), Reply :: term(), NewState :: term()} |
-    {stop, Reason :: term(), NewState :: term()}.
-
+-spec handle_call(Request :: term(), From :: {pid(), Tag :: term()}, #state{}) ->
+    {reply, Reply :: term(), #state{}} |
+    {reply, Reply :: term(), #state{}, timeout() | hibernate | {continue, term()}} |
+    {noreply, #state{}} |
+    {noreply, #state{}, timeout() | hibernate | {continue, term()}} |
+    {stop, Reason :: term(), Reply :: term(), #state{}} |
+    {stop, Reason :: term(), #state{}}.
 handle_call(Request, From, State) ->
     error_logger:warning_msg("SYN[~s] Received from ~p an unknown call message: ~p", [node(), From, Request]),
     {reply, undefined, State}.
@@ -87,11 +85,10 @@ handle_call(Request, From, State) ->
 %% ----------------------------------------------------------------------------------------------------------
 %% Info messages
 %% ----------------------------------------------------------------------------------------------------------
--spec handle_info(Info :: timeout | term(), State :: term()) ->
-    {noreply, NewState :: term()} |
-    {noreply, NewState :: term(), timeout() | hibernate | {continue, term()}} |
-    {stop, Reason :: term(), NewState :: term()}.
-
+-spec handle_info(Info :: timeout | term(), #state{}) ->
+    {noreply, #state{}} |
+    {noreply, #state{}, timeout() | hibernate | {continue, term()}} |
+    {stop, Reason :: term(), #state{}}.
 handle_info(Info, State) ->
     error_logger:warning_msg("SYN[~s] Received an unknown info message: ~p", [node(), Info]),
     {noreply, State}.
