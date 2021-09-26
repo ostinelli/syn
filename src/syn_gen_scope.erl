@@ -85,7 +85,7 @@ start_link(Handler, Scope) when is_atom(Scope) ->
     ScopeBin = atom_to_binary(Scope),
     ProcessName = binary_to_atom(<<HandlerBin/binary, "_", ScopeBin/binary>>),
     %% save to lookup table
-    true = ets:insert(syn_process_names, {{Handler, Scope}, ProcessName}),
+    syn_backbone:save_process_name({Handler, Scope}, ProcessName),
     %% create process
     gen_server:start_link({local, ProcessName}, ?MODULE, [Handler, Scope, ProcessName], []).
 
@@ -205,7 +205,7 @@ handle_info({'3.0', discover, RemoteScopePid}, #state{
 } = State) ->
     RemoteScopeNode = node(RemoteScopePid),
     error_logger:info_msg("SYN[~s] Received DISCOVER request from node '~s'for ~s and scope '~s'",
-        [node(), RemoteScopeNode,Handler, Scope]
+        [node(), RemoteScopeNode, Handler, Scope]
     ),
     %% send local data to remote
     {ok, LocalData} = Handler:get_local_data(State),
@@ -317,10 +317,7 @@ code_change(_OldVsn, State, _Extra) ->
 %% ===================================================================
 -spec get_process_name_for_scope(Handler :: module(), Scope :: atom()) -> ProcessName :: atom() | undefined.
 get_process_name_for_scope(Handler, Scope) ->
-    case ets:lookup(syn_process_names, {Handler, Scope}) of
-        [{_, ProcessName}] -> ProcessName;
-        [] -> undefined
-    end.
+    syn_backbone:get_process_name({Handler, Scope}).
 
 -spec multicast_loop() -> terminated.
 multicast_loop() ->

@@ -30,6 +30,7 @@
 -export([start_link/0]).
 -export([create_tables_for_scope/1]).
 -export([get_table_name/2]).
+-export([save_process_name/2, get_process_name/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
@@ -48,6 +49,17 @@ start_link() ->
 -spec create_tables_for_scope(Scope :: atom()) -> ok.
 create_tables_for_scope(Scope) ->
     gen_server:call(?MODULE, {create_tables_for_scope, Scope}).
+
+-spec save_process_name(Key :: any(), ProcessName :: atom()) -> true.
+save_process_name(Key, ProcessName) ->
+    true = ets:insert(syn_process_names, {Key, ProcessName}).
+
+-spec get_process_name(Key :: any()) ->  ProcessName :: atom().
+get_process_name(Key) ->
+    case ets:lookup(syn_process_names, Key) of
+        [{_, ProcessName}] -> ProcessName;
+        [] -> undefined
+    end.
 
 -spec get_table_name(TableId :: atom(), Scope :: atom()) -> TableName :: atom() | undefined.
 get_table_name(TableId, Scope) ->
