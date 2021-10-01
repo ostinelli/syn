@@ -32,8 +32,7 @@
     process_loop/0,
     register_on_node/4,
     unregister_on_node/4,
-    wait_registration_propagation/1,
-    wait_unregistration_propagation/0
+    wait_registry_propagation/1
 ]).
 -export([
     start_profiling/0,
@@ -54,7 +53,7 @@ start() ->
     ProcessesPerNode = round(ProcessCount / SlavesCount),
 
     io:format("-----> Starting benchmark~n"),
-    io:format("       --> Nodes: ~w (~w slaves)~n", [SlavesCount + 1, SlavesCount]),
+    io:format("       --> Nodes: ~w / ~w slave(s)~n", [SlavesCount + 1, SlavesCount]),
     io:format("       --> Total processes: ~w (~w / slave node)~n", [ProcessCount, ProcessesPerNode]),
     io:format("       --> Workers per node: ~w~n~n", [WorkersPerNode]),
 
@@ -104,7 +103,7 @@ start() ->
     io:format("      --> MIN: ~p secs.~n", [lists:min(RegRemoteNodesTimes)]),
     io:format("      --> MAX: ~p secs.~n", [lists:max(RegRemoteNodesTimes)]),
 
-    {RegPropagationTimeMs, _} = timer:tc(?MODULE, wait_registration_propagation, [ProcessCount]),
+    {RegPropagationTimeMs, _} = timer:tc(?MODULE, wait_registry_propagation, [ProcessCount]),
     RegPropagationTime = RegPropagationTimeMs / 1000000,
     io:format("----> Eventual additional time to propagate all to master: ~p secs.~n", [RegPropagationTime]),
 
@@ -127,7 +126,7 @@ start() ->
     io:format("      --> MIN: ~p secs.~n", [lists:min(UnregRemoteNodesTimes)]),
     io:format("      --> MAX: ~p secs.~n", [lists:max(UnregRemoteNodesTimes)]),
 
-    {UnregPropagationTimeMs, _} = timer:tc(?MODULE, wait_unregistration_propagation, []),
+    {UnregPropagationTimeMs, _} = timer:tc(?MODULE, wait_registry_propagation, [0]),
     UnregPropagationTime = UnregPropagationTimeMs / 1000000,
     io:format("----> Eventual additional time to propagate all to master: ~p secs.~n", [UnregPropagationTime]),
 
@@ -149,7 +148,7 @@ start() ->
     io:format("      --> MIN: ~p secs.~n", [lists:min(ReRegRemoteNodesTimes)]),
     io:format("      --> MAX: ~p secs.~n", [lists:max(ReRegRemoteNodesTimes)]),
 
-    {ReRegPropagationTimeMs, _} = timer:tc(?MODULE, wait_registration_propagation, [ProcessCount]),
+    {ReRegPropagationTimeMs, _} = timer:tc(?MODULE, wait_registry_propagation, [ProcessCount]),
     ReRegPropagationTime = ReRegPropagationTimeMs / 1000000,
     io:format("----> Eventual additional time to propagate all to master: ~p secs.~n", [ReRegPropagationTime]),
 
@@ -164,7 +163,7 @@ start() ->
     end, PidsMap),
 
     %% wait all unregistered
-    {KillPropagationTimeMs, _} = timer:tc(?MODULE, wait_unregistration_propagation, []),
+    {KillPropagationTimeMs, _} = timer:tc(?MODULE, wait_registry_propagation, [0]),
     KillPropagationTime = KillPropagationTimeMs / 1000000,
     io:format("----> Time to propagate killed process to to master: ~p secs.~n", [KillPropagationTime]),
 
@@ -200,22 +199,13 @@ register_on_node(CollectorPid, WorkersPerNode, FromName, Pids) ->
         end)
     end, WorkerInfo),
     %% wait
-    wait_register_on_node(CollectorPid, 0, WorkersPerNode).
+    Time = wait_done_on_node(CollectorPid, 0, WorkersPerNode),
+    io:format("----> Registered on node ~p on ~p secs.~n", [node(), Time]).
 
 worker_register_on_node(_Name, []) -> ok;
 worker_register_on_node(Name, [Pid | PidsTail]) ->
     ok = syn:register(Name, Pid),
     worker_register_on_node(Name + 1, PidsTail).
-
-wait_register_on_node(CollectorPid, Time, 0) ->
-    io:format("----> Registered on node ~p on ~p secs.~n", [node(), Time]),
-    CollectorPid ! {done, node(), Time};
-wait_register_on_node(CollectorPid, Time, WorkersRemainingCount) ->
-    receive
-        {done, WorkerTime} ->
-            Time1 = lists:max([WorkerTime, Time]),
-            wait_register_on_node(CollectorPid, Time1, WorkersRemainingCount - 1)
-    end.
 
 unregister_on_node(CollectorPid, WorkersPerNode, FromName, ToName) ->
     %% split pids in workers
@@ -243,21 +233,22 @@ unregister_on_node(CollectorPid, WorkersPerNode, FromName, ToName) ->
         end)
     end, WorkerInfo),
     %% wait
-    wait_unregister_on_node(CollectorPid, 0, WorkersPerNode).
+    Time = wait_done_on_node(CollectorPid, 0, WorkersPerNode),
+    io:format("----> Unregistered on node ~p on ~p secs.~n", [node(), Time]).
 
 worker_unregister_on_node(FromName, ToName) when FromName > ToName -> ok;
 worker_unregister_on_node(Name, ToName) ->
     ok = syn:unregister(Name),
     worker_unregister_on_node(Name + 1, ToName).
 
-wait_unregister_on_node(CollectorPid, Time, 0) ->
-    io:format("----> Unregistered on node ~p on ~p secs.~n", [node(), Time]),
-    CollectorPid ! {done, node(), Time};
-wait_unregister_on_node(CollectorPid, Time, WorkersRemainingCount) ->
+wait_done_on_node(CollectorPid, Time, 0) ->
+    CollectorPid ! {done, node(), Time},
+    Time;
+wait_done_on_node(CollectorPid, Time, WorkersRemainingCount) ->
     receive
         {done, WorkerTime} ->
             Time1 = lists:max([WorkerTime, Time]),
-            wait_unregister_on_node(CollectorPid, Time1, WorkersRemainingCount - 1)
+            wait_done_on_node(CollectorPid, Time1, WorkersRemainingCount - 1)
     end.
 
 start_processes(Count) ->
@@ -280,24 +271,14 @@ wait_from_all_remote_nodes([RemoteNode | Tail], Times) ->
             wait_from_all_remote_nodes(Tail, [Time | Times])
     end.
 
-wait_registration_propagation(ProcessCount) ->
+wait_registry_propagation(DesiredCount) ->
     case syn:registry_count(default) of
-        ProcessCount ->
+        DesiredCount ->
             ok;
 
         _ ->
             timer:sleep(50),
-            wait_registration_propagation(ProcessCount)
-    end.
-
-wait_unregistration_propagation() ->
-    case syn:registry_count(default) of
-        0 ->
-            ok;
-
-        _ ->
-            timer:sleep(50),
-            wait_unregistration_propagation()
+            wait_registry_propagation(DesiredCount)
     end.
 
 start_profiling() ->
