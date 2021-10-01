@@ -35,7 +35,7 @@
     unregister_on_node/3,
     do_unregister_on_node/2,
     wait_registration_propagation/1,
-    wait_unregistration_propagation/1
+    wait_unregistration_propagation/0
 ]).
 -export([
     start_profiling/0,
@@ -103,7 +103,7 @@ start() ->
     io:format("      --> MIN: ~p secs.~n", [lists:min(RegRemoteNodesTimes)]),
     io:format("      --> MAX: ~p secs.~n", [lists:max(RegRemoteNodesTimes)]),
 
-    {RegPropagationTimeMs, _} = timer:tc(?MODULE, wait_registration_propagation, [NodesInfo]),
+    {RegPropagationTimeMs, _} = timer:tc(?MODULE, wait_registration_propagation, [ProcessCount]),
     RegPropagationTime = RegPropagationTimeMs / 1000000,
     io:format("----> Eventual additional time to propagate all to master: ~p secs.~n", [RegPropagationTime]),
 
@@ -126,7 +126,7 @@ start() ->
     io:format("      --> MIN: ~p secs.~n", [lists:min(UnregRemoteNodesTimes)]),
     io:format("      --> MAX: ~p secs.~n", [lists:max(UnregRemoteNodesTimes)]),
 
-    {UnregPropagationTimeMs, _} = timer:tc(?MODULE, wait_unregistration_propagation, [NodesInfo]),
+    {UnregPropagationTimeMs, _} = timer:tc(?MODULE, wait_unregistration_propagation, []),
     UnregPropagationTime = UnregPropagationTimeMs / 1000000,
     io:format("----> Eventual additional time to propagate all to master: ~p secs.~n", [UnregPropagationTime]),
 
@@ -148,7 +148,7 @@ start() ->
     io:format("      --> MIN: ~p secs.~n", [lists:min(ReRegRemoteNodesTimes)]),
     io:format("      --> MAX: ~p secs.~n", [lists:max(ReRegRemoteNodesTimes)]),
 
-    {ReRegPropagationTimeMs, _} = timer:tc(?MODULE, wait_registration_propagation, [NodesInfo]),
+    {ReRegPropagationTimeMs, _} = timer:tc(?MODULE, wait_registration_propagation, [ProcessCount]),
     ReRegPropagationTime = ReRegPropagationTimeMs / 1000000,
     io:format("----> Eventual additional time to propagate all to master: ~p secs.~n", [ReRegPropagationTime]),
 
@@ -163,7 +163,7 @@ start() ->
     end, PidsMap),
 
     %% wait all unregistered
-    {KillPropagationTimeMs, _} = timer:tc(?MODULE, wait_unregistration_propagation, [NodesInfo]),
+    {KillPropagationTimeMs, _} = timer:tc(?MODULE, wait_unregistration_propagation, []),
     KillPropagationTime = KillPropagationTimeMs / 1000000,
     io:format("----> Time to propagate killed process to to master: ~p secs.~n", [KillPropagationTime]),
 
@@ -215,26 +215,24 @@ wait_from_all_remote_nodes([RemoteNode | Tail], Times) ->
             wait_from_all_remote_nodes(Tail, [Time | Times])
     end.
 
-wait_registration_propagation([]) -> ok;
-wait_registration_propagation([{_Node, _FromName, ToName} | NodeInfosTail] = NodesInfo) ->
-    case syn:lookup(ToName) of
-        undefined ->
-            timer:sleep(50),
-            wait_registration_propagation(NodesInfo);
+wait_registration_propagation(ProcessCount) ->
+    case syn:registry_count(default) of
+        ProcessCount ->
+            ok;
 
-        {_Pid, undefined} ->
-            wait_registration_propagation(NodeInfosTail)
+        _ ->
+            timer:sleep(50),
+            wait_registration_propagation(ProcessCount)
     end.
 
-wait_unregistration_propagation([]) -> ok;
-wait_unregistration_propagation([{_Node, _FromName, ToName} | NodeInfosTail] = NodesInfo) ->
-    case syn:lookup(ToName) of
-        undefined ->
-            wait_unregistration_propagation(NodeInfosTail);
+wait_unregistration_propagation() ->
+    case syn:registry_count(default) of
+        0 ->
+            ok;
 
-        {_Pid, undefined} ->
+        _ ->
             timer:sleep(50),
-            wait_unregistration_propagation(NodesInfo)
+            wait_unregistration_propagation()
     end.
 
 start_profiling() ->
