@@ -34,7 +34,8 @@
 %% tests
 -export([
     three_nodes_discover_default_scope/1,
-    three_nodes_discover_custom_scope/1
+    three_nodes_discover_custom_scope/1,
+    three_nodes_join_leave_and_monitor_default_scope/1
 ]).
 
 %% include
@@ -72,8 +73,9 @@ all() ->
 groups() ->
     [
         {three_nodes_groups, [shuffle], [
-            three_nodes_discover_default_scope,
-            three_nodes_discover_custom_scope
+%%            three_nodes_discover_default_scope,
+%%            three_nodes_discover_custom_scope,
+            three_nodes_join_leave_and_monitor_default_scope
         ]}
     ].
 %% -------------------------------------------------------------------
@@ -337,3 +339,70 @@ three_nodes_discover_custom_scope(Config) ->
     syn_test_suite_helper:assert_groups_scope_subcluster(SlaveNode2, custom_scope_bc, [SlaveNode1]),
     syn_test_suite_helper:assert_groups_scope_subcluster(SlaveNode2, custom_scope_c, []),
     syn_test_suite_helper:assert_groups_scope_subcluster(SlaveNode2, custom_scope_all, [node(), SlaveNode1]).
+
+three_nodes_join_leave_and_monitor_default_scope(Config) ->
+    %% get slaves
+    SlaveNode1 = proplists:get_value(slave_node_1, Config),
+    SlaveNode2 = proplists:get_value(slave_node_2, Config),
+
+    %% start syn on nodes
+    ok = syn:start(),
+    ok = rpc:call(SlaveNode1, syn, start, []),
+    ok = rpc:call(SlaveNode2, syn, start, []),
+
+    %% start processes
+    Pid = syn_test_suite_helper:start_process(),
+    PidWithMeta = syn_test_suite_helper:start_process(),
+    PidRemoteOn1 = syn_test_suite_helper:start_process(SlaveNode1),
+
+    %% check
+    [] = syn:get_members({group, "one"}),
+    [] = rpc:call(SlaveNode1, syn, get_members, [{group, "one"}]),
+    [] = rpc:call(SlaveNode2, syn, get_members, [{group, "one"}]),
+    [] = syn:get_members({group, "two"}),
+    [] = rpc:call(SlaveNode1, syn, get_members, [{group, "two"}]),
+    [] = rpc:call(SlaveNode2, syn, get_members, [{group, "two"}]),
+    0 = syn:groups_count(default),
+    0 = syn:groups_count(default, node()),
+    0 = syn:groups_count(default, SlaveNode1),
+    0 = syn:groups_count(default, SlaveNode2),
+
+    %% join
+    ok = syn:join({group, "one"}, Pid),
+    ok = syn:join({group, "one"}, PidWithMeta, <<"with meta">>),
+    ok = syn:join({group, "one"}, PidRemoteOn1),
+    ok = syn:join({group, "two"}, Pid),
+    ok = syn:join({group, "two"}, PidWithMeta, "with-meta-2"),
+
+    %% errors
+    {error, not_alive} = syn:join({"pid not alive"}, list_to_pid("<0.9999.0>")),
+
+    %% retrieve
+    syn_test_suite_helper:assert_wait(
+        lists:sort([{Pid, undefined}, {PidWithMeta, <<"with meta">>}, {PidRemoteOn1, undefined}]),
+        fun() -> lists:sort(syn:get_members({group, "one"})) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        lists:sort([{Pid, undefined}, {PidWithMeta, <<"with meta">>}, {PidRemoteOn1, undefined}]),
+        fun() -> lists:sort(rpc:call(SlaveNode1, syn, get_members, [{group, "one"}])) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        lists:sort([{Pid, undefined}, {PidWithMeta, <<"with meta">>}, {PidRemoteOn1, undefined}]),
+        fun() -> lists:sort(rpc:call(SlaveNode2, syn, get_members, [{group, "one"}])) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        lists:sort([{Pid, undefined}, {PidWithMeta, "with-meta-2"}]),
+        fun() -> lists:sort(syn:get_members({group, "two"})) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        lists:sort([{Pid, undefined}, {PidWithMeta, "with-meta-2"}]),
+        fun() -> lists:sort(rpc:call(SlaveNode1, syn, get_members, [{group, "two"}])) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        lists:sort([{Pid, undefined}, {PidWithMeta, "with-meta-2"}]),
+        fun() -> lists:sort(rpc:call(SlaveNode2, syn, get_members, [{group, "two"}])) end
+    ),
+    2 = syn:groups_count(default),
+    2 = syn:groups_count(default, node()),
+    1 = syn:groups_count(default, SlaveNode1),
+    0 = syn:groups_count(default, SlaveNode2).

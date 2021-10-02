@@ -51,9 +51,12 @@
     Time :: integer()
 }.
 -type syn_groups_entry() :: {
-    GroupName :: any(),
-    Pid :: pid(),
+    {
+        GroupName :: any(),
+        Pid :: pid()
+    },
     Meta :: any(),
+    Time :: integer(),
     MRef :: undefined | reference(),
     Node :: node()
 }.

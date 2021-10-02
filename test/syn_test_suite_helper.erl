@@ -38,6 +38,7 @@
 -export([assert_registry_scope_subcluster/3, assert_groups_scope_subcluster/3]).
 -export([assert_received_messages/1]).
 -export([assert_empty_queue/1]).
+-export([assert_same_array_with_same_members/2]).
 -export([assert_wait/2]).
 -export([send_error_logger_to_disk/0]).
 
@@ -215,6 +216,22 @@ assert_empty_queue(Pid) when is_pid(Pid) ->
         _ ->
             {messages, Messages} = process_info(Pid, messages),
             ct:fail("~n\tMessage queue was not empty, got:~n\t~p~n", [Messages])
+    end.
+
+assert_same_array_with_same_members(Arr1, Arr2) ->
+    assert_same_array_with_same_members(Arr1, Arr2, []).
+assert_same_array_with_same_members([], [], []) ->
+    ok;
+assert_same_array_with_same_members([], RemArr2, RemArr1) ->
+    ct:fail("~n\tIn 1 only: ~p~n\tIn 2 only: ~p~n", [RemArr1, RemArr2]);
+assert_same_array_with_same_members([E1 | Arr1], Arr2, RemArr1) ->
+    case lists:member(E1, Arr2) of
+        false ->
+            assert_same_array_with_same_members(Arr1, Arr2, [E1 | RemArr1]);
+
+        true ->
+            NewArr2 = lists:delete(E1, Arr2),
+            assert_same_array_with_same_members(Arr1, NewArr2, RemArr1)
     end.
 
 assert_wait(ExpectedResult, Fun) ->

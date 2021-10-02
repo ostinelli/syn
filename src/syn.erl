@@ -27,14 +27,20 @@
 
 %% API
 -export([start/0, stop/0]).
+%% scopes
 -export([get_node_scopes/0, add_node_to_scope/1, add_node_to_scopes/1]).
 -export([set_event_handler/1]).
+%% registry
 -export([lookup/1, lookup/2]).
 -export([register/2, register/3, register/4]).
 -export([unregister/1, unregister/2]).
 -export([registry_count/1, registry_count/2]).
 %% gen_server via interface
 -export([register_name/2, unregister_name/1, whereis_name/1, send/2]).
+%% groups
+-export([get_members/1, get_members/2]).
+-export([join/2, join/3, join/4]).
+-export([groups_count/1, groups_count/2]).
 
 %% ===================================================================
 %% API
@@ -72,7 +78,7 @@ set_event_handler(Module) ->
 lookup(Name) ->
     syn_registry:lookup(Name).
 
--spec lookup(Scope ::atom(), Name :: any()) -> {pid(), Meta :: any()} | undefined.
+-spec lookup(Scope :: atom(), Name :: any()) -> {pid(), Meta :: any()} | undefined.
 lookup(Scope, Name) ->
     syn_registry:lookup(Scope, Name).
 
@@ -135,3 +141,32 @@ send(Name, Message) ->
             Pid ! Message,
             Pid
     end.
+
+%% ----- \/ groups ---------------------------------------------------
+-spec get_members(GroupName :: term()) -> [{Pid :: pid(), Meta :: term()}].
+get_members(GroupName) ->
+    syn_groups:get_members(GroupName).
+
+-spec get_members(Scope :: atom(), GroupName :: term()) -> [{Pid :: pid(), Meta :: term()}].
+get_members(Scope, GroupName) ->
+    syn_groups:get_members(Scope, GroupName).
+
+-spec join(GroupName :: any(), Pid :: pid()) -> ok | {error, Reason :: any()}.
+join(GroupName, Pid) ->
+    syn_groups:join(GroupName, Pid).
+
+-spec join(GroupNameOrScope :: any(), PidOrGroupName :: any(), MetaOrPid :: any()) -> ok | {error, Reason :: any()}.
+join(GroupNameOrScope, PidOrGroupName, MetaOrPid) ->
+    syn_groups:join(GroupNameOrScope, PidOrGroupName, MetaOrPid).
+
+-spec join(Scope :: atom(), GroupName :: any(), Pid :: pid(), Meta :: any()) -> ok | {error, Reason :: any()}.
+join(Scope, GroupName, Pid, Meta) ->
+    syn_groups:join(Scope, GroupName, Pid, Meta).
+
+-spec groups_count(Scope :: atom()) -> non_neg_integer().
+groups_count(Scope) ->
+    syn_groups:count(Scope).
+
+-spec groups_count(Scope :: atom(), Node :: node()) -> non_neg_integer().
+groups_count(Scope, Node) ->
+    syn_groups:count(Scope, Node).
