@@ -40,6 +40,7 @@
 %% groups
 -export([get_members/1, get_members/2]).
 -export([join/2, join/3, join/4]).
+-export([leave/2, leave/3]).
 -export([groups_count/1, groups_count/2]).
 
 %% ===================================================================
@@ -162,6 +163,14 @@ join(GroupNameOrScope, PidOrGroupName, MetaOrPid) ->
 -spec join(Scope :: atom(), GroupName :: any(), Pid :: pid(), Meta :: any()) -> ok | {error, Reason :: any()}.
 join(Scope, GroupName, Pid, Meta) ->
     syn_groups:join(Scope, GroupName, Pid, Meta).
+
+-spec leave(GroupName :: any(), Pid :: pid()) -> ok | {error, Reason :: any()}.
+leave(GroupName, Pid) ->
+    syn_groups:leave(GroupName, Pid).
+
+-spec leave(Scope :: atom(), GroupName :: any(), Pid :: pid()) -> ok | {error, Reason :: any()}.
+leave(Scope, GroupName, Pid) ->
+    syn_groups:leave(Scope, GroupName, Pid).
 
 -spec groups_count(Scope :: atom()) -> non_neg_integer().
 groups_count(Scope) ->

@@ -376,6 +376,7 @@ three_nodes_join_leave_and_monitor_default_scope(Config) ->
 
     %% errors
     {error, not_alive} = syn:join({"pid not alive"}, list_to_pid("<0.9999.0>")),
+    {error, not_in_group} = syn:leave({group, "three"}, Pid),
 
     %% retrieve
     syn_test_suite_helper:assert_wait(
@@ -405,4 +406,78 @@ three_nodes_join_leave_and_monitor_default_scope(Config) ->
     2 = syn:groups_count(default),
     2 = syn:groups_count(default, node()),
     1 = syn:groups_count(default, SlaveNode1),
+    0 = syn:groups_count(default, SlaveNode2),
+
+    %% re-join to edit meta
+    ok = syn:join({group, "one"}, PidWithMeta, <<"with updated meta">>),
+    ok = rpc:call(SlaveNode2, syn, join, [{group, "one"}, PidRemoteOn1, added_meta]), %% updated on slave 2
+
+    %% retrieve
+    syn_test_suite_helper:assert_wait(
+        lists:sort([{Pid, undefined}, {PidWithMeta, <<"with updated meta">>}, {PidRemoteOn1, added_meta}]),
+        fun() -> lists:sort(syn:get_members({group, "one"})) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        lists:sort([{Pid, undefined}, {PidWithMeta, <<"with updated meta">>}, {PidRemoteOn1, added_meta}]),
+        fun() -> lists:sort(rpc:call(SlaveNode1, syn, get_members, [{group, "one"}])) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        lists:sort([{Pid, undefined}, {PidWithMeta, <<"with updated meta">>}, {PidRemoteOn1, added_meta}]),
+        fun() -> lists:sort(rpc:call(SlaveNode2, syn, get_members, [{group, "one"}])) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        lists:sort([{Pid, undefined}, {PidWithMeta, "with-meta-2"}]),
+        fun() -> lists:sort(syn:get_members({group, "two"})) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        lists:sort([{Pid, undefined}, {PidWithMeta, "with-meta-2"}]),
+        fun() -> lists:sort(rpc:call(SlaveNode1, syn, get_members, [{group, "two"}])) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        lists:sort([{Pid, undefined}, {PidWithMeta, "with-meta-2"}]),
+        fun() -> lists:sort(rpc:call(SlaveNode2, syn, get_members, [{group, "two"}])) end
+    ),
+    2 = syn:groups_count(default),
+    2 = syn:groups_count(default, node()),
+    1 = syn:groups_count(default, SlaveNode1),
+    0 = syn:groups_count(default, SlaveNode2),
+
+    %% crash scope process to ensure that monitors get recreated
+    exit(whereis(syn_groups_default), kill),
+    syn_test_suite_helper:wait_process_name_ready(syn_groups_default),
+
+    %% kill process
+    syn_test_suite_helper:kill_process(Pid),
+    syn_test_suite_helper:kill_process(PidRemoteOn1),
+    %% leave
+    ok = syn:leave({group, "one"}, PidWithMeta),
+
+    %% retrieve
+    syn_test_suite_helper:assert_wait(
+        [],
+        fun() -> lists:sort(syn:get_members({group, "one"})) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        [],
+        fun() -> lists:sort(rpc:call(SlaveNode1, syn, get_members, [{group, "one"}])) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        [],
+        fun() -> lists:sort(rpc:call(SlaveNode2, syn, get_members, [{group, "one"}])) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        [{PidWithMeta, "with-meta-2"}],
+        fun() -> lists:sort(syn:get_members({group, "two"})) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        [{PidWithMeta, "with-meta-2"}],
+        fun() -> lists:sort(rpc:call(SlaveNode1, syn, get_members, [{group, "two"}])) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        [{PidWithMeta, "with-meta-2"}],
+        fun() -> lists:sort(rpc:call(SlaveNode2, syn, get_members, [{group, "two"}])) end
+    ),
+    1 = syn:groups_count(default),
+    1 = syn:groups_count(default, node()),
+    0 = syn:groups_count(default, SlaveNode1),
     0 = syn:groups_count(default, SlaveNode2).

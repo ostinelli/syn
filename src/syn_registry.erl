@@ -282,6 +282,7 @@ handle_info({'3.0', sync_unregister, Name, Pid, Meta}, #state{
     syn_event_handler:do_on_process_unregistered(Scope, Name, Pid, Meta),
     %% return
     {noreply, State};
+
 handle_info({'DOWN', _MRef, process, Pid, Reason}, #state{
     scope = Scope,
     table_by_name = TableByName,
