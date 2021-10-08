@@ -343,17 +343,25 @@ rebuild_monitors(#state{
     table_by_pid = TableByPid
 }) ->
     RegistryTuples = get_registry_tuples_for_node(node(), TableByName),
-    lists:foreach(fun({Name, Pid, Meta, Time}) ->
+    lists:foldl(fun({Name, Pid, Meta, Time}, NewMonitorRefs) ->
         remove_from_local_table(Name, Pid, TableByName, TableByPid),
         case is_process_alive(Pid) of
             true ->
-                MRef = erlang:monitor(process, Pid),
-                add_to_local_table(Name, Pid, Meta, Time, MRef, TableByName, TableByPid);
+                case maps:find(Pid, NewMonitorRefs) of
+                    error ->
+                        MRef = erlang:monitor(process, Pid),
+                        add_to_local_table(Name, Pid, Meta, Time, MRef, TableByName, TableByPid),
+                        maps:put(Pid, MRef, NewMonitorRefs);
+
+                    {ok, MRef} ->
+                        add_to_local_table(Name, Pid, Meta, Time, MRef, TableByName, TableByPid),
+                        NewMonitorRefs
+                end;
 
             _ ->
-                ok
+                NewMonitorRefs
         end
-    end, RegistryTuples).
+    end, #{}, RegistryTuples).
 
 -spec get_registry_tuples_for_node(Node :: node(), TableByName :: atom()) -> [syn_registry_tuple()].
 get_registry_tuples_for_node(Node, TableByName) ->
