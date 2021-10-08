@@ -329,29 +329,34 @@ purge_local_data_for_node(Node, #state{
 %% ===================================================================
 -spec rebuild_monitors(#state{}) -> ok.
 rebuild_monitors(#state{
+    table_by_name = TableByName
+} = State) ->
+    GroupsTuples = get_groups_tuples_for_node(node(), TableByName),
+    do_rebuild_monitors(GroupsTuples, #{}, State).
+
+-spec do_rebuild_monitors([syn_groups_tuple()], [reference()], #state{}) -> ok.
+do_rebuild_monitors([], _, _) -> ok;
+do_rebuild_monitors([{GroupName, Pid, Meta, Time} | T], NewMonitorRefs, #state{
     table_by_name = TableByName,
     table_by_pid = TableByPid
-}) ->
-    GroupsTuples = get_groups_tuples_for_node(node(), TableByName),
-    lists:foldl(fun({GroupName, Pid, Meta, Time}, NewMonitorRefs) ->
-        remove_from_local_table(GroupName, Pid, TableByName, TableByPid),
-        case is_process_alive(Pid) of
-            true ->
-                case maps:find(Pid, NewMonitorRefs) of
-                    error ->
-                        MRef = erlang:monitor(process, Pid),
-                        add_to_local_table(GroupName, Pid, Meta, Time, MRef, TableByName, TableByPid),
-                        maps:put(Pid, MRef, NewMonitorRefs);
+} = State) ->
+    remove_from_local_table(GroupName, Pid, TableByName, TableByPid),
+    case is_process_alive(Pid) of
+        true ->
+            case maps:find(Pid, NewMonitorRefs) of
+                error ->
+                    MRef = erlang:monitor(process, Pid),
+                    add_to_local_table(GroupName, Pid, Meta, Time, MRef, TableByName, TableByPid),
+                    do_rebuild_monitors(T, maps:put(Pid, MRef, NewMonitorRefs), State);
 
-                    {ok, MRef} ->
-                        add_to_local_table(GroupName, Pid, Meta, Time, MRef, TableByName, TableByPid),
-                        NewMonitorRefs
-                end;
+                {ok, MRef} ->
+                    add_to_local_table(GroupName, Pid, Meta, Time, MRef, TableByName, TableByPid),
+                    do_rebuild_monitors(T, NewMonitorRefs, State)
+            end;
 
-            _ ->
-                NewMonitorRefs
-        end
-    end, #{}, GroupsTuples).
+        _ ->
+            do_rebuild_monitors(T, NewMonitorRefs, State)
+    end.
 
 -spec get_groups_tuples_for_node(Node :: node(), TableByName :: atom()) -> [syn_groups_tuple()].
 get_groups_tuples_for_node(Node, TableByName) ->

@@ -339,29 +339,34 @@ purge_local_data_for_node(Node, #state{
 %% ===================================================================
 -spec rebuild_monitors(#state{}) -> ok.
 rebuild_monitors(#state{
+    table_by_name = TableByName
+} = State) ->
+    RegistryTuples = get_registry_tuples_for_node(node(), TableByName),
+    do_rebuild_monitors(RegistryTuples, #{}, State).
+
+-spec do_rebuild_monitors([syn_registry_tuple()], [reference()], #state{}) -> ok.
+do_rebuild_monitors([], _, _) -> ok;
+do_rebuild_monitors([{Name, Pid, Meta, Time} | T], NewMonitorRefs, #state{
     table_by_name = TableByName,
     table_by_pid = TableByPid
-}) ->
-    RegistryTuples = get_registry_tuples_for_node(node(), TableByName),
-    lists:foldl(fun({Name, Pid, Meta, Time}, NewMonitorRefs) ->
-        remove_from_local_table(Name, Pid, TableByName, TableByPid),
-        case is_process_alive(Pid) of
-            true ->
-                case maps:find(Pid, NewMonitorRefs) of
-                    error ->
-                        MRef = erlang:monitor(process, Pid),
-                        add_to_local_table(Name, Pid, Meta, Time, MRef, TableByName, TableByPid),
-                        maps:put(Pid, MRef, NewMonitorRefs);
+} = State) ->
+    remove_from_local_table(Name, Pid, TableByName, TableByPid),
+    case is_process_alive(Pid) of
+        true ->
+            case maps:find(Pid, NewMonitorRefs) of
+                error ->
+                    MRef = erlang:monitor(process, Pid),
+                    add_to_local_table(Name, Pid, Meta, Time, MRef, TableByName, TableByPid),
+                    do_rebuild_monitors(T, maps:put(Pid, MRef, NewMonitorRefs), State);
 
-                    {ok, MRef} ->
-                        add_to_local_table(Name, Pid, Meta, Time, MRef, TableByName, TableByPid),
-                        NewMonitorRefs
-                end;
+                {ok, MRef} ->
+                    add_to_local_table(Name, Pid, Meta, Time, MRef, TableByName, TableByPid),
+                    do_rebuild_monitors(T, NewMonitorRefs, State)
+            end;
 
-            _ ->
-                NewMonitorRefs
-        end
-    end, #{}, RegistryTuples).
+        _ ->
+            do_rebuild_monitors(T, NewMonitorRefs, State)
+    end.
 
 -spec get_registry_tuples_for_node(Node :: node(), TableByName :: atom()) -> [syn_registry_tuple()].
 get_registry_tuples_for_node(Node, TableByName) ->
