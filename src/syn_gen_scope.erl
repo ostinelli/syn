@@ -104,7 +104,10 @@ call(Handler, Scope, Message) ->
 call(Handler, Node, Scope, Message) ->
     case get_process_name_for_scope(Handler, Scope) of
         undefined -> error({invalid_scope, Scope});
-        ProcessName -> gen_server:call({ProcessName, Node}, Message)
+        ProcessName ->
+            try gen_server:call({ProcessName, Node}, Message)
+            catch exit:{noproc, {gen_server, call, _}} -> error({invalid_scope, Scope})
+            end
     end.
 
 %% ===================================================================

@@ -333,17 +333,25 @@ rebuild_monitors(#state{
     table_by_pid = TableByPid
 }) ->
     GroupsTuples = get_groups_tuples_for_node(node(), TableByName),
-    lists:foreach(fun({GroupName, Pid, Meta, Time}) ->
+    lists:foldl(fun({GroupName, Pid, Meta, Time}, NewMonitorRefs) ->
         remove_from_local_table(GroupName, Pid, TableByName, TableByPid),
         case is_process_alive(Pid) of
             true ->
-                MRef = erlang:monitor(process, Pid),
-                add_to_local_table(GroupName, Pid, Meta, Time, MRef, TableByName, TableByPid);
+                case maps:find(Pid, NewMonitorRefs) of
+                    error ->
+                        MRef = erlang:monitor(process, Pid),
+                        add_to_local_table(GroupName, Pid, Meta, Time, MRef, TableByName, TableByPid),
+                        maps:put(Pid, MRef, NewMonitorRefs);
+
+                    {ok, MRef} ->
+                        add_to_local_table(GroupName, Pid, Meta, Time, MRef, TableByName, TableByPid),
+                        NewMonitorRefs
+                end;
 
             _ ->
-                ok
+                NewMonitorRefs
         end
-    end, GroupsTuples).
+    end, #{}, GroupsTuples).
 
 -spec get_groups_tuples_for_node(Node :: node(), TableByName :: atom()) -> [syn_groups_tuple()].
 get_groups_tuples_for_node(Node, TableByName) ->
