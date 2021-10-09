@@ -36,6 +36,8 @@
 -export([local_members/1, local_members/2]).
 -export([is_local_member/2, is_local_member/3]).
 -export([count/1, count/2]).
+-export([publish/2, publish/3]).
+-export([local_publish/2, local_publish/3]).
 
 %% syn_gen_scope callbacks
 -export([
@@ -210,6 +212,30 @@ count(Scope, Node) ->
             Set = sets:from_list(Entries),
             sets:size(Set)
     end.
+
+-spec publish(GroupName :: any(), Message :: any()) -> {ok, RecipientCount :: non_neg_integer()}.
+publish(GroupName, Message) ->
+    publish(?DEFAULT_SCOPE, GroupName, Message).
+
+-spec publish(Scope :: atom(), GroupName :: any(), Message :: any()) -> {ok, RecipientCount :: non_neg_integer()}.
+publish(Scope, GroupName, Message) ->
+    Members = members(Scope, GroupName),
+    lists:foreach(fun({Pid, _Meta}) ->
+        Pid ! Message
+    end, Members),
+    {ok, length(Members)}.
+
+-spec local_publish(GroupName :: any(), Message :: any()) -> {ok, RecipientCount :: non_neg_integer()}.
+local_publish(GroupName, Message) ->
+    local_publish(?DEFAULT_SCOPE, GroupName, Message).
+
+-spec local_publish(Scope :: atom(), GroupName :: any(), Message :: any()) -> {ok, RecipientCount :: non_neg_integer()}.
+local_publish(Scope, GroupName, Message) ->
+    Members = local_members(Scope, GroupName),
+    lists:foreach(fun({Pid, _Meta}) ->
+        Pid ! Message
+    end, Members),
+    {ok, length(Members)}.
 
 %% ===================================================================
 %% Callbacks

@@ -45,6 +45,8 @@
 -export([join/2, join/3, join/4]).
 -export([leave/2, leave/3]).
 -export([groups_count/1, groups_count/2]).
+-export([publish/2, publish/3]).
+-export([local_publish/2, local_publish/3]).
 
 %% ===================================================================
 %% API
@@ -206,3 +208,19 @@ groups_count(Scope) ->
 -spec groups_count(Scope :: atom(), Node :: node()) -> non_neg_integer().
 groups_count(Scope, Node) ->
     syn_groups:count(Scope, Node).
+
+-spec publish(GroupName :: any(), Message :: any()) -> {ok, RecipientCount :: non_neg_integer()}.
+publish(GroupName, Message) ->
+    syn_groups:publish(GroupName, Message).
+
+-spec publish(Scope :: atom(), GroupName :: any(), Message :: any()) -> {ok, RecipientCount :: non_neg_integer()}.
+publish(Scope, GroupName, Message) ->
+    syn_groups:publish(Scope, GroupName, Message).
+
+-spec local_publish(GroupName :: any(), Message :: any()) -> {ok, RecipientCount :: non_neg_integer()}.
+local_publish(GroupName, Message) ->
+    syn_groups:local_publish(GroupName, Message).
+
+-spec local_publish(Scope :: atom(), GroupName :: any(), Message :: any()) -> {ok, RecipientCount :: non_neg_integer()}.
+local_publish(Scope, GroupName, Message) ->
+    syn_groups:local_publish(Scope, GroupName, Message).
