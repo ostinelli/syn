@@ -31,9 +31,9 @@
 -export([get_subcluster_nodes/1]).
 -export([join/2, join/3, join/4]).
 -export([leave/2, leave/3]).
--export([get_members/1, get_members/2]).
+-export([members/1, members/2]).
 -export([is_member/2, is_member/3]).
--export([get_local_members/1, get_local_members/2]).
+-export([local_members/1, local_members/2]).
 -export([is_local_member/2, is_local_member/3]).
 -export([count/1, count/2]).
 
@@ -62,12 +62,12 @@ start_link(Scope) when is_atom(Scope) ->
 get_subcluster_nodes(Scope) ->
     syn_gen_scope:get_subcluster_nodes(?MODULE, Scope).
 
--spec get_members(GroupName :: term()) -> [{Pid :: pid(), Meta :: term()}].
-get_members(GroupName) ->
-    get_members(default, GroupName).
+-spec members(GroupName :: term()) -> [{Pid :: pid(), Meta :: term()}].
+members(GroupName) ->
+    members(default, GroupName).
 
--spec get_members(Scope :: atom(), GroupName :: term()) -> [{Pid :: pid(), Meta :: term()}].
-get_members(Scope, GroupName) ->
+-spec members(Scope :: atom(), GroupName :: term()) -> [{Pid :: pid(), Meta :: term()}].
+members(Scope, GroupName) ->
     do_get_members(Scope, GroupName, '_').
 
 -spec is_member(GroupName :: any(), Pid :: pid()) -> boolean().
@@ -87,12 +87,12 @@ is_member(Scope, GroupName, Pid) ->
             end
     end.
 
--spec get_local_members(GroupName :: term()) -> [{Pid :: pid(), Meta :: term()}].
-get_local_members(GroupName) ->
-    get_local_members(default, GroupName).
+-spec local_members(GroupName :: term()) -> [{Pid :: pid(), Meta :: term()}].
+local_members(GroupName) ->
+    local_members(default, GroupName).
 
--spec get_local_members(Scope :: atom(), GroupName :: term()) -> [{Pid :: pid(), Meta :: term()}].
-get_local_members(Scope, GroupName) ->
+-spec local_members(Scope :: atom(), GroupName :: term()) -> [{Pid :: pid(), Meta :: term()}].
+local_members(Scope, GroupName) ->
     do_get_members(Scope, GroupName, node()).
 
 -spec do_get_members(Scope :: atom(), GroupName :: term(), NodeParam :: atom()) -> [{Pid :: pid(), Meta :: term()}].

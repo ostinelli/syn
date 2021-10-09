@@ -28,7 +28,7 @@
 
 %% API
 -export([start_link/0]).
--export([get_node_scopes/0, add_node_to_scope/1]).
+-export([node_scopes/0, add_node_to_scope/1]).
 
 %% Supervisor callbacks
 -export([init/1]).
@@ -40,8 +40,8 @@
 start_link() ->
     supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
--spec get_node_scopes() -> [atom()].
-get_node_scopes() ->
+-spec node_scopes() -> [atom()].
+node_scopes() ->
     %% always have a default scope for all nodes
     case application:get_env(syn, custom_scopes) of
         undefined -> [default];
@@ -84,7 +84,7 @@ init([]) ->
         lists:foldl(fun(Scope, Acc) ->
             %% add to specs
             [child_spec(Scope) | Acc]
-        end, [], get_node_scopes()),
+        end, [], node_scopes()),
 
     %% return
     {ok, {{one_for_one, 10, 10}, Children}}.

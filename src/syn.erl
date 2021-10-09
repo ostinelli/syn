@@ -28,7 +28,7 @@
 %% API
 -export([start/0, stop/0]).
 %% scopes
--export([get_node_scopes/0, add_node_to_scope/1, add_node_to_scopes/1]).
+-export([node_scopes/0, add_node_to_scope/1, add_node_to_scopes/1]).
 -export([set_event_handler/1]).
 %% registry
 -export([lookup/1, lookup/2]).
@@ -38,9 +38,9 @@
 %% gen_server via interface
 -export([register_name/2, unregister_name/1, whereis_name/1, send/2]).
 %% groups
--export([get_members/1, get_members/2]).
+-export([members/1, members/2]).
 -export([is_member/2, is_member/3]).
--export([get_local_members/1, get_local_members/2]).
+-export([local_members/1, local_members/2]).
 -export([is_local_member/2, is_local_member/3]).
 -export([join/2, join/3, join/4]).
 -export([leave/2, leave/3]).
@@ -59,9 +59,9 @@ stop() ->
     application:stop(syn).
 
 %% ----- \/ scopes ---------------------------------------------------
--spec get_node_scopes() -> [atom()].
-get_node_scopes() ->
-    syn_sup:get_node_scopes().
+-spec node_scopes() -> [atom()].
+node_scopes() ->
+    syn_sup:node_scopes().
 
 -spec add_node_to_scope(Scope :: atom()) -> ok.
 add_node_to_scope(Scope) ->
@@ -147,13 +147,13 @@ send(Name, Message) ->
     end.
 
 %% ----- \/ groups ---------------------------------------------------
--spec get_members(GroupName :: term()) -> [{Pid :: pid(), Meta :: term()}].
-get_members(GroupName) ->
-    syn_groups:get_members(GroupName).
+-spec members(GroupName :: term()) -> [{Pid :: pid(), Meta :: term()}].
+members(GroupName) ->
+    syn_groups:members(GroupName).
 
--spec get_members(Scope :: atom(), GroupName :: term()) -> [{Pid :: pid(), Meta :: term()}].
-get_members(Scope, GroupName) ->
-    syn_groups:get_members(Scope, GroupName).
+-spec members(Scope :: atom(), GroupName :: term()) -> [{Pid :: pid(), Meta :: term()}].
+members(Scope, GroupName) ->
+    syn_groups:members(Scope, GroupName).
 
 -spec is_member(GroupName :: any(), Pid :: pid()) -> boolean().
 is_member(GroupName, Pid) ->
@@ -163,13 +163,13 @@ is_member(GroupName, Pid) ->
 is_member(Scope, GroupName, Pid) ->
     syn_groups:is_member(Scope, GroupName, Pid).
 
--spec get_local_members(GroupName :: term()) -> [{Pid :: pid(), Meta :: term()}].
-get_local_members(GroupName) ->
-    syn_groups:get_local_members(GroupName).
+-spec local_members(GroupName :: term()) -> [{Pid :: pid(), Meta :: term()}].
+local_members(GroupName) ->
+    syn_groups:local_members(GroupName).
 
--spec get_local_members(Scope :: atom(), GroupName :: term()) -> [{Pid :: pid(), Meta :: term()}].
-get_local_members(Scope, GroupName) ->
-    syn_groups:get_local_members(Scope, GroupName).
+-spec local_members(Scope :: atom(), GroupName :: term()) -> [{Pid :: pid(), Meta :: term()}].
+local_members(Scope, GroupName) ->
+    syn_groups:local_members(Scope, GroupName).
 
 -spec is_local_member(GroupName :: any(), Pid :: pid()) -> boolean().
 is_local_member(GroupName, Pid) ->
