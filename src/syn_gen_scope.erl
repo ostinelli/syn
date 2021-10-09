@@ -205,8 +205,8 @@ handle_info({'3.0', discover, RemoteScopePid}, #state{
     nodes_map = NodesMap
 } = State) ->
     RemoteScopeNode = node(RemoteScopePid),
-    error_logger:info_msg("SYN[~s] Received DISCOVER request from node '~s'for ~s and scope '~s'",
-        [node(), RemoteScopeNode, Handler, Scope]
+    error_logger:info_msg("SYN[~s|~s] Received DISCOVER request from node '~s'",
+        [Handler, Scope, RemoteScopeNode]
     ),
     %% send local data to remote
     {ok, LocalData} = Handler:get_local_data(State),
@@ -229,8 +229,8 @@ handle_info({'3.0', ack_sync, RemoteScopePid, Data}, #state{
     scope = Scope
 } = State) ->
     RemoteScopeNode = node(RemoteScopePid),
-    error_logger:info_msg("SYN[~s] Received ACK SYNC (~w entries) from node '~s' for ~s and scope '~s'",
-        [node(), length(Data), RemoteScopeNode, Handler, Scope]
+    error_logger:info_msg("SYN[~s|~s] Received ACK SYNC (~w entries) from node '~s'",
+        [Handler, Scope, length(Data), RemoteScopeNode]
     ),
     %% save remote data
     Handler:save_remote_data(Data, State),
@@ -259,8 +259,8 @@ handle_info({'DOWN', MRef, process, Pid, Reason}, #state{
     RemoteNode = node(Pid),
     case maps:take(RemoteNode, NodesMap) of
         {Pid, NodesMap1} ->
-            error_logger:info_msg("SYN[~s] Scope Process '~s' for ~s is DOWN on node '~s': ~p",
-                [node(), Scope, Handler, RemoteNode, Reason]
+            error_logger:info_msg("SYN[~s|~s] Scope Process is DOWN on node '~s': ~p",
+                [Handler, Scope, RemoteNode, Reason]
             ),
             Handler:purge_local_data_for_node(RemoteNode, State),
             {noreply, State#state{nodes_map = NodesMap1}};
@@ -278,8 +278,8 @@ handle_info({nodeup, RemoteNode}, #state{
     handler = Handler,
     scope = Scope
 } = State) ->
-    error_logger:info_msg("SYN[~s] Node '~s' has joined the cluster, sending discover message for ~s and scope '~s'",
-        [node(), RemoteNode, Handler, Scope]
+    error_logger:info_msg("SYN[~s|~s] Node '~s' has joined the cluster, sending discover message",
+        [Handler, Scope, RemoteNode]
     ),
     send_to_node(RemoteNode, {'3.0', discover, self()}, State),
     {noreply, State};
@@ -298,7 +298,7 @@ handle_continue(after_init, #state{
     handler = Handler,
     scope = Scope
 } = State) ->
-    error_logger:info_msg("SYN[~s] Discovering the cluster for ~s and scope '~s'", [node(), Handler, Scope]),
+    error_logger:info_msg("SYN[~s|~s] Discovering the cluster", [Handler, Scope]),
     broadcast_all_cluster({'3.0', discover, self()}, State),
     {noreply, State}.
 
@@ -306,8 +306,8 @@ handle_continue(after_init, #state{
 %% Terminate
 %% ----------------------------------------------------------------------------------------------------------
 -spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()), #state{}) -> any().
-terminate(Reason, #state{handler = Handler}) ->
-    error_logger:info_msg("SYN[~s] ~s terminating with reason: ~p", [node(), Handler, Reason]).
+terminate(Reason, #state{handler = Handler, scope = Scope}) ->
+    error_logger:info_msg("SYN[~s|~s] ~s terminating with reason: ~p", [Handler, Scope, Handler, Reason]).
 
 %% ----------------------------------------------------------------------------------------------------------
 %% Convert process state when code is changed.

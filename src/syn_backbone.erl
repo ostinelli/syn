@@ -54,7 +54,7 @@ create_tables_for_scope(Scope) ->
 save_process_name(Key, ProcessName) ->
     true = ets:insert(syn_process_names, {Key, ProcessName}).
 
--spec get_process_name(Key :: any()) ->  ProcessName :: atom().
+-spec get_process_name(Key :: any()) -> ProcessName :: atom().
 get_process_name(Key) ->
     case ets:lookup(syn_process_names, Key) of
         [{_, ProcessName}] -> ProcessName;
@@ -98,7 +98,7 @@ init([]) ->
     {stop, Reason :: any(), Reply :: any(), State :: map()} |
     {stop, Reason :: any(), State :: map()}.
 handle_call({create_tables_for_scope, Scope}, _From, State) ->
-    error_logger:info_msg("SYN[~s] Creating tables for scope '~s'", [node(), Scope]),
+    error_logger:info_msg("SYN[~s] Creating tables for scope '~s'", [?MODULE, Scope]),
     ensure_table_exists(set, syn_registry_by_name, Scope),
     ensure_table_exists(bag, syn_registry_by_pid, Scope),
     ensure_table_exists(ordered_set, syn_groups_by_name, Scope),
@@ -106,7 +106,7 @@ handle_call({create_tables_for_scope, Scope}, _From, State) ->
     {reply, ok, State};
 
 handle_call(Request, From, State) ->
-    error_logger:warning_msg("SYN[~s] Received from ~p an unknown call message: ~p", [node(), From, Request]),
+    error_logger:warning_msg("SYN[~s] Received from ~p an unknown call message: ~p", [?MODULE, From, Request]),
     {reply, undefined, State}.
 
 %% ----------------------------------------------------------------------------------------------------------
@@ -117,7 +117,7 @@ handle_call(Request, From, State) ->
     {noreply, State :: map(), Timeout :: non_neg_integer()} |
     {stop, Reason :: any(), State :: map()}.
 handle_cast(Msg, State) ->
-    error_logger:warning_msg("SYN[~s] Received an unknown cast message: ~p", [node(), Msg]),
+    error_logger:warning_msg("SYN[~s] Received an unknown cast message: ~p", [?MODULE, Msg]),
     {noreply, State}.
 
 %% ----------------------------------------------------------------------------------------------------------
@@ -128,7 +128,7 @@ handle_cast(Msg, State) ->
     {noreply, State :: map(), Timeout :: non_neg_integer()} |
     {stop, Reason :: any(), State :: map()}.
 handle_info(Info, State) ->
-    error_logger:warning_msg("SYN[~s] Received an unknown info message: ~p", [node(), Info]),
+    error_logger:warning_msg("SYN[~s] Received an unknown info message: ~p", [?MODULE, Info]),
     {noreply, State}.
 
 %% ----------------------------------------------------------------------------------------------------------
@@ -136,7 +136,7 @@ handle_info(Info, State) ->
 %% ----------------------------------------------------------------------------------------------------------
 -spec terminate(Reason :: any(), State :: map()) -> terminated.
 terminate(Reason, _State) ->
-    error_logger:info_msg("SYN[~s] Terminating with reason: ~p", [node(), Reason]),
+    error_logger:info_msg("SYN[~s] Terminating with reason: ~p", [?MODULE, Reason]),
     %% return
     terminated.
 

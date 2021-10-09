@@ -303,8 +303,8 @@ handle_call({leave_on_owner, RequesterNode, GroupName, Pid}, _From, #state{
             {reply, {ok, {Meta, TableByPid}}, State}
     end;
 
-handle_call(Request, From, State) ->
-    error_logger:warning_msg("SYN[~s] Received from ~p an unknown call message: ~p", [node(), From, Request]),
+handle_call(Request, From, #state{scope = Scope} = State) ->
+    error_logger:warning_msg("SYN[~s|~s] Received from ~p an unknown call message: ~p", [?MODULE, Scope, From, Request]),
     {reply, undefined, State}.
 
 %% ----------------------------------------------------------------------------------------------------------
@@ -338,8 +338,8 @@ handle_info({'DOWN', _MRef, process, Pid, Reason}, #state{
     case find_groups_entries_by_pid(Pid, TableByPid) of
         [] ->
             error_logger:warning_msg(
-                "SYN[~s] Received a DOWN message from an unknown process ~p with reason: ~p",
-                [node(), Pid, Reason]
+                "SYN[~s|~s] Received a DOWN message from an unknown process ~p with reason: ~p",
+                [?MODULE, Scope, Pid, Reason]
             );
 
         Entries ->
@@ -355,8 +355,8 @@ handle_info({'DOWN', _MRef, process, Pid, Reason}, #state{
     %% return
     {noreply, State};
 
-handle_info(Info, State) ->
-    error_logger:warning_msg("SYN[~s] Received an unknown info message: ~p", [node(), Info]),
+handle_info(Info, #state{scope = Scope} = State) ->
+    error_logger:warning_msg("SYN[~s|~s] Received an unknown info message: ~p", [?MODULE, Scope, Info]),
     {noreply, State}.
 
 %% ----------------------------------------------------------------------------------------------------------
