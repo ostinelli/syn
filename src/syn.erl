@@ -39,7 +39,9 @@
 -export([register_name/2, unregister_name/1, whereis_name/1, send/2]).
 %% groups
 -export([get_members/1, get_members/2]).
+-export([is_member/2, is_member/3]).
 -export([get_local_members/1, get_local_members/2]).
+-export([is_local_member/2, is_local_member/3]).
 -export([join/2, join/3, join/4]).
 -export([leave/2, leave/3]).
 -export([groups_count/1, groups_count/2]).
@@ -153,6 +155,14 @@ get_members(GroupName) ->
 get_members(Scope, GroupName) ->
     syn_groups:get_members(Scope, GroupName).
 
+-spec is_member(GroupName :: any(), Pid :: pid()) -> boolean().
+is_member(GroupName, Pid) ->
+    syn_groups:is_member(GroupName, Pid).
+
+-spec is_member(Scope :: atom(), GroupName :: any(), Pid :: pid()) -> boolean().
+is_member(Scope, GroupName, Pid) ->
+    syn_groups:is_member(Scope, GroupName, Pid).
+
 -spec get_local_members(GroupName :: term()) -> [{Pid :: pid(), Meta :: term()}].
 get_local_members(GroupName) ->
     syn_groups:get_local_members(GroupName).
@@ -160,6 +170,14 @@ get_local_members(GroupName) ->
 -spec get_local_members(Scope :: atom(), GroupName :: term()) -> [{Pid :: pid(), Meta :: term()}].
 get_local_members(Scope, GroupName) ->
     syn_groups:get_local_members(Scope, GroupName).
+
+-spec is_local_member(GroupName :: any(), Pid :: pid()) -> boolean().
+is_local_member(GroupName, Pid) ->
+    syn_groups:is_local_member(GroupName, Pid).
+
+-spec is_local_member(Scope :: atom(), GroupName :: any(), Pid :: pid()) -> boolean().
+is_local_member(Scope, GroupName, Pid) ->
+    syn_groups:is_local_member(Scope, GroupName, Pid).
 
 -spec join(GroupName :: any(), Pid :: pid()) -> ok | {error, Reason :: any()}.
 join(GroupName, Pid) ->

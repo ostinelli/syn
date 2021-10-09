@@ -365,16 +365,54 @@ three_nodes_join_leave_and_monitor_default_scope(Config) ->
     [] = syn:get_members({group, "one"}),
     [] = rpc:call(SlaveNode1, syn, get_members, [{group, "one"}]),
     [] = rpc:call(SlaveNode2, syn, get_members, [{group, "one"}]),
+    false = syn:is_member({group, "one"}, Pid),
+    false = syn:is_member({group, "one"}, PidWithMeta),
+    false = syn:is_member({group, "one"}, PidRemoteOn1),
+    false = rpc:call(SlaveNode1, syn, is_member, [{group, "one"}, Pid]),
+    false = rpc:call(SlaveNode1, syn, is_member, [{group, "one"}, PidWithMeta]),
+    false = rpc:call(SlaveNode1, syn, is_member, [{group, "one"}, PidRemoteOn1]),
+    false = rpc:call(SlaveNode2, syn, is_member, [{group, "one"}, Pid]),
+    false = rpc:call(SlaveNode2, syn, is_member, [{group, "one"}, PidWithMeta]),
+    false = rpc:call(SlaveNode2, syn, is_member, [{group, "one"}, PidRemoteOn1]),
+
     [] = syn:get_members({group, "two"}),
     [] = rpc:call(SlaveNode1, syn, get_members, [{group, "two"}]),
     [] = rpc:call(SlaveNode2, syn, get_members, [{group, "two"}]),
+    false = syn:is_member({group, "two"}, Pid),
+    false = syn:is_member({group, "two"}, PidWithMeta),
+    false = syn:is_member({group, "two"}, PidRemoteOn1),
+    false = rpc:call(SlaveNode1, syn, is_member, [{group, "two"}, Pid]),
+    false = rpc:call(SlaveNode1, syn, is_member, [{group, "two"}, PidWithMeta]),
+    false = rpc:call(SlaveNode1, syn, is_member, [{group, "two"}, PidRemoteOn1]),
+    false = rpc:call(SlaveNode2, syn, is_member, [{group, "two"}, Pid]),
+    false = rpc:call(SlaveNode2, syn, is_member, [{group, "two"}, PidWithMeta]),
+    false = rpc:call(SlaveNode2, syn, is_member, [{group, "two"}, PidRemoteOn1]),
 
     [] = syn:get_local_members({group, "one"}),
     [] = rpc:call(SlaveNode1, syn, get_local_members, [{group, "one"}]),
     [] = rpc:call(SlaveNode2, syn, get_local_members, [{group, "one"}]),
+    false = syn:is_local_member({group, "one"}, Pid),
+    false = syn:is_local_member({group, "one"}, PidWithMeta),
+    false = syn:is_local_member({group, "one"}, PidRemoteOn1),
+    false = rpc:call(SlaveNode1, syn, is_local_member, [{group, "one"}, Pid]),
+    false = rpc:call(SlaveNode1, syn, is_local_member, [{group, "one"}, PidWithMeta]),
+    false = rpc:call(SlaveNode1, syn, is_local_member, [{group, "one"}, PidRemoteOn1]),
+    false = rpc:call(SlaveNode2, syn, is_local_member, [{group, "one"}, Pid]),
+    false = rpc:call(SlaveNode2, syn, is_local_member, [{group, "one"}, PidWithMeta]),
+    false = rpc:call(SlaveNode2, syn, is_local_member, [{group, "one"}, PidRemoteOn1]),
+
     [] = syn:get_local_members({group, "two"}),
     [] = rpc:call(SlaveNode1, syn, get_local_members, [{group, "two"}]),
     [] = rpc:call(SlaveNode2, syn, get_local_members, [{group, "two"}]),
+    false = syn:is_local_member({group, "two"}, Pid),
+    false = syn:is_local_member({group, "two"}, PidWithMeta),
+    false = syn:is_local_member({group, "two"}, PidRemoteOn1),
+    false = rpc:call(SlaveNode1, syn, is_local_member, [{group, "two"}, Pid]),
+    false = rpc:call(SlaveNode1, syn, is_local_member, [{group, "two"}, PidWithMeta]),
+    false = rpc:call(SlaveNode1, syn, is_local_member, [{group, "two"}, PidRemoteOn1]),
+    false = rpc:call(SlaveNode2, syn, is_local_member, [{group, "two"}, Pid]),
+    false = rpc:call(SlaveNode2, syn, is_local_member, [{group, "two"}, PidWithMeta]),
+    false = rpc:call(SlaveNode2, syn, is_local_member, [{group, "two"}, PidRemoteOn1]),
 
     0 = syn:groups_count(default),
     0 = syn:groups_count(default, node()),
@@ -405,6 +443,15 @@ three_nodes_join_leave_and_monitor_default_scope(Config) ->
         lists:sort([{Pid, undefined}, {PidWithMeta, <<"with meta">>}, {PidRemoteOn1, undefined}]),
         fun() -> lists:sort(rpc:call(SlaveNode2, syn, get_members, [{group, "one"}])) end
     ),
+    true = syn:is_member({group, "one"}, Pid),
+    true = syn:is_member({group, "one"}, PidWithMeta),
+    true = syn:is_member({group, "one"}, PidRemoteOn1),
+    true = rpc:call(SlaveNode1, syn, is_member, [{group, "one"}, Pid]),
+    true = rpc:call(SlaveNode1, syn, is_member, [{group, "one"}, PidWithMeta]),
+    true = rpc:call(SlaveNode1, syn, is_member, [{group, "one"}, PidRemoteOn1]),
+    true = rpc:call(SlaveNode2, syn, is_member, [{group, "one"}, Pid]),
+    true = rpc:call(SlaveNode2, syn, is_member, [{group, "one"}, PidWithMeta]),
+    true = rpc:call(SlaveNode2, syn, is_member, [{group, "one"}, PidRemoteOn1]),
 
     syn_test_suite_helper:assert_wait(
         lists:sort([{Pid, undefined}, {PidWithMeta, <<"with meta">>}]),
@@ -418,6 +465,15 @@ three_nodes_join_leave_and_monitor_default_scope(Config) ->
         [],
         fun() -> lists:sort(rpc:call(SlaveNode2, syn, get_local_members, [{group, "one"}])) end
     ),
+    true = syn:is_local_member({group, "one"}, Pid),
+    true = syn:is_local_member({group, "one"}, PidWithMeta),
+    false = syn:is_local_member({group, "one"}, PidRemoteOn1),
+    false = rpc:call(SlaveNode1, syn, is_local_member, [{group, "one"}, Pid]),
+    false = rpc:call(SlaveNode1, syn, is_local_member, [{group, "one"}, PidWithMeta]),
+    true = rpc:call(SlaveNode1, syn, is_local_member, [{group, "one"}, PidRemoteOn1]),
+    false = rpc:call(SlaveNode2, syn, is_local_member, [{group, "one"}, Pid]),
+    false = rpc:call(SlaveNode2, syn, is_local_member, [{group, "one"}, PidWithMeta]),
+    false = rpc:call(SlaveNode2, syn, is_local_member, [{group, "one"}, PidRemoteOn1]),
 
     syn_test_suite_helper:assert_wait(
         lists:sort([{Pid, undefined}, {PidWithMeta, "with-meta-2"}]),
@@ -431,6 +487,15 @@ three_nodes_join_leave_and_monitor_default_scope(Config) ->
         lists:sort([{Pid, undefined}, {PidWithMeta, "with-meta-2"}]),
         fun() -> lists:sort(rpc:call(SlaveNode2, syn, get_members, [{group, "two"}])) end
     ),
+    true = syn:is_member({group, "two"}, Pid),
+    true = syn:is_member({group, "two"}, PidWithMeta),
+    false = syn:is_member({group, "two"}, PidRemoteOn1),
+    true = rpc:call(SlaveNode1, syn, is_member, [{group, "two"}, Pid]),
+    true = rpc:call(SlaveNode1, syn, is_member, [{group, "two"}, PidWithMeta]),
+    false = rpc:call(SlaveNode1, syn, is_member, [{group, "two"}, PidRemoteOn1]),
+    true = rpc:call(SlaveNode2, syn, is_member, [{group, "two"}, Pid]),
+    true = rpc:call(SlaveNode2, syn, is_member, [{group, "two"}, PidWithMeta]),
+    false = rpc:call(SlaveNode2, syn, is_member, [{group, "two"}, PidRemoteOn1]),
 
     syn_test_suite_helper:assert_wait(
         lists:sort([{Pid, undefined}, {PidWithMeta, "with-meta-2"}]),
@@ -444,6 +509,15 @@ three_nodes_join_leave_and_monitor_default_scope(Config) ->
         [],
         fun() -> lists:sort(rpc:call(SlaveNode2, syn, get_local_members, [{group, "two"}])) end
     ),
+    true = syn:is_local_member({group, "two"}, Pid),
+    true = syn:is_local_member({group, "two"}, PidWithMeta),
+    false = syn:is_local_member({group, "two"}, PidRemoteOn1),
+    false = rpc:call(SlaveNode1, syn, is_local_member, [{group, "two"}, Pid]),
+    false = rpc:call(SlaveNode1, syn, is_local_member, [{group, "two"}, PidWithMeta]),
+    false = rpc:call(SlaveNode1, syn, is_local_member, [{group, "two"}, PidRemoteOn1]),
+    false = rpc:call(SlaveNode2, syn, is_local_member, [{group, "two"}, Pid]),
+    false = rpc:call(SlaveNode2, syn, is_local_member, [{group, "two"}, PidWithMeta]),
+    false = rpc:call(SlaveNode2, syn, is_local_member, [{group, "two"}, PidRemoteOn1]),
 
     2 = syn:groups_count(default),
     2 = syn:groups_count(default, node()),
@@ -535,6 +609,15 @@ three_nodes_join_leave_and_monitor_default_scope(Config) ->
         [],
         fun() -> lists:sort(rpc:call(SlaveNode2, syn, get_members, [{group, "one"}])) end
     ),
+    false = syn:is_member({group, "one"}, Pid),
+    false = syn:is_member({group, "one"}, PidWithMeta),
+    false = syn:is_member({group, "one"}, PidRemoteOn1),
+    false = rpc:call(SlaveNode1, syn, is_member, [{group, "one"}, Pid]),
+    false = rpc:call(SlaveNode1, syn, is_member, [{group, "one"}, PidWithMeta]),
+    false = rpc:call(SlaveNode1, syn, is_member, [{group, "one"}, PidRemoteOn1]),
+    false = rpc:call(SlaveNode2, syn, is_member, [{group, "one"}, Pid]),
+    false = rpc:call(SlaveNode2, syn, is_member, [{group, "one"}, PidWithMeta]),
+    false = rpc:call(SlaveNode2, syn, is_member, [{group, "one"}, PidRemoteOn1]),
 
     syn_test_suite_helper:assert_wait(
         [],
@@ -548,6 +631,15 @@ three_nodes_join_leave_and_monitor_default_scope(Config) ->
         [],
         fun() -> lists:sort(rpc:call(SlaveNode2, syn, get_local_members, [{group, "one"}])) end
     ),
+    false = syn:is_local_member({group, "one"}, Pid),
+    false = syn:is_local_member({group, "one"}, PidWithMeta),
+    false = syn:is_local_member({group, "one"}, PidRemoteOn1),
+    false = rpc:call(SlaveNode1, syn, is_local_member, [{group, "one"}, Pid]),
+    false = rpc:call(SlaveNode1, syn, is_local_member, [{group, "one"}, PidWithMeta]),
+    false = rpc:call(SlaveNode1, syn, is_local_member, [{group, "one"}, PidRemoteOn1]),
+    false = rpc:call(SlaveNode2, syn, is_local_member, [{group, "one"}, Pid]),
+    false = rpc:call(SlaveNode2, syn, is_local_member, [{group, "one"}, PidWithMeta]),
+    false = rpc:call(SlaveNode2, syn, is_local_member, [{group, "one"}, PidRemoteOn1]),
 
     syn_test_suite_helper:assert_wait(
         [{PidWithMeta, "with-meta-2"}],
@@ -561,6 +653,15 @@ three_nodes_join_leave_and_monitor_default_scope(Config) ->
         [{PidWithMeta, "with-meta-2"}],
         fun() -> lists:sort(rpc:call(SlaveNode2, syn, get_members, [{group, "two"}])) end
     ),
+    false = syn:is_member({group, "two"}, Pid),
+    true = syn:is_member({group, "two"}, PidWithMeta),
+    false = syn:is_member({group, "two"}, PidRemoteOn1),
+    false = rpc:call(SlaveNode1, syn, is_member, [{group, "two"}, Pid]),
+    true = rpc:call(SlaveNode1, syn, is_member, [{group, "two"}, PidWithMeta]),
+    false = rpc:call(SlaveNode1, syn, is_member, [{group, "two"}, PidRemoteOn1]),
+    false = rpc:call(SlaveNode2, syn, is_member, [{group, "two"}, Pid]),
+    true = rpc:call(SlaveNode2, syn, is_member, [{group, "two"}, PidWithMeta]),
+    false = rpc:call(SlaveNode2, syn, is_member, [{group, "two"}, PidRemoteOn1]),
 
     syn_test_suite_helper:assert_wait(
         [{PidWithMeta, "with-meta-2"}],
@@ -574,6 +675,15 @@ three_nodes_join_leave_and_monitor_default_scope(Config) ->
         [],
         fun() -> lists:sort(rpc:call(SlaveNode2, syn, get_local_members, [{group, "two"}])) end
     ),
+    false = syn:is_local_member({group, "two"}, Pid),
+    true = syn:is_local_member({group, "two"}, PidWithMeta),
+    false = syn:is_local_member({group, "two"}, PidRemoteOn1),
+    false = rpc:call(SlaveNode1, syn, is_local_member, [{group, "two"}, Pid]),
+    false = rpc:call(SlaveNode1, syn, is_local_member, [{group, "two"}, PidWithMeta]),
+    false = rpc:call(SlaveNode1, syn, is_local_member, [{group, "two"}, PidRemoteOn1]),
+    false = rpc:call(SlaveNode2, syn, is_local_member, [{group, "two"}, Pid]),
+    false = rpc:call(SlaveNode2, syn, is_local_member, [{group, "two"}, PidWithMeta]),
+    false = rpc:call(SlaveNode2, syn, is_local_member, [{group, "two"}, PidRemoteOn1]),
 
     1 = syn:groups_count(default),
     1 = syn:groups_count(default, node()),
@@ -608,10 +718,24 @@ three_nodes_join_leave_and_monitor_custom_scope(Config) ->
     [] = syn:get_members(custom_scope_ab, {group, "one"}),
     [] = rpc:call(SlaveNode1, syn, get_members, [custom_scope_ab, {group, "one"}]),
     {badrpc, {'EXIT', {{invalid_scope, custom_scope_ab}, _}}} = catch rpc:call(SlaveNode2, syn, get_members, [custom_scope_ab, {group, "one"}]),
+    false = syn:is_member(custom_scope_ab, {group, "one"}, Pid),
+    false = syn:is_member(custom_scope_ab, {group, "one"}, PidWithMeta),
+    false = syn:is_member(custom_scope_ab, {group, "one"}, PidRemoteOn1),
+    false = rpc:call(SlaveNode1, syn, is_member, [custom_scope_ab, {group, "one"}, Pid]),
+    false = rpc:call(SlaveNode1, syn, is_member, [custom_scope_ab, {group, "one"}, PidWithMeta]),
+    false = rpc:call(SlaveNode1, syn, is_member, [custom_scope_ab, {group, "one"}, PidRemoteOn1]),
+    {badrpc, {'EXIT', {{invalid_scope, custom_scope_ab}, _}}} = catch rpc:call(SlaveNode2, syn, is_member, [custom_scope_ab, {group, "one"}, Pid]),
 
     [] = syn:get_local_members(custom_scope_ab, {group, "one"}),
     [] = rpc:call(SlaveNode1, syn, get_local_members, [custom_scope_ab, {group, "one"}]),
     {badrpc, {'EXIT', {{invalid_scope, custom_scope_ab}, _}}} = catch rpc:call(SlaveNode2, syn, get_local_members, [custom_scope_ab, {group, "one"}]),
+    false = syn:is_local_member(custom_scope_ab, {group, "one"}, Pid),
+    false = syn:is_local_member(custom_scope_ab, {group, "one"}, PidWithMeta),
+    false = syn:is_local_member(custom_scope_ab, {group, "one"}, PidRemoteOn1),
+    false = rpc:call(SlaveNode1, syn, is_local_member, [custom_scope_ab, {group, "one"}, Pid]),
+    false = rpc:call(SlaveNode1, syn, is_local_member, [custom_scope_ab, {group, "one"}, PidWithMeta]),
+    false = rpc:call(SlaveNode1, syn, is_local_member, [custom_scope_ab, {group, "one"}, PidRemoteOn1]),
+    {badrpc, {'EXIT', {{invalid_scope, custom_scope_ab}, _}}} = catch rpc:call(SlaveNode2, syn, is_local_member, [custom_scope_ab, {group, "one"}, Pid]),
 
     {'EXIT', {{invalid_scope, custom_scope_bc}, _}} = catch syn:get_members(custom_scope_bc, {group, "one"}),
     [] = rpc:call(SlaveNode1, syn, get_members, [custom_scope_bc, {group, "one"}]),
@@ -624,10 +748,24 @@ three_nodes_join_leave_and_monitor_custom_scope(Config) ->
     [] = syn:get_members(custom_scope_ab, {group, "two"}),
     [] = rpc:call(SlaveNode1, syn, get_members, [custom_scope_ab, {group, "two"}]),
     {badrpc, {'EXIT', {{invalid_scope, custom_scope_ab}, _}}} = catch rpc:call(SlaveNode2, syn, get_members, [custom_scope_ab, {group, "two"}]),
+    false = syn:is_member(custom_scope_ab, {group, "two"}, Pid),
+    false = syn:is_member(custom_scope_ab, {group, "two"}, PidWithMeta),
+    false = syn:is_member(custom_scope_ab, {group, "two"}, PidRemoteOn1),
+    false = rpc:call(SlaveNode1, syn, is_member, [custom_scope_ab, {group, "two"}, Pid]),
+    false = rpc:call(SlaveNode1, syn, is_member, [custom_scope_ab, {group, "two"}, PidWithMeta]),
+    false = rpc:call(SlaveNode1, syn, is_member, [custom_scope_ab, {group, "two"}, PidRemoteOn1]),
+    {badrpc, {'EXIT', {{invalid_scope, custom_scope_ab}, _}}} = catch rpc:call(SlaveNode2, syn, is_member, [custom_scope_ab, {group, "two"}, Pid]),
 
     [] = syn:get_local_members(custom_scope_ab, {group, "two"}),
     [] = rpc:call(SlaveNode1, syn, get_local_members, [custom_scope_ab, {group, "two"}]),
     {badrpc, {'EXIT', {{invalid_scope, custom_scope_ab}, _}}} = catch rpc:call(SlaveNode2, syn, get_local_members, [custom_scope_ab, {group, "two"}]),
+    false = syn:is_local_member(custom_scope_ab, {group, "two"}, Pid),
+    false = syn:is_local_member(custom_scope_ab, {group, "two"}, PidWithMeta),
+    false = syn:is_local_member(custom_scope_ab, {group, "two"}, PidRemoteOn1),
+    false = rpc:call(SlaveNode1, syn, is_local_member, [custom_scope_ab, {group, "two"}, Pid]),
+    false = rpc:call(SlaveNode1, syn, is_local_member, [custom_scope_ab, {group, "two"}, PidWithMeta]),
+    false = rpc:call(SlaveNode1, syn, is_local_member, [custom_scope_ab, {group, "two"}, PidRemoteOn1]),
+    {badrpc, {'EXIT', {{invalid_scope, custom_scope_ab}, _}}} = catch rpc:call(SlaveNode2, syn, is_local_member, [custom_scope_ab, {group, "two"}, Pid]),
 
     {'EXIT', {{invalid_scope, custom_scope_bc}, _}} = catch syn:get_members(custom_scope_bc, {group, "two"}),
     [] = rpc:call(SlaveNode1, syn, get_members, [custom_scope_bc, {group, "two"}]),
@@ -659,6 +797,13 @@ three_nodes_join_leave_and_monitor_custom_scope(Config) ->
         fun() -> lists:sort(rpc:call(SlaveNode1, syn, get_members, [custom_scope_ab, {group, "one"}])) end
     ),
     {badrpc, {'EXIT', {{invalid_scope, custom_scope_ab}, _}}} = catch rpc:call(SlaveNode2, syn, get_members, [custom_scope_ab, {group, "one"}]),
+    true = syn:is_member(custom_scope_ab, {group, "one"}, Pid),
+    true = syn:is_member(custom_scope_ab, {group, "one"}, PidWithMeta),
+    false = syn:is_member(custom_scope_ab, {group, "one"}, PidRemoteOn1),
+    true = rpc:call(SlaveNode1, syn, is_member, [custom_scope_ab, {group, "one"}, Pid]),
+    true = rpc:call(SlaveNode1, syn, is_member, [custom_scope_ab, {group, "one"}, PidWithMeta]),
+    false = rpc:call(SlaveNode1, syn, is_member, [custom_scope_ab, {group, "one"}, PidRemoteOn1]),
+    {badrpc, {'EXIT', {{invalid_scope, custom_scope_ab}, _}}} = catch rpc:call(SlaveNode2, syn, is_member, [custom_scope_ab, {group, "one"}, Pid]),
 
     syn_test_suite_helper:assert_wait(
         lists:sort([{Pid, undefined}, {PidWithMeta, <<"with meta">>}]),
@@ -669,6 +814,13 @@ three_nodes_join_leave_and_monitor_custom_scope(Config) ->
         fun() -> lists:sort(rpc:call(SlaveNode1, syn, get_local_members, [custom_scope_ab, {group, "one"}])) end
     ),
     {badrpc, {'EXIT', {{invalid_scope, custom_scope_ab}, _}}} = catch rpc:call(SlaveNode2, syn, get_local_members, [custom_scope_ab, {group, "one"}]),
+    true = syn:is_local_member(custom_scope_ab, {group, "one"}, Pid),
+    true = syn:is_local_member(custom_scope_ab, {group, "one"}, PidWithMeta),
+    false = syn:is_local_member(custom_scope_ab, {group, "one"}, PidRemoteOn1),
+    false = rpc:call(SlaveNode1, syn, is_local_member, [custom_scope_ab, {group, "one"}, Pid]),
+    false = rpc:call(SlaveNode1, syn, is_local_member, [custom_scope_ab, {group, "one"}, PidWithMeta]),
+    false = rpc:call(SlaveNode1, syn, is_local_member, [custom_scope_ab, {group, "one"}, PidRemoteOn1]),
+    {badrpc, {'EXIT', {{invalid_scope, custom_scope_ab}, _}}} = catch rpc:call(SlaveNode2, syn, is_local_member, [custom_scope_ab, {group, "one"}, Pid]),
 
     syn_test_suite_helper:assert_wait(
         lists:sort([{Pid, undefined}, {PidWithMeta, "with-meta-2"}]),
@@ -679,6 +831,13 @@ three_nodes_join_leave_and_monitor_custom_scope(Config) ->
         fun() -> lists:sort(rpc:call(SlaveNode1, syn, get_members, [custom_scope_ab, {group, "two"}])) end
     ),
     {badrpc, {'EXIT', {{invalid_scope, custom_scope_ab}, _}}} = catch rpc:call(SlaveNode2, syn, get_members, [custom_scope_ab, {group, "two"}]),
+    true = syn:is_member(custom_scope_ab, {group, "two"}, Pid),
+    true = syn:is_member(custom_scope_ab, {group, "two"}, PidWithMeta),
+    false = syn:is_member(custom_scope_ab, {group, "two"}, PidRemoteOn1),
+    true = rpc:call(SlaveNode1, syn, is_member, [custom_scope_ab, {group, "two"}, Pid]),
+    true = rpc:call(SlaveNode1, syn, is_member, [custom_scope_ab, {group, "two"}, PidWithMeta]),
+    false = rpc:call(SlaveNode1, syn, is_member, [custom_scope_ab, {group, "two"}, PidRemoteOn1]),
+    {badrpc, {'EXIT', {{invalid_scope, custom_scope_ab}, _}}} = catch rpc:call(SlaveNode2, syn, is_member, [custom_scope_ab, {group, "two"}, Pid]),
 
     syn_test_suite_helper:assert_wait(
         lists:sort([{Pid, undefined}, {PidWithMeta, "with-meta-2"}]),
@@ -689,6 +848,13 @@ three_nodes_join_leave_and_monitor_custom_scope(Config) ->
         fun() -> lists:sort(rpc:call(SlaveNode1, syn, get_local_members, [custom_scope_ab, {group, "two"}])) end
     ),
     {badrpc, {'EXIT', {{invalid_scope, custom_scope_ab}, _}}} = catch rpc:call(SlaveNode2, syn, get_local_members, [custom_scope_ab, {group, "two"}]),
+    true = syn:is_local_member(custom_scope_ab, {group, "two"}, Pid),
+    true = syn:is_local_member(custom_scope_ab, {group, "two"}, PidWithMeta),
+    false = syn:is_local_member(custom_scope_ab, {group, "two"}, PidRemoteOn1),
+    false = rpc:call(SlaveNode1, syn, is_local_member, [custom_scope_ab, {group, "two"}, Pid]),
+    false = rpc:call(SlaveNode1, syn, is_local_member, [custom_scope_ab, {group, "two"}, PidWithMeta]),
+    false = rpc:call(SlaveNode1, syn, is_local_member, [custom_scope_ab, {group, "two"}, PidRemoteOn1]),
+    {badrpc, {'EXIT', {{invalid_scope, custom_scope_ab}, _}}} = catch rpc:call(SlaveNode2, syn, is_local_member, [custom_scope_ab, {group, "two"}, Pid]),
 
     {'EXIT', {{invalid_scope, custom_scope_bc}, _}} = catch syn:get_members(custom_scope_bc, {group, "two"}),
     syn_test_suite_helper:assert_wait(
@@ -845,6 +1011,13 @@ three_nodes_join_leave_and_monitor_custom_scope(Config) ->
         fun() -> lists:sort(rpc:call(SlaveNode1, syn, get_members, [custom_scope_ab, {group, "one"}])) end
     ),
     {badrpc, {'EXIT', {{invalid_scope, custom_scope_ab}, _}}} = catch rpc:call(SlaveNode2, syn, get_members, [custom_scope_ab, {group, "one"}]),
+    false = syn:is_member(custom_scope_ab, {group, "one"}, Pid),
+    false = syn:is_member(custom_scope_ab, {group, "one"}, PidWithMeta),
+    false = syn:is_member(custom_scope_ab, {group, "one"}, PidRemoteOn1),
+    false = rpc:call(SlaveNode1, syn, is_member, [custom_scope_ab, {group, "one"}, Pid]),
+    false = rpc:call(SlaveNode1, syn, is_member, [custom_scope_ab, {group, "one"}, PidWithMeta]),
+    false = rpc:call(SlaveNode1, syn, is_member, [custom_scope_ab, {group, "one"}, PidRemoteOn1]),
+    {badrpc, {'EXIT', {{invalid_scope, custom_scope_ab}, _}}} = catch rpc:call(SlaveNode2, syn, is_member, [custom_scope_ab, {group, "one"}, Pid]),
 
     syn_test_suite_helper:assert_wait(
         [],
@@ -855,6 +1028,13 @@ three_nodes_join_leave_and_monitor_custom_scope(Config) ->
         fun() -> lists:sort(rpc:call(SlaveNode1, syn, get_local_members, [custom_scope_ab, {group, "one"}])) end
     ),
     {badrpc, {'EXIT', {{invalid_scope, custom_scope_ab}, _}}} = catch rpc:call(SlaveNode2, syn, get_local_members, [custom_scope_ab, {group, "one"}]),
+    false = syn:is_local_member(custom_scope_ab, {group, "one"}, Pid),
+    false = syn:is_local_member(custom_scope_ab, {group, "one"}, PidWithMeta),
+    false = syn:is_local_member(custom_scope_ab, {group, "one"}, PidRemoteOn1),
+    false = rpc:call(SlaveNode1, syn, is_local_member, [custom_scope_ab, {group, "one"}, Pid]),
+    false = rpc:call(SlaveNode1, syn, is_local_member, [custom_scope_ab, {group, "one"}, PidWithMeta]),
+    false = rpc:call(SlaveNode1, syn, is_local_member, [custom_scope_ab, {group, "one"}, PidRemoteOn1]),
+    {badrpc, {'EXIT', {{invalid_scope, custom_scope_ab}, _}}} = catch rpc:call(SlaveNode2, syn, is_local_member, [custom_scope_ab, {group, "one"}, Pid]),
 
     syn_test_suite_helper:assert_wait(
         [{PidWithMeta, "with-meta-2"}],
@@ -865,6 +1045,13 @@ three_nodes_join_leave_and_monitor_custom_scope(Config) ->
         fun() -> lists:sort(rpc:call(SlaveNode1, syn, get_members, [custom_scope_ab, {group, "two"}])) end
     ),
     {badrpc, {'EXIT', {{invalid_scope, custom_scope_ab}, _}}} = catch rpc:call(SlaveNode2, syn, get_members, [custom_scope_ab, {group, "two"}]),
+    false = syn:is_member(custom_scope_ab, {group, "two"}, Pid),
+    true = syn:is_member(custom_scope_ab, {group, "two"}, PidWithMeta),
+    false = syn:is_member(custom_scope_ab, {group, "two"}, PidRemoteOn1),
+    false = rpc:call(SlaveNode1, syn, is_member, [custom_scope_ab, {group, "two"}, Pid]),
+    true = rpc:call(SlaveNode1, syn, is_member, [custom_scope_ab, {group, "two"}, PidWithMeta]),
+    false = rpc:call(SlaveNode1, syn, is_member, [custom_scope_ab, {group, "two"}, PidRemoteOn1]),
+    {badrpc, {'EXIT', {{invalid_scope, custom_scope_ab}, _}}} = catch rpc:call(SlaveNode2, syn, is_member, [custom_scope_ab, {group, "two"}, Pid]),
 
     syn_test_suite_helper:assert_wait(
         [{PidWithMeta, "with-meta-2"}],
@@ -875,6 +1062,13 @@ three_nodes_join_leave_and_monitor_custom_scope(Config) ->
         fun() -> lists:sort(rpc:call(SlaveNode1, syn, get_local_members, [custom_scope_ab, {group, "two"}])) end
     ),
     {badrpc, {'EXIT', {{invalid_scope, custom_scope_ab}, _}}} = catch rpc:call(SlaveNode2, syn, get_local_members, [custom_scope_ab, {group, "two"}]),
+    false = syn:is_local_member(custom_scope_ab, {group, "two"}, Pid),
+    true = syn:is_local_member(custom_scope_ab, {group, "two"}, PidWithMeta),
+    false = syn:is_local_member(custom_scope_ab, {group, "two"}, PidRemoteOn1),
+    false = rpc:call(SlaveNode1, syn, is_local_member, [custom_scope_ab, {group, "two"}, Pid]),
+    false = rpc:call(SlaveNode1, syn, is_local_member, [custom_scope_ab, {group, "two"}, PidWithMeta]),
+    false = rpc:call(SlaveNode1, syn, is_local_member, [custom_scope_ab, {group, "two"}, PidRemoteOn1]),
+    {badrpc, {'EXIT', {{invalid_scope, custom_scope_ab}, _}}} = catch rpc:call(SlaveNode2, syn, is_local_member, [custom_scope_ab, {group, "two"}, Pid]),
 
     {'EXIT', {{invalid_scope, custom_scope_bc}, _}} = catch syn:get_members(custom_scope_bc, {group, "two"}),
     syn_test_suite_helper:assert_wait(

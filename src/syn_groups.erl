@@ -32,7 +32,9 @@
 -export([join/2, join/3, join/4]).
 -export([leave/2, leave/3]).
 -export([get_members/1, get_members/2]).
+-export([is_member/2, is_member/3]).
 -export([get_local_members/1, get_local_members/2]).
+-export([is_local_member/2, is_local_member/3]).
 -export([count/1, count/2]).
 
 %% syn_gen_scope callbacks
@@ -68,6 +70,23 @@ get_members(GroupName) ->
 get_members(Scope, GroupName) ->
     do_get_members(Scope, GroupName, '_').
 
+-spec is_member(GroupName :: any(), Pid :: pid()) -> boolean().
+is_member(GroupName, Pid) ->
+    is_member(default, GroupName, Pid).
+
+-spec is_member(Scope :: atom(), GroupName :: any(), Pid :: pid()) -> boolean().
+is_member(Scope, GroupName, Pid) ->
+    case syn_backbone:get_table_name(syn_groups_by_name, Scope) of
+        undefined ->
+            error({invalid_scope, Scope});
+
+        TableByName ->
+            case find_groups_entry_by_name_and_pid(GroupName, Pid, TableByName) of
+                undefined -> false;
+                _ -> true
+            end
+    end.
+
 -spec get_local_members(GroupName :: term()) -> [{Pid :: pid(), Meta :: term()}].
 get_local_members(GroupName) ->
     get_local_members(default, GroupName).
@@ -88,6 +107,23 @@ do_get_members(Scope, GroupName, NodeParam) ->
                 [],
                 [{{'$2', '$3'}}]
             }])
+    end.
+
+-spec is_local_member(GroupName :: any(), Pid :: pid()) -> boolean().
+is_local_member(GroupName, Pid) ->
+    is_local_member(default, GroupName, Pid).
+
+-spec is_local_member(Scope :: atom(), GroupName :: any(), Pid :: pid()) -> boolean().
+is_local_member(Scope, GroupName, Pid) ->
+    case syn_backbone:get_table_name(syn_groups_by_name, Scope) of
+        undefined ->
+            error({invalid_scope, Scope});
+
+        TableByName ->
+            case find_groups_entry_by_name_and_pid(GroupName, Pid, TableByName) of
+                {{_, _}, _, _, _, Node} when Node =:= node() -> true;
+                _ -> false
+            end
     end.
 
 -spec join(GroupName :: term(), Pid :: pid()) -> ok.

@@ -63,7 +63,7 @@
 %% -------------------------------------------------------------------
 all() ->
     [
-        {group, one_process_registration},
+        {group, one_node_process_registration},
         {group, three_nodes_process_registration}
     ].
 
@@ -81,7 +81,7 @@ all() ->
 %% -------------------------------------------------------------------
 groups() ->
     [
-        {one_process_registration, [shuffle], [
+        {one_node_process_registration, [shuffle], [
             one_node_via_register_unregister
         ]},
         {three_nodes_process_registration, [shuffle], [
