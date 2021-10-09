@@ -1289,6 +1289,7 @@ three_nodes_custom_event_handler_joined_left(Config) ->
 
     %% start process
     Pid = syn_test_suite_helper:start_process(),
+    Pid2 = syn_test_suite_helper:start_process(),
 
     %% ---> on join
     ok = syn:join("my-group", Pid, {recipient, self(), <<"meta">>}),
@@ -1298,6 +1299,17 @@ three_nodes_custom_event_handler_joined_left(Config) ->
         {on_process_joined, CurrentNode, default, "my-group", Pid, <<"meta">>},
         {on_process_joined, SlaveNode1, default, "my-group", Pid, <<"meta">>},
         {on_process_joined, SlaveNode2, default, "my-group", Pid, <<"meta">>}
+    ]),
+    syn_test_suite_helper:assert_empty_queue(self()),
+
+    %% join from another node
+    ok = rpc:call(SlaveNode1, syn, join, ["my-group", Pid2, {recipient, self(), <<"meta-for-2">>}]),
+
+    %% check callbacks called
+    syn_test_suite_helper:assert_received_messages([
+        {on_process_joined, CurrentNode, default, "my-group", Pid2, <<"meta-for-2">>},
+        {on_process_joined, SlaveNode1, default, "my-group", Pid2, <<"meta-for-2">>},
+        {on_process_joined, SlaveNode2, default, "my-group", Pid2, <<"meta-for-2">>}
     ]),
     syn_test_suite_helper:assert_empty_queue(self()),
 
@@ -1331,6 +1343,17 @@ three_nodes_custom_event_handler_joined_left(Config) ->
         {on_process_left, CurrentNode, default, "my-group", Pid, <<"new-meta">>},
         {on_process_left, SlaveNode1, default, "my-group", Pid, <<"new-meta">>},
         {on_process_left, SlaveNode2, default, "my-group", Pid, <<"new-meta">>}
+    ]),
+    syn_test_suite_helper:assert_empty_queue(self()),
+
+    %% leave from another node
+    ok = rpc:call(SlaveNode1, syn, leave, ["my-group", Pid2]),
+
+    %% check callbacks called
+    syn_test_suite_helper:assert_received_messages([
+        {on_process_left, CurrentNode, default, "my-group", Pid2, <<"meta-for-2">>},
+        {on_process_left, SlaveNode1, default, "my-group", Pid2, <<"meta-for-2">>},
+        {on_process_left, SlaveNode2, default, "my-group", Pid2, <<"meta-for-2">>}
     ]),
     syn_test_suite_helper:assert_empty_queue(self()),
 

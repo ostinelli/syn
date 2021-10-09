@@ -1230,6 +1230,7 @@ three_nodes_custom_event_handler_reg_unreg(Config) ->
 
     %% start process
     Pid = syn_test_suite_helper:start_process(),
+    Pid2 = syn_test_suite_helper:start_process(),
 
     %% ---> on registration
     ok = syn:register("proc-handler", Pid, {recipient, self(), <<"meta">>}),
@@ -1239,6 +1240,17 @@ three_nodes_custom_event_handler_reg_unreg(Config) ->
         {on_process_registered, CurrentNode, default, "proc-handler", Pid, <<"meta">>},
         {on_process_registered, SlaveNode1, default, "proc-handler", Pid, <<"meta">>},
         {on_process_registered, SlaveNode2, default, "proc-handler", Pid, <<"meta">>}
+    ]),
+    syn_test_suite_helper:assert_empty_queue(self()),
+
+    %% registration from another node
+    ok = rpc:call(SlaveNode1, syn, register, ["proc-handler-2", Pid2, {recipient, self(), <<"meta-for-2">>}]),
+
+    %% check callbacks called
+    syn_test_suite_helper:assert_received_messages([
+        {on_process_registered, CurrentNode, default, "proc-handler-2", Pid2, <<"meta-for-2">>},
+        {on_process_registered, SlaveNode1, default, "proc-handler-2", Pid2, <<"meta-for-2">>},
+        {on_process_registered, SlaveNode2, default, "proc-handler-2", Pid2, <<"meta-for-2">>}
     ]),
     syn_test_suite_helper:assert_empty_queue(self()),
 
@@ -1253,6 +1265,17 @@ three_nodes_custom_event_handler_reg_unreg(Config) ->
     ]),
     syn_test_suite_helper:assert_empty_queue(self()),
 
+    %% meta update from another node
+    ok = rpc:call(SlaveNode1, syn, register, ["proc-handler-2", Pid2, {recipient, self(), <<"meta-for-2-update">>}]),
+
+    %% check callbacks called
+    syn_test_suite_helper:assert_received_messages([
+        {on_registry_process_updated, CurrentNode, default, "proc-handler-2", Pid2, <<"meta-for-2-update">>},
+        {on_registry_process_updated, SlaveNode1, default, "proc-handler-2", Pid2, <<"meta-for-2-update">>},
+        {on_registry_process_updated, SlaveNode2, default, "proc-handler-2", Pid2, <<"meta-for-2-update">>}
+    ]),
+    syn_test_suite_helper:assert_empty_queue(self()),
+
     %% ---> on unregister
     ok = syn:unregister("proc-handler"),
 
@@ -1261,6 +1284,17 @@ three_nodes_custom_event_handler_reg_unreg(Config) ->
         {on_process_unregistered, CurrentNode, default, "proc-handler", Pid, <<"new-meta">>},
         {on_process_unregistered, SlaveNode1, default, "proc-handler", Pid, <<"new-meta">>},
         {on_process_unregistered, SlaveNode2, default, "proc-handler", Pid, <<"new-meta">>}
+    ]),
+    syn_test_suite_helper:assert_empty_queue(self()),
+
+    %% unregister from another node
+    ok = rpc:call(SlaveNode1, syn, unregister, ["proc-handler-2"]),
+
+    %% check callbacks called
+    syn_test_suite_helper:assert_received_messages([
+        {on_process_unregistered, CurrentNode, default, "proc-handler-2", Pid2, <<"meta-for-2-update">>},
+        {on_process_unregistered, SlaveNode1, default, "proc-handler-2", Pid2, <<"meta-for-2-update">>},
+        {on_process_unregistered, SlaveNode2, default, "proc-handler-2", Pid2, <<"meta-for-2-update">>}
     ]),
     syn_test_suite_helper:assert_empty_queue(self()),
 
