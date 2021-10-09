@@ -262,7 +262,7 @@ handle_call({unregister_on_owner, RequesterNode, Name, Pid}, _From, #state{
     end;
 
 handle_call(Request, From, #state{scope = Scope} = State) ->
-    error_logger:warning_msg("SYN[~s|~s] Received from ~p an unknown call message: ~p", [?MODULE, Scope, From, Request]),
+    error_logger:warning_msg("SYN[~s<~s>] Received from ~p an unknown call message: ~p", [?MODULE, Scope, From, Request]),
     {reply, undefined, State}.
 
 %% ----------------------------------------------------------------------------------------------------------
@@ -295,7 +295,7 @@ handle_info({'DOWN', _MRef, process, Pid, Reason}, #state{
     case find_registry_entries_by_pid(Pid, TableByPid) of
         [] ->
             error_logger:warning_msg(
-                "SYN[~s|~s] Received a DOWN message from an unknown process ~p with reason: ~p",
+                "SYN[~s<~s>] Received a DOWN message from an unknown process ~p with reason: ~p",
                 [?MODULE, Scope, Pid, Reason]
             );
 
@@ -313,7 +313,7 @@ handle_info({'DOWN', _MRef, process, Pid, Reason}, #state{
     {noreply, State};
 
 handle_info(Info, #state{scope = Scope} = State) ->
-    error_logger:warning_msg("SYN[~s|~s] Received an unknown info message: ~p", [?MODULE, Scope, Info]),
+    error_logger:warning_msg("SYN[~s<~s>] Received an unknown info message: ~p", [?MODULE, Scope, Info]),
     {noreply, State}.
 
 %% ----------------------------------------------------------------------------------------------------------
@@ -551,7 +551,7 @@ resolve_conflict(Scope, Name, {Pid, Meta, Time}, {TablePid, TableMeta, TableTime
     case PidToKeep of
         Pid ->
             %% -> we keep the remote pid
-            error_logger:info_msg("SYN[~s|~s] Registry CONFLICT for name ~p: ~p vs ~p -> keeping remote: ~p",
+            error_logger:info_msg("SYN[~s<~s>] Registry CONFLICT for name ~p: ~p vs ~p -> keeping remote: ~p",
                 [?MODULE, Scope, Name, Pid, TablePid, Pid]
             ),
             %% update locally, the incoming sync_register will update with the time coming from remote node
@@ -564,7 +564,7 @@ resolve_conflict(Scope, Name, {Pid, Meta, Time}, {TablePid, TableMeta, TableTime
 
         TablePid ->
             %% -> we keep the local pid
-            error_logger:info_msg("SYN[~s|~s] Registry CONFLICT for name ~p: ~p vs ~p -> keeping local: ~p",
+            error_logger:info_msg("SYN[~s<~s>] Registry CONFLICT for name ~p: ~p vs ~p -> keeping local: ~p",
                 [?MODULE, Scope, Name, Pid, TablePid, TablePid]
             ),
             %% overwrite with updated time
@@ -574,7 +574,7 @@ resolve_conflict(Scope, Name, {Pid, Meta, Time}, {TablePid, TableMeta, TableTime
             syn_gen_scope:broadcast({'3.0', sync_register, Name, TablePid, TableMeta, ResolveTime}, State);
 
         Invalid ->
-            error_logger:info_msg("SYN[~s|~s] Registry CONFLICT for name ~p: ~p vs ~p -> none chosen (got: ~p)",
+            error_logger:info_msg("SYN[~s<~s>] Registry CONFLICT for name ~p: ~p vs ~p -> none chosen (got: ~p)",
                 [?MODULE, Scope, Name, Pid, TablePid, Invalid]
             ),
             %% remove
