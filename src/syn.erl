@@ -39,6 +39,7 @@
 -export([register_name/2, unregister_name/1, whereis_name/1, send/2]).
 %% groups
 -export([get_members/1, get_members/2]).
+-export([get_local_members/1, get_local_members/2]).
 -export([join/2, join/3, join/4]).
 -export([leave/2, leave/3]).
 -export([groups_count/1, groups_count/2]).
@@ -151,6 +152,14 @@ get_members(GroupName) ->
 -spec get_members(Scope :: atom(), GroupName :: term()) -> [{Pid :: pid(), Meta :: term()}].
 get_members(Scope, GroupName) ->
     syn_groups:get_members(Scope, GroupName).
+
+-spec get_local_members(GroupName :: term()) -> [{Pid :: pid(), Meta :: term()}].
+get_local_members(GroupName) ->
+    syn_groups:get_local_members(GroupName).
+
+-spec get_local_members(Scope :: atom(), GroupName :: term()) -> [{Pid :: pid(), Meta :: term()}].
+get_local_members(Scope, GroupName) ->
+    syn_groups:get_local_members(Scope, GroupName).
 
 -spec join(GroupName :: any(), Pid :: pid()) -> ok | {error, Reason :: any()}.
 join(GroupName, Pid) ->

@@ -32,6 +32,7 @@
 -export([join/2, join/3, join/4]).
 -export([leave/2, leave/3]).
 -export([get_members/1, get_members/2]).
+-export([get_local_members/1, get_local_members/2]).
 -export([count/1, count/2]).
 
 %% syn_gen_scope callbacks
@@ -65,13 +66,25 @@ get_members(GroupName) ->
 
 -spec get_members(Scope :: atom(), GroupName :: term()) -> [{Pid :: pid(), Meta :: term()}].
 get_members(Scope, GroupName) ->
+    do_get_members(Scope, GroupName, '_').
+
+-spec get_local_members(GroupName :: term()) -> [{Pid :: pid(), Meta :: term()}].
+get_local_members(GroupName) ->
+    get_local_members(default, GroupName).
+
+-spec get_local_members(Scope :: atom(), GroupName :: term()) -> [{Pid :: pid(), Meta :: term()}].
+get_local_members(Scope, GroupName) ->
+    do_get_members(Scope, GroupName, node()).
+
+-spec do_get_members(Scope :: atom(), GroupName :: term(), NodeParam :: atom()) -> [{Pid :: pid(), Meta :: term()}].
+do_get_members(Scope, GroupName, NodeParam) ->
     case syn_backbone:get_table_name(syn_groups_by_name, Scope) of
         undefined ->
             error({invalid_scope, Scope});
 
         TableByName ->
             ets:select(TableByName, [{
-                {{GroupName, '$2'}, '$3', '_', '_', '_'},
+                {{GroupName, '$2'}, '$3', '_', '_', NodeParam},
                 [],
                 [{{'$2', '$3'}}]
             }])
