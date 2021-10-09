@@ -117,11 +117,11 @@ leave(Scope, GroupName, Pid) ->
         TableByName ->
             Node = node(Pid),
             case syn_gen_scope:call(?MODULE, Node, Scope, {leave_on_owner, node(), GroupName, Pid}) of
-                {ok, TableByPid} when Node =/= node() ->
+                {ok, {TableMeta, TableByPid}} when Node =/= node() ->
                     %% remove table on caller node immediately so that subsequent calls have an updated registry
                     remove_from_local_table(GroupName, Pid, TableByName, TableByPid),
                     %% callback
-                    %%syn_event_handler:do_on_process_left(Scope, GroupName, Pid, Meta),
+                    syn_event_handler:do_on_process_left(Scope, GroupName, Pid, TableMeta),
                     %% return
                     ok;
 
@@ -199,13 +199,14 @@ handle_call({join_on_owner, RequesterNode, GroupName, Pid, Meta}, _From, #state{
                 undefined -> erlang:monitor(process, Pid);  %% process is not monitored yet, add
                 MRef0 -> MRef0
             end,
-            %% add to local table
-            Time = erlang:system_time(),
-            add_to_local_table(GroupName, Pid, Meta, Time, MRef, TableByName, TableByPid),
+            %% get table meta
             TableMeta = case find_groups_entry_by_name_and_pid(GroupName, Pid, TableByName) of
                 {{_, M}, _, _, _, _} -> M;
                 _ -> undefined
             end,
+            %% add to local table
+            Time = erlang:system_time(),
+            add_to_local_table(GroupName, Pid, Meta, Time, MRef, TableByName, TableByPid),
             %% callback
             syn_event_handler:do_on_process_joined(Scope, GroupName, {TableMeta}, {Pid, Meta}),
             %% broadcast
@@ -218,6 +219,7 @@ handle_call({join_on_owner, RequesterNode, GroupName, Pid, Meta}, _From, #state{
     end;
 
 handle_call({leave_on_owner, RequesterNode, GroupName, Pid}, _From, #state{
+    scope = Scope,
     table_by_name = TableByName,
     table_by_pid = TableByPid
 } = State) ->
@@ -225,15 +227,17 @@ handle_call({leave_on_owner, RequesterNode, GroupName, Pid}, _From, #state{
         undefined ->
             {reply, {{error, not_in_group}, undefined}, State};
 
-        _ ->
+        {{_, _}, TableMeta, _, _, _} ->
             %% is this the last group process is in?
             maybe_demonitor(Pid, TableByPid),
             %% remove from table
             remove_from_local_table(GroupName, Pid, TableByName, TableByPid),
+            %% callback
+            syn_event_handler:do_on_process_left(Scope, GroupName, Pid, TableMeta),
             %% broadcast
-            syn_gen_scope:broadcast({'3.0', sync_leave, GroupName, Pid}, [RequesterNode], State),
+            syn_gen_scope:broadcast({'3.0', sync_leave, GroupName, Pid, TableMeta}, [RequesterNode], State),
             %% return
-            {reply, {ok, TableByPid}, State}
+            {reply, {ok, {TableMeta, TableByPid}}, State}
     end;
 
 handle_call(Request, From, State) ->
@@ -251,16 +255,20 @@ handle_info({'3.0', sync_join, GroupName, Pid, Meta, Time}, State) ->
     handle_groups_sync(GroupName, Pid, Meta, Time, State),
     {noreply, State};
 
-handle_info({'3.0', sync_leave, GroupName, Pid}, #state{
+handle_info({'3.0', sync_leave, GroupName, Pid, Meta}, #state{
+    scope = Scope,
     table_by_name = TableByName,
     table_by_pid = TableByPid
 } = State) ->
     %% remove from table
     remove_from_local_table(GroupName, Pid, TableByName, TableByPid),
+    %% callback
+    syn_event_handler:do_on_process_left(Scope, GroupName, Pid, Meta),
     %% return
     {noreply, State};
 
 handle_info({'DOWN', _MRef, process, Pid, Reason}, #state{
+    scope = Scope,
     table_by_name = TableByName,
     table_by_pid = TableByPid
 } = State) ->
@@ -272,13 +280,13 @@ handle_info({'DOWN', _MRef, process, Pid, Reason}, #state{
             );
 
         Entries ->
-            lists:foreach(fun({{_Pid, GroupName}, _Meta, _, _, _}) ->
+            lists:foreach(fun({{_Pid, GroupName}, Meta, _, _, _}) ->
                 %% remove from table
                 remove_from_local_table(GroupName, Pid, TableByName, TableByPid),
                 %% callback
-                %%syn_event_handler:do_on_process_left(Scope, GroupName, Pid, Meta),
+                syn_event_handler:do_on_process_left(Scope, GroupName, Pid, Meta),
                 %% broadcast
-                syn_gen_scope:broadcast({'3.0', sync_leave, GroupName, Pid}, State)
+                syn_gen_scope:broadcast({'3.0', sync_leave, GroupName, Pid, Meta}, State)
             end, Entries)
     end,
     %% return
@@ -425,14 +433,14 @@ remove_from_local_table(GroupName, Pid, TableByName, TableByPid) ->
     true = ets:delete(TableByPid, {Pid, GroupName}).
 
 -spec purge_groups_for_remote_node(Scope :: atom(), Node :: atom(), TableByName :: atom(), TableByPid :: atom()) -> true.
-purge_groups_for_remote_node(_Scope, Node, TableByName, TableByPid) ->
-%%    %% loop elements for callback in a separate process to free scope process
-%%    GroupsTuples = get_groups_tuples_for_node(Node, TableByName),
-%%    spawn(fun() ->
-%%        lists:foreach(fun({Name, Pid, Meta, _Time}) ->
-%%            syn_event_handler:do_on_process_left(Scope, Name, Pid, Meta)
-%%        end, GroupsTuples)
-%%    end),
+purge_groups_for_remote_node(Scope, Node, TableByName, TableByPid) ->
+    %% loop elements for callback in a separate process to free scope process
+    GroupsTuples = get_groups_tuples_for_node(Node, TableByName),
+    spawn(fun() ->
+        lists:foreach(fun({GroupName, Pid, Meta, _Time}) ->
+            syn_event_handler:do_on_process_left(Scope, GroupName, Pid, Meta)
+        end, GroupsTuples)
+    end),
     ets:match_delete(TableByName, {{'_', '_'}, '_', '_', '_', Node}),
     ets:match_delete(TableByPid, {{'_', '_'}, '_', '_', '_', Node}).
 

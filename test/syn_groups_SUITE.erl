@@ -76,11 +76,11 @@ all() ->
 groups() ->
     [
         {three_nodes_groups, [shuffle], [
-%%            three_nodes_discover_default_scope,
-%%            three_nodes_discover_custom_scope,
-%%            three_nodes_join_leave_and_monitor_default_scope,
-%%            three_nodes_join_leave_and_monitor_custom_scope,
-%%            three_nodes_cluster_changes,
+            three_nodes_discover_default_scope,
+            three_nodes_discover_custom_scope,
+            three_nodes_join_leave_and_monitor_default_scope,
+            three_nodes_join_leave_and_monitor_custom_scope,
+            three_nodes_cluster_changes,
             three_nodes_custom_event_handler_joined_left
         ]}
     ].
@@ -984,4 +984,77 @@ three_nodes_custom_event_handler_joined_left(Config) ->
         {on_process_joined, SlaveNode1, default, "my-group", Pid, <<"new-meta">>},
         {on_process_joined, SlaveNode2, default, "my-group", Pid, <<"new-meta">>}
     ]),
-    syn_test_suite_helper:assert_empty_queue(self()).
+    syn_test_suite_helper:assert_empty_queue(self()),
+
+    %% ---> on left
+    ok = syn:leave("my-group", Pid),
+
+    %% check callbacks called
+    syn_test_suite_helper:assert_received_messages([
+        {on_process_left, CurrentNode, default, "my-group", Pid, <<"new-meta">>},
+        {on_process_left, SlaveNode1, default, "my-group", Pid, <<"new-meta">>},
+        {on_process_left, SlaveNode2, default, "my-group", Pid, <<"new-meta">>}
+    ]),
+    syn_test_suite_helper:assert_empty_queue(self()),
+
+    %% clean & check
+    syn_test_suite_helper:kill_process(Pid),
+    syn_test_suite_helper:assert_empty_queue(self()),
+
+    %% ---> after a netsplit
+    PidRemoteOn1 = syn_test_suite_helper:start_process(SlaveNode1),
+    syn:join(remote_on_1, PidRemoteOn1, {recipient, self(), <<"netsplit">>}),
+
+    %% check callbacks called
+    syn_test_suite_helper:assert_received_messages([
+        {on_process_joined, CurrentNode, default, remote_on_1, PidRemoteOn1, <<"netsplit">>},
+        {on_process_joined, SlaveNode1, default, remote_on_1, PidRemoteOn1, <<"netsplit">>},
+        {on_process_joined, SlaveNode2, default, remote_on_1, PidRemoteOn1, <<"netsplit">>}
+    ]),
+    syn_test_suite_helper:assert_empty_queue(self()),
+
+    %% partial netsplit (1 cannot see 2)
+    rpc:call(SlaveNode1, syn_test_suite_helper, disconnect_node, [SlaveNode2]),
+    syn_test_suite_helper:assert_cluster(node(), [SlaveNode1, SlaveNode2]),
+    syn_test_suite_helper:assert_cluster(SlaveNode1, [node()]),
+    syn_test_suite_helper:assert_cluster(SlaveNode2, [node()]),
+
+    %% check callbacks called
+    syn_test_suite_helper:assert_received_messages([
+        {on_process_left, SlaveNode2, default, remote_on_1, PidRemoteOn1, <<"netsplit">>}
+    ]),
+    syn_test_suite_helper:assert_empty_queue(self()),
+
+    %% ---> after a re-join
+    %% re-join
+    rpc:call(SlaveNode1, syn_test_suite_helper, connect_node, [SlaveNode2]),
+    syn_test_suite_helper:assert_cluster(node(), [SlaveNode1, SlaveNode2]),
+    syn_test_suite_helper:assert_cluster(SlaveNode1, [node(), SlaveNode2]),
+    syn_test_suite_helper:assert_cluster(SlaveNode2, [node(), SlaveNode1]),
+
+    %% check callbacks called
+    syn_test_suite_helper:assert_received_messages([
+        {on_process_joined, SlaveNode2, default, remote_on_1, PidRemoteOn1, <<"netsplit">>}
+    ]),
+    syn_test_suite_helper:assert_empty_queue(self()),
+
+    %% clean
+    syn_test_suite_helper:kill_process(PidRemoteOn1),
+
+    %% check callbacks called
+    syn_test_suite_helper:assert_received_messages([
+        {on_process_left, CurrentNode, default, remote_on_1, PidRemoteOn1, <<"netsplit">>},
+        {on_process_left, SlaveNode1, default, remote_on_1, PidRemoteOn1, <<"netsplit">>},
+        {on_process_left, SlaveNode2, default, remote_on_1, PidRemoteOn1, <<"netsplit">>}
+    ]),
+    syn_test_suite_helper:assert_empty_queue(self()),
+
+    %% ---> don't call on monitor rebuild
+    %% crash the scope process on local
+    syn_test_suite_helper:kill_process(syn_groups_default),
+
+    %% no messages
+    syn_test_suite_helper:assert_wait(
+        ok,
+        fun() -> syn_test_suite_helper:assert_empty_queue(self()) end
+    ).

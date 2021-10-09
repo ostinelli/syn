@@ -29,6 +29,7 @@
 -export([on_process_registered/4]).
 -export([on_process_unregistered/4]).
 -export([on_process_joined/4]).
+-export([on_process_left/4]).
 
 on_process_registered(Scope, Name, Pid, {recipient, RecipientPid, AdditionalMeta}) ->
     RecipientPid ! {on_process_registered, node(), Scope, Name, Pid, AdditionalMeta}.
@@ -38,3 +39,6 @@ on_process_unregistered(Scope, Name, Pid, {recipient, RecipientPid, AdditionalMe
 
 on_process_joined(Scope, GroupName, Pid, {recipient, RecipientPid, AdditionalMeta}) ->
     RecipientPid ! {on_process_joined, node(), Scope, GroupName, Pid, AdditionalMeta}.
+
+on_process_left(Scope, GroupName, Pid, {recipient, RecipientPid, AdditionalMeta}) ->
+    RecipientPid ! {on_process_left, node(), Scope, GroupName, Pid, AdditionalMeta}.
