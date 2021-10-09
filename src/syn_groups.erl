@@ -105,11 +105,11 @@ join(Scope, GroupName, Pid) when is_pid(Pid) ->
 join(Scope, GroupName, Pid, Meta) ->
     Node = node(Pid),
     case syn_gen_scope:call(?MODULE, Node, Scope, {join_on_owner, node(), GroupName, Pid, Meta}) of
-        {ok, {TableMeta, Time, TableByName, TableByPid}} when Node =/= node() ->
+        {ok, {CallbackMethod, Time, TableByName, TableByPid}} when Node =/= node() ->
             %% update table on caller node immediately so that subsequent calls have an updated registry
             add_to_local_table(GroupName, Pid, Meta, Time, undefined, TableByName, TableByPid),
             %% callback
-            syn_event_handler:do_on_process_joined(Scope, GroupName, {TableMeta}, {Pid, Meta}),
+            syn_event_handler:call_event_handler(CallbackMethod, [Scope, GroupName, Pid, Meta]),
             %% return
             ok;
 
@@ -130,11 +130,11 @@ leave(Scope, GroupName, Pid) ->
         TableByName ->
             Node = node(Pid),
             case syn_gen_scope:call(?MODULE, Node, Scope, {leave_on_owner, node(), GroupName, Pid}) of
-                {ok, {TableMeta, TableByPid}} when Node =/= node() ->
+                {ok, {Meta, TableByPid}} when Node =/= node() ->
                     %% remove table on caller node immediately so that subsequent calls have an updated registry
                     remove_from_local_table(GroupName, Pid, TableByName, TableByPid),
                     %% callback
-                    syn_event_handler:do_on_process_left(Scope, GroupName, Pid, TableMeta),
+                    syn_event_handler:call_event_handler(on_process_left, [Scope, GroupName, Pid, Meta]),
                     %% return
                     ok;
 
@@ -207,25 +207,39 @@ handle_call({join_on_owner, RequesterNode, GroupName, Pid, Meta}, _From, #state{
 } = State) ->
     case is_process_alive(Pid) of
         true ->
-            %% available
-            MRef = case find_monitor_for_pid(Pid, TableByPid) of
-                undefined -> erlang:monitor(process, Pid);  %% process is not monitored yet, add
-                MRef0 -> MRef0
-            end,
-            %% get table meta
-            TableMeta = case find_groups_entry_by_name_and_pid(GroupName, Pid, TableByName) of
-                {{_, M}, _, _, _, _} -> M;
-                _ -> undefined
-            end,
-            %% add to local table
-            Time = erlang:system_time(),
-            add_to_local_table(GroupName, Pid, Meta, Time, MRef, TableByName, TableByPid),
-            %% callback
-            syn_event_handler:do_on_process_joined(Scope, GroupName, {TableMeta}, {Pid, Meta}),
-            %% broadcast
-            syn_gen_scope:broadcast({'3.0', sync_join, GroupName, Pid, Meta, Time}, [RequesterNode], State),
-            %% return
-            {reply, {ok, {TableMeta, Time, TableByName, TableByPid}}, State};
+            case find_groups_entry_by_name_and_pid(GroupName, Pid, TableByName) of
+                undefined ->
+                    %% add
+                    MRef = case find_monitor_for_pid(Pid, TableByPid) of
+                        undefined -> erlang:monitor(process, Pid);  %% process is not monitored yet, create
+                        MRef0 -> MRef0
+                    end,
+                    Time = erlang:system_time(),
+                    %% add to local table
+                    add_to_local_table(GroupName, Pid, Meta, Time, MRef, TableByName, TableByPid),
+                    %% callback
+                    syn_event_handler:call_event_handler(on_process_joined, [Scope, GroupName, Pid, Meta]),
+                    %% broadcast
+                    syn_gen_scope:broadcast({'3.0', sync_join, GroupName, Pid, Meta, Time}, [RequesterNode], State),
+                    %% return
+                    {reply, {ok, {on_process_joined, Time, TableByName, TableByPid}}, State};
+
+                {{_, Meta}, _, _, _, _} ->
+                    %% re-joined with same meta
+                    {ok, noop};
+
+                {{_, _}, _, _, MRef, _} ->
+                    %% meta updated
+                    Time = erlang:system_time(),
+                    %% add to local table
+                    add_to_local_table(GroupName, Pid, Meta, Time, MRef, TableByName, TableByPid),
+                    %% callback
+                    syn_event_handler:call_event_handler(on_group_process_updated, [Scope, GroupName, Pid, Meta]),
+                    %% broadcast
+                    syn_gen_scope:broadcast({'3.0', sync_join, GroupName, Pid, Meta, Time}, [RequesterNode], State),
+                    %% return
+                    {reply, {ok, {on_group_process_updated, Time, TableByName, TableByPid}}, State}
+            end;
 
         false ->
             {reply, {{error, not_alive}, undefined}, State}
@@ -240,17 +254,17 @@ handle_call({leave_on_owner, RequesterNode, GroupName, Pid}, _From, #state{
         undefined ->
             {reply, {{error, not_in_group}, undefined}, State};
 
-        {{_, _}, TableMeta, _, _, _} ->
+        {{_, _}, Meta, _, _, _} ->
             %% is this the last group process is in?
             maybe_demonitor(Pid, TableByPid),
             %% remove from table
             remove_from_local_table(GroupName, Pid, TableByName, TableByPid),
             %% callback
-            syn_event_handler:do_on_process_left(Scope, GroupName, Pid, TableMeta),
+            syn_event_handler:call_event_handler(on_process_left, [Scope, GroupName, Pid, Meta]),
             %% broadcast
-            syn_gen_scope:broadcast({'3.0', sync_leave, GroupName, Pid, TableMeta}, [RequesterNode], State),
+            syn_gen_scope:broadcast({'3.0', sync_leave, GroupName, Pid, Meta}, [RequesterNode], State),
             %% return
-            {reply, {ok, {TableMeta, TableByPid}}, State}
+            {reply, {ok, {Meta, TableByPid}}, State}
     end;
 
 handle_call(Request, From, State) ->
@@ -276,7 +290,7 @@ handle_info({'3.0', sync_leave, GroupName, Pid, Meta}, #state{
     %% remove from table
     remove_from_local_table(GroupName, Pid, TableByName, TableByPid),
     %% callback
-    syn_event_handler:do_on_process_left(Scope, GroupName, Pid, Meta),
+    syn_event_handler:call_event_handler(on_process_left, [Scope, GroupName, Pid, Meta]),
     %% return
     {noreply, State};
 
@@ -297,7 +311,7 @@ handle_info({'DOWN', _MRef, process, Pid, Reason}, #state{
                 %% remove from table
                 remove_from_local_table(GroupName, Pid, TableByName, TableByPid),
                 %% callback
-                syn_event_handler:do_on_process_left(Scope, GroupName, Pid, Meta),
+                syn_event_handler:call_event_handler(on_process_left, [Scope, GroupName, Pid, Meta]),
                 %% broadcast
                 syn_gen_scope:broadcast({'3.0', sync_leave, GroupName, Pid, Meta}, State)
             end, Entries)
@@ -451,7 +465,7 @@ purge_groups_for_remote_node(Scope, Node, TableByName, TableByPid) ->
     GroupsTuples = get_groups_tuples_for_node(Node, TableByName),
     spawn(fun() ->
         lists:foreach(fun({GroupName, Pid, Meta, _Time}) ->
-            syn_event_handler:do_on_process_left(Scope, GroupName, Pid, Meta)
+            syn_event_handler:call_event_handler(on_process_left, [Scope, GroupName, Pid, Meta])
         end, GroupsTuples)
     end),
     ets:match_delete(TableByName, {{'_', '_'}, '_', '_', '_', Node}),
@@ -474,13 +488,16 @@ handle_groups_sync(GroupName, Pid, Meta, Time, #state{
             %% new
             add_to_local_table(GroupName, Pid, Meta, Time, undefined, TableByName, TableByPid),
             %% callback
-            syn_event_handler:do_on_process_joined(Scope, GroupName, {undefined}, {Pid, Meta});
+            syn_event_handler:call_event_handler(on_process_joined, [Scope, GroupName, Pid, Meta]);
 
         {{GroupName, Pid}, TableMeta, TableTime, _MRef, _TableNode} when Time > TableTime ->
-            %% update meta
+            %% maybe updated meta or time only
             add_to_local_table(GroupName, Pid, Meta, Time, undefined, TableByName, TableByPid),
-            %% callback
-            syn_event_handler:do_on_process_joined(Scope, GroupName, {TableMeta}, {Pid, Meta});
+            %% callback (call only if meta update)
+            case TableMeta =/= Meta of
+                true -> syn_event_handler:call_event_handler(on_group_process_updated, [Scope, GroupName, Pid, Meta]);
+                _ -> ok
+            end;
 
         {{GroupName, Pid}, _TableMeta, _TableTime, _TableMRef, _TableNode} ->
             %% race condition: incoming data is older, ignore

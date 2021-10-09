@@ -1302,13 +1302,24 @@ three_nodes_custom_event_handler_joined_left(Config) ->
     syn_test_suite_helper:assert_empty_queue(self()),
 
     %% ---> on meta update
-    ok = syn:join("my-group", Pid, {recipient, self(), <<"new-meta">>}),
+    ok = syn:join("my-group", Pid, {recipient, self(), <<"new-meta-0">>}),
 
     %% check callbacks called
     syn_test_suite_helper:assert_received_messages([
-        {on_process_joined, CurrentNode, default, "my-group", Pid, <<"new-meta">>},
-        {on_process_joined, SlaveNode1, default, "my-group", Pid, <<"new-meta">>},
-        {on_process_joined, SlaveNode2, default, "my-group", Pid, <<"new-meta">>}
+        {on_group_process_updated, CurrentNode, default, "my-group", Pid, <<"new-meta-0">>},
+        {on_group_process_updated, SlaveNode1, default, "my-group", Pid, <<"new-meta-0">>},
+        {on_group_process_updated, SlaveNode2, default, "my-group", Pid, <<"new-meta-0">>}
+    ]),
+    syn_test_suite_helper:assert_empty_queue(self()),
+
+    %% update meta from another node
+    ok = rpc:call(SlaveNode1, syn, join, ["my-group", Pid, {recipient, self(), <<"new-meta">>}]),
+
+    %% check callbacks called
+    syn_test_suite_helper:assert_received_messages([
+        {on_group_process_updated, CurrentNode, default, "my-group", Pid, <<"new-meta">>},
+        {on_group_process_updated, SlaveNode1, default, "my-group", Pid, <<"new-meta">>},
+        {on_group_process_updated, SlaveNode2, default, "my-group", Pid, <<"new-meta">>}
     ]),
     syn_test_suite_helper:assert_empty_queue(self()),
 

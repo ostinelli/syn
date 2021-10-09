@@ -1247,9 +1247,9 @@ three_nodes_custom_event_handler_reg_unreg(Config) ->
 
     %% check callbacks called
     syn_test_suite_helper:assert_received_messages([
-        {on_process_registered, CurrentNode, default, "proc-handler", Pid, <<"new-meta">>},
-        {on_process_registered, SlaveNode1, default, "proc-handler", Pid, <<"new-meta">>},
-        {on_process_registered, SlaveNode2, default, "proc-handler", Pid, <<"new-meta">>}
+        {on_registry_process_updated, CurrentNode, default, "proc-handler", Pid, <<"new-meta">>},
+        {on_registry_process_updated, SlaveNode1, default, "proc-handler", Pid, <<"new-meta">>},
+        {on_registry_process_updated, SlaveNode2, default, "proc-handler", Pid, <<"new-meta">>}
     ]),
     syn_test_suite_helper:assert_empty_queue(self()),
 
