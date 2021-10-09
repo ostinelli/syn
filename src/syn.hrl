@@ -70,10 +70,13 @@
 -record(state, {
     handler = undefined :: undefined | module(),
     handler_state = undefined :: any(),
-    scope = default :: atom(),
+    scope = undefined :: atom(),
     process_name :: atom(),
     nodes_map = #{} :: #{node() => pid()},
     multicast_pid :: pid(),
     table_by_name :: atom(),
     table_by_pid :: atom()
 }).
+
+%% macros
+-define(DEFAULT_SCOPE, default).

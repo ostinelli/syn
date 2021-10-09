@@ -33,6 +33,9 @@
 %% Supervisor callbacks
 -export([init/1]).
 
+%% includes
+-include("syn.hrl").
+
 %% ===================================================================
 %% API
 %% ===================================================================
@@ -44,8 +47,8 @@ start_link() ->
 node_scopes() ->
     %% always have a default scope for all nodes
     case application:get_env(syn, custom_scopes) of
-        undefined -> [default];
-        {ok, Scopes} -> [default] ++ maps:keys(Scopes)
+        undefined -> [?DEFAULT_SCOPE];
+        {ok, Scopes} -> [?DEFAULT_SCOPE] ++ maps:keys(Scopes)
     end.
 
 -spec add_node_to_scope(Scope :: atom()) -> ok.

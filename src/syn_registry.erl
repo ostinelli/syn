@@ -66,7 +66,7 @@ get_subcluster_nodes(Scope) ->
 
 -spec lookup(Name :: term()) -> {pid(), Meta :: term()} | undefined.
 lookup(Name) ->
-    lookup(default, Name).
+    lookup(?DEFAULT_SCOPE, Name).
 
 -spec lookup(Scope :: atom(), Name :: term()) -> {pid(), Meta :: term()} | undefined.
 lookup(Scope, Name) ->
@@ -83,11 +83,11 @@ lookup(Scope, Name) ->
 
 -spec register(Name :: term(), Pid :: pid()) -> ok | {error, Reason :: term()}.
 register(Name, Pid) ->
-    register(default, Name, Pid, undefined).
+    register(?DEFAULT_SCOPE, Name, Pid, undefined).
 
 -spec register(NameOrScope :: term(), PidOrName :: term(), MetaOrPid :: term()) -> ok | {error, Reason :: term()}.
 register(Name, Pid, Meta) when is_pid(Pid) ->
-    register(default, Name, Pid, Meta);
+    register(?DEFAULT_SCOPE, Name, Pid, Meta);
 
 register(Scope, Name, Pid) when is_pid(Pid) ->
     register(Scope, Name, Pid, undefined).
@@ -110,7 +110,7 @@ register(Scope, Name, Pid, Meta) ->
 
 -spec unregister(Name :: term()) -> ok | {error, Reason :: term()}.
 unregister(Name) ->
-    unregister(default, Name).
+    unregister(?DEFAULT_SCOPE, Name).
 
 -spec unregister(Scope :: atom(), Name :: term()) -> ok | {error, Reason :: term()}.
 unregister(Scope, Name) ->

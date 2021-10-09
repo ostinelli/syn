@@ -64,7 +64,7 @@ get_subcluster_nodes(Scope) ->
 
 -spec members(GroupName :: term()) -> [{Pid :: pid(), Meta :: term()}].
 members(GroupName) ->
-    members(default, GroupName).
+    members(?DEFAULT_SCOPE, GroupName).
 
 -spec members(Scope :: atom(), GroupName :: term()) -> [{Pid :: pid(), Meta :: term()}].
 members(Scope, GroupName) ->
@@ -72,7 +72,7 @@ members(Scope, GroupName) ->
 
 -spec is_member(GroupName :: any(), Pid :: pid()) -> boolean().
 is_member(GroupName, Pid) ->
-    is_member(default, GroupName, Pid).
+    is_member(?DEFAULT_SCOPE, GroupName, Pid).
 
 -spec is_member(Scope :: atom(), GroupName :: any(), Pid :: pid()) -> boolean().
 is_member(Scope, GroupName, Pid) ->
@@ -89,7 +89,7 @@ is_member(Scope, GroupName, Pid) ->
 
 -spec local_members(GroupName :: term()) -> [{Pid :: pid(), Meta :: term()}].
 local_members(GroupName) ->
-    local_members(default, GroupName).
+    local_members(?DEFAULT_SCOPE, GroupName).
 
 -spec local_members(Scope :: atom(), GroupName :: term()) -> [{Pid :: pid(), Meta :: term()}].
 local_members(Scope, GroupName) ->
@@ -111,7 +111,7 @@ do_get_members(Scope, GroupName, NodeParam) ->
 
 -spec is_local_member(GroupName :: any(), Pid :: pid()) -> boolean().
 is_local_member(GroupName, Pid) ->
-    is_local_member(default, GroupName, Pid).
+    is_local_member(?DEFAULT_SCOPE, GroupName, Pid).
 
 -spec is_local_member(Scope :: atom(), GroupName :: any(), Pid :: pid()) -> boolean().
 is_local_member(Scope, GroupName, Pid) ->
@@ -132,7 +132,7 @@ join(GroupName, Pid) ->
 
 -spec join(GroupNameOrScope :: term(), PidOrGroupName :: term(), MetaOrPid :: term()) -> ok.
 join(GroupName, Pid, Meta) when is_pid(Pid) ->
-    join(default, GroupName, Pid, Meta);
+    join(?DEFAULT_SCOPE, GroupName, Pid, Meta);
 
 join(Scope, GroupName, Pid) when is_pid(Pid) ->
     join(Scope, GroupName, Pid, undefined).
@@ -155,7 +155,7 @@ join(Scope, GroupName, Pid, Meta) ->
 
 -spec leave(GroupName :: any(), Pid :: pid()) -> ok | {error, Reason :: any()}.
 leave(GroupName, Pid) ->
-    leave(default, GroupName, Pid).
+    leave(?DEFAULT_SCOPE, GroupName, Pid).
 
 -spec leave(Scope :: atom(), GroupName :: any(), Pid :: pid()) -> ok | {error, Reason :: any()}.
 leave(Scope, GroupName, Pid) ->
