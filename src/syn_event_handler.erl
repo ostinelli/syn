@@ -30,8 +30,8 @@
 
 %% API
 -export([ensure_event_handler_loaded/0]).
--export([do_on_process_registered/4]).
--export([do_on_process_unregistered/4]).
+-export([do_on_process_registered/4, do_on_process_unregistered/4]).
+-export([do_on_process_joined/4]).
 -export([do_resolve_registry_conflict/4]).
 
 -callback on_process_registered(
@@ -85,6 +85,17 @@ do_on_process_registered(Scope, Name, {_TablePid, _TableMeta}, {Pid, Meta}) ->
 ) -> any().
 do_on_process_unregistered(Scope, Name, Pid, Meta) ->
     call_callback_event(on_process_unregistered, Scope, Name, Pid, Meta).
+
+-spec do_on_process_joined(
+    Scope :: atom(),
+    Name :: any(),
+    {TablePid :: pid() | undefined, TableMeta :: any()},
+    {Pid :: pid(), Meta :: any()}
+) -> any().
+do_on_process_joined(_Scope, _GroupName, {TableMeta}, {_Pid, Meta})
+    when TableMeta =:= Meta -> ok;
+do_on_process_joined(Scope, GroupName, {_TableMeta}, {Pid, Meta}) ->
+    call_callback_event(on_process_joined, Scope, GroupName, Pid, Meta).
 
 -spec do_resolve_registry_conflict(
     Scope :: atom(),

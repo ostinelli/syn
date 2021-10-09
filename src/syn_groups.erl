@@ -92,11 +92,11 @@ join(Scope, GroupName, Pid) when is_pid(Pid) ->
 join(Scope, GroupName, Pid, Meta) ->
     Node = node(Pid),
     case syn_gen_scope:call(?MODULE, Node, Scope, {join_on_owner, node(), GroupName, Pid, Meta}) of
-        {ok, {Time, TableByName, TableByPid}} when Node =/= node() ->
+        {ok, {TableMeta, Time, TableByName, TableByPid}} when Node =/= node() ->
             %% update table on caller node immediately so that subsequent calls have an updated registry
             add_to_local_table(GroupName, Pid, Meta, Time, undefined, TableByName, TableByPid),
             %% callback
-            %%syn_event_handler:do_on_process_joined(Scope, GroupName, {TablePid, TableMeta}, {Pid, Meta}),
+            syn_event_handler:do_on_process_joined(Scope, GroupName, {TableMeta}, {Pid, Meta}),
             %% return
             ok;
 
@@ -188,6 +188,7 @@ init(State) ->
     {stop, Reason :: term(), Reply :: term(), #state{}} |
     {stop, Reason :: term(), #state{}}.
 handle_call({join_on_owner, RequesterNode, GroupName, Pid, Meta}, _From, #state{
+    scope = Scope,
     table_by_name = TableByName,
     table_by_pid = TableByPid
 } = State) ->
@@ -201,12 +202,16 @@ handle_call({join_on_owner, RequesterNode, GroupName, Pid, Meta}, _From, #state{
             %% add to local table
             Time = erlang:system_time(),
             add_to_local_table(GroupName, Pid, Meta, Time, MRef, TableByName, TableByPid),
+            TableMeta = case find_groups_entry_by_name_and_pid(GroupName, Pid, TableByName) of
+                {{_, M}, _, _, _, _} -> M;
+                _ -> undefined
+            end,
             %% callback
-            %%syn_event_handler:do_on_process_joined(Scope, GroupName, {undefined, undefined}, {Pid, Meta}),
+            syn_event_handler:do_on_process_joined(Scope, GroupName, {TableMeta}, {Pid, Meta}),
             %% broadcast
             syn_gen_scope:broadcast({'3.0', sync_join, GroupName, Pid, Meta, Time}, [RequesterNode], State),
             %% return
-            {reply, {ok, {Time, TableByName, TableByPid}}, State};
+            {reply, {ok, {TableMeta, Time, TableByName, TableByPid}}, State};
 
         false ->
             {reply, {{error, not_alive}, undefined}, State}
@@ -439,6 +444,7 @@ purge_groups_for_remote_node(_Scope, Node, TableByName, TableByPid) ->
     #state{}
 ) -> any().
 handle_groups_sync(GroupName, Pid, Meta, Time, #state{
+    scope = Scope,
     table_by_name = TableByName,
     table_by_pid = TableByPid
 }) ->
@@ -447,15 +453,13 @@ handle_groups_sync(GroupName, Pid, Meta, Time, #state{
             %% new
             add_to_local_table(GroupName, Pid, Meta, Time, undefined, TableByName, TableByPid),
             %% callback
-            %%syn_event_handler:do_on_process_joined(Scope, GroupName, {undefined, undefined}, {Pid, Meta});
-            ok;
+            syn_event_handler:do_on_process_joined(Scope, GroupName, {undefined}, {Pid, Meta});
 
-        {{GroupName, Pid}, _TableMeta, TableTime, _MRef, _TableNode} when Time > TableTime ->
+        {{GroupName, Pid}, TableMeta, TableTime, _MRef, _TableNode} when Time > TableTime ->
             %% update meta
             add_to_local_table(GroupName, Pid, Meta, Time, undefined, TableByName, TableByPid),
             %% callback
-            %%syn_event_handler:do_on_process_joined(Scope, GroupName, {undefined, undefined}, {Pid, Meta});
-            ok;
+            syn_event_handler:do_on_process_joined(Scope, GroupName, {TableMeta}, {Pid, Meta});
 
         {{GroupName, Pid}, _TableMeta, _TableTime, _TableMRef, _TableNode} ->
             %% race condition: incoming data is older, ignore

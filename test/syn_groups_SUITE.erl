@@ -37,7 +37,8 @@
     three_nodes_discover_custom_scope/1,
     three_nodes_join_leave_and_monitor_default_scope/1,
     three_nodes_join_leave_and_monitor_custom_scope/1,
-    three_nodes_cluster_changes/1
+    three_nodes_cluster_changes/1,
+    three_nodes_custom_event_handler_joined_left/1
 ]).
 
 %% include
@@ -75,11 +76,12 @@ all() ->
 groups() ->
     [
         {three_nodes_groups, [shuffle], [
-            three_nodes_discover_default_scope,
-            three_nodes_discover_custom_scope,
-            three_nodes_join_leave_and_monitor_default_scope,
-            three_nodes_join_leave_and_monitor_custom_scope,
-            three_nodes_cluster_changes
+%%            three_nodes_discover_default_scope,
+%%            three_nodes_discover_custom_scope,
+%%            three_nodes_join_leave_and_monitor_default_scope,
+%%            three_nodes_join_leave_and_monitor_custom_scope,
+%%            three_nodes_cluster_changes,
+            three_nodes_custom_event_handler_joined_left
         ]}
     ].
 %% -------------------------------------------------------------------
@@ -940,3 +942,46 @@ three_nodes_cluster_changes(Config) ->
     0 = rpc:call(SlaveNode2, syn, groups_count, [custom_scope_bc, node()]),
     1 = rpc:call(SlaveNode2, syn, groups_count, [custom_scope_bc, SlaveNode1]),
     1 = rpc:call(SlaveNode2, syn, groups_count, [custom_scope_bc, SlaveNode2]).
+
+three_nodes_custom_event_handler_joined_left(Config) ->
+    %% get slaves
+    SlaveNode1 = proplists:get_value(slave_node_1, Config),
+    SlaveNode2 = proplists:get_value(slave_node_2, Config),
+
+    %% add custom handler for callbacks
+    syn:set_event_handler(syn_test_event_handler_callbacks),
+    rpc:call(SlaveNode1, syn, set_event_handler, [syn_test_event_handler_callbacks]),
+    rpc:call(SlaveNode2, syn, set_event_handler, [syn_test_event_handler_callbacks]),
+
+    %% start syn on nodes
+    ok = syn:start(),
+    ok = rpc:call(SlaveNode1, syn, start, []),
+    ok = rpc:call(SlaveNode2, syn, start, []),
+
+    %% init
+    CurrentNode = node(),
+
+    %% start process
+    Pid = syn_test_suite_helper:start_process(),
+
+    %% ---> on join
+    ok = syn:join("my-group", Pid, {recipient, self(), <<"meta">>}),
+
+    %% check callbacks called
+    syn_test_suite_helper:assert_received_messages([
+        {on_process_joined, CurrentNode, default, "my-group", Pid, <<"meta">>},
+        {on_process_joined, SlaveNode1, default, "my-group", Pid, <<"meta">>},
+        {on_process_joined, SlaveNode2, default, "my-group", Pid, <<"meta">>}
+    ]),
+    syn_test_suite_helper:assert_empty_queue(self()),
+
+    %% ---> on meta update
+    ok = syn:join("my-group", Pid, {recipient, self(), <<"new-meta">>}),
+
+    %% check callbacks called
+    syn_test_suite_helper:assert_received_messages([
+        {on_process_joined, CurrentNode, default, "my-group", Pid, <<"new-meta">>},
+        {on_process_joined, SlaveNode1, default, "my-group", Pid, <<"new-meta">>},
+        {on_process_joined, SlaveNode2, default, "my-group", Pid, <<"new-meta">>}
+    ]),
+    syn_test_suite_helper:assert_empty_queue(self()).
