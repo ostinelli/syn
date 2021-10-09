@@ -923,6 +923,9 @@ three_nodes_cluster_changes(Config) ->
         fun() -> rpc:call(SlaveNode2, syn, lookup, [custom_scope_bc, "BC-proc-1 alias"]) end
     ),
     {'EXIT', {{invalid_scope, custom_scope_bc}, _}} = catch syn:registry_count(custom_scope_bc),
+    {'EXIT', {{invalid_scope, custom_scope_bc}, _}} = catch syn:registry_count(custom_scope_bc, node()),
+    {'EXIT', {{invalid_scope, custom_scope_bc}, _}} = catch syn:registry_count(custom_scope_bc, SlaveNode1),
+    {'EXIT', {{invalid_scope, custom_scope_bc}, _}} = catch syn:registry_count(custom_scope_bc, SlaveNode2),
     2 = rpc:call(SlaveNode1, syn, registry_count, [custom_scope_bc]),
     0 = rpc:call(SlaveNode1, syn, registry_count, [custom_scope_bc, node()]),
     2 = rpc:call(SlaveNode1, syn, registry_count, [custom_scope_bc, SlaveNode1]),

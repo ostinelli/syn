@@ -188,7 +188,6 @@ init(State) ->
     {stop, Reason :: term(), Reply :: term(), #state{}} |
     {stop, Reason :: term(), #state{}}.
 handle_call({join_on_owner, RequesterNode, GroupName, Pid, Meta}, _From, #state{
-    scope = Scope,
     table_by_name = TableByName,
     table_by_pid = TableByPid
 } = State) ->
@@ -243,29 +242,9 @@ handle_call(Request, From, State) ->
     {noreply, #state{}} |
     {noreply, #state{}, timeout() | hibernate | {continue, term()}} |
     {stop, Reason :: term(), #state{}}.
-handle_info({'3.0', sync_join, GroupName, Pid, Meta, Time}, #state{
-    table_by_name = TableByName,
-    table_by_pid = TableByPid
-} = State) ->
-    case find_groups_entry_by_name_and_pid(GroupName, Pid, TableByName) of
-        undefined ->
-            %% new
-            add_to_local_table(GroupName, Pid, Meta, Time, undefined, TableByName, TableByPid),
-            %% callback
-            %%syn_event_handler:do_on_process_joined(Scope, GroupName, {undefined, undefined}, {Pid, Meta});
-            {noreply, State};
-
-        {{GroupName, Pid}, _TableMeta, TableTime, _MRef, _TableNode} when Time > TableTime ->
-            %% update meta
-            add_to_local_table(GroupName, Pid, Meta, Time, undefined, TableByName, TableByPid),
-            %% callback
-            %%syn_event_handler:do_on_process_joined(Scope, GroupName, {undefined, undefined}, {Pid, Meta});
-            {noreply, State};
-
-        {{GroupName, Pid}, _TableMeta, _TableTime, _TableMRef, _TableNode} ->
-            %% race condition: incoming data is older, ignore
-            {noreply, State}
-    end;
+handle_info({'3.0', sync_join, GroupName, Pid, Meta, Time}, State) ->
+    handle_groups_sync(GroupName, Pid, Meta, Time, State),
+    {noreply, State};
 
 handle_info({'3.0', sync_leave, GroupName, Pid}, #state{
     table_by_name = TableByName,
@@ -288,7 +267,7 @@ handle_info({'DOWN', _MRef, process, Pid, Reason}, #state{
             );
 
         Entries ->
-            lists:foreach(fun({{_Pid, GroupName}, Meta, _, _, _}) ->
+            lists:foreach(fun({{_Pid, GroupName}, _Meta, _, _, _}) ->
                 %% remove from table
                 remove_from_local_table(GroupName, Pid, TableByName, TableByPid),
                 %% callback
@@ -309,12 +288,14 @@ handle_info(Info, State) ->
 %% ----------------------------------------------------------------------------------------------------------
 -spec get_local_data(State :: term()) -> {ok, Data :: any()} | undefined.
 get_local_data(#state{table_by_name = TableByName}) ->
-    {ok, []}.
+    {ok, get_groups_tuples_for_node(node(), TableByName)}.
 
 -spec save_remote_data(RemoteData :: any(), State :: term()) -> any().
-save_remote_data(RegistryTuplesOfRemoteNode, #state{scope = Scope} = State) ->
+save_remote_data(GroupsTuplesOfRemoteNode, State) ->
     %% insert tuples
-    ok.
+    lists:foreach(fun({GroupName, Pid, Meta, Time}) ->
+        handle_groups_sync(GroupName, Pid, Meta, Time, State)
+    end, GroupsTuplesOfRemoteNode).
 
 -spec purge_local_data_for_node(Node :: node(), State :: term()) -> any().
 purge_local_data_for_node(Node, #state{
@@ -322,7 +303,7 @@ purge_local_data_for_node(Node, #state{
     table_by_name = TableByName,
     table_by_pid = TableByPid
 }) ->
-    ok.
+    purge_groups_for_remote_node(Scope, Node, TableByName, TableByPid).
 
 %% ===================================================================
 %% Internal
@@ -437,3 +418,46 @@ add_to_local_table(GroupName, Pid, Meta, Time, MRef, TableByName, TableByPid) ->
 remove_from_local_table(GroupName, Pid, TableByName, TableByPid) ->
     true = ets:delete(TableByName, {GroupName, Pid}),
     true = ets:delete(TableByPid, {Pid, GroupName}).
+
+-spec purge_groups_for_remote_node(Scope :: atom(), Node :: atom(), TableByName :: atom(), TableByPid :: atom()) -> true.
+purge_groups_for_remote_node(_Scope, Node, TableByName, TableByPid) ->
+%%    %% loop elements for callback in a separate process to free scope process
+%%    GroupsTuples = get_groups_tuples_for_node(Node, TableByName),
+%%    spawn(fun() ->
+%%        lists:foreach(fun({Name, Pid, Meta, _Time}) ->
+%%            syn_event_handler:do_on_process_left(Scope, Name, Pid, Meta)
+%%        end, GroupsTuples)
+%%    end),
+    ets:match_delete(TableByName, {{'_', '_'}, '_', '_', '_', Node}),
+    ets:match_delete(TableByPid, {{'_', '_'}, '_', '_', '_', Node}).
+
+-spec handle_groups_sync(
+    GroupName :: term(),
+    Pid :: pid(),
+    Meta :: term(),
+    Time :: non_neg_integer(),
+    #state{}
+) -> any().
+handle_groups_sync(GroupName, Pid, Meta, Time, #state{
+    table_by_name = TableByName,
+    table_by_pid = TableByPid
+}) ->
+    case find_groups_entry_by_name_and_pid(GroupName, Pid, TableByName) of
+        undefined ->
+            %% new
+            add_to_local_table(GroupName, Pid, Meta, Time, undefined, TableByName, TableByPid),
+            %% callback
+            %%syn_event_handler:do_on_process_joined(Scope, GroupName, {undefined, undefined}, {Pid, Meta});
+            ok;
+
+        {{GroupName, Pid}, _TableMeta, TableTime, _MRef, _TableNode} when Time > TableTime ->
+            %% update meta
+            add_to_local_table(GroupName, Pid, Meta, Time, undefined, TableByName, TableByPid),
+            %% callback
+            %%syn_event_handler:do_on_process_joined(Scope, GroupName, {undefined, undefined}, {Pid, Meta});
+            ok;
+
+        {{GroupName, Pid}, _TableMeta, _TableTime, _TableMRef, _TableNode} ->
+            %% race condition: incoming data is older, ignore
+            ok
+    end.

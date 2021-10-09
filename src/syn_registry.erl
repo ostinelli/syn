@@ -268,8 +268,8 @@ handle_call(Request, From, State) ->
     {noreply, #state{}} |
     {noreply, #state{}, timeout() | hibernate | {continue, term()}} |
     {stop, Reason :: term(), #state{}}.
-handle_info({'3.0', sync_register, Scope, Name, Pid, Meta, Time}, State) ->
-    handle_registry_sync(Scope, Name, Pid, Meta, Time, State),
+handle_info({'3.0', sync_register, _Scope, Name, Pid, Meta, Time}, State) ->
+    handle_registry_sync(Name, Pid, Meta, Time, State),
     {noreply, State};
 
 handle_info({'3.0', sync_unregister, Name, Pid, Meta}, #state{
@@ -320,10 +320,10 @@ get_local_data(#state{table_by_name = TableByName}) ->
     {ok, get_registry_tuples_for_node(node(), TableByName)}.
 
 -spec save_remote_data(RemoteData :: term(), #state{}) -> any().
-save_remote_data(RegistryTuplesOfRemoteNode, #state{scope = Scope} = State) ->
+save_remote_data(RegistryTuplesOfRemoteNode, State) ->
     %% insert tuples
     lists:foreach(fun({Name, Pid, Meta, Time}) ->
-        handle_registry_sync(Scope, Name, Pid, Meta, Time, State)
+        handle_registry_sync(Name, Pid, Meta, Time, State)
     end, RegistryTuplesOfRemoteNode).
 
 -spec purge_local_data_for_node(Node :: node(), #state{}) -> any().
@@ -477,14 +477,14 @@ purge_registry_for_remote_node(Scope, Node, TableByName, TableByPid) when Node =
     true = ets:match_delete(TableByPid, {'_', '_', '_', '_', '_', Node}).
 
 -spec handle_registry_sync(
-    Scope :: atom(),
     Name :: term(),
     Pid :: pid(),
     Meta :: term(),
     Time :: non_neg_integer(),
     #state{}
 ) -> any().
-handle_registry_sync(Scope, Name, Pid, Meta, Time, #state{
+handle_registry_sync(Name, Pid, Meta, Time, #state{
+    scope = Scope,
     table_by_name = TableByName,
     table_by_pid = TableByPid
 } = State) ->

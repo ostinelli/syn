@@ -36,7 +36,8 @@
     three_nodes_discover_default_scope/1,
     three_nodes_discover_custom_scope/1,
     three_nodes_join_leave_and_monitor_default_scope/1,
-    three_nodes_join_leave_and_monitor_custom_scope/1
+    three_nodes_join_leave_and_monitor_custom_scope/1,
+    three_nodes_cluster_changes/1
 ]).
 
 %% include
@@ -74,10 +75,11 @@ all() ->
 groups() ->
     [
         {three_nodes_groups, [shuffle], [
-            three_nodes_discover_default_scope,
-            three_nodes_discover_custom_scope,
-            three_nodes_join_leave_and_monitor_default_scope,
-            three_nodes_join_leave_and_monitor_custom_scope
+%%            three_nodes_discover_default_scope,
+%%            three_nodes_discover_custom_scope,
+%%            three_nodes_join_leave_and_monitor_default_scope,
+%%            three_nodes_join_leave_and_monitor_custom_scope,
+            three_nodes_cluster_changes
         ]}
     ].
 %% -------------------------------------------------------------------
@@ -708,3 +710,233 @@ three_nodes_join_leave_and_monitor_custom_scope(Config) ->
 
     %% errors
     {error, not_in_group} = syn:leave(custom_scope_ab, {group, "one"}, PidWithMeta).
+
+three_nodes_cluster_changes(Config) ->
+    %% get slaves
+    SlaveNode1 = proplists:get_value(slave_node_1, Config),
+    SlaveNode2 = proplists:get_value(slave_node_2, Config),
+
+    %% disconnect 1 from 2
+    rpc:call(SlaveNode1, syn_test_suite_helper, disconnect_node, [SlaveNode2]),
+    syn_test_suite_helper:assert_cluster(node(), [SlaveNode1, SlaveNode2]),
+    syn_test_suite_helper:assert_cluster(SlaveNode1, [node()]),
+    syn_test_suite_helper:assert_cluster(SlaveNode2, [node()]),
+
+    %% start syn on 1 and 2, nodes don't know of each other
+    ok = rpc:call(SlaveNode1, syn, start, []),
+    ok = rpc:call(SlaveNode2, syn, start, []),
+
+    %% add custom scopes
+    ok = rpc:call(SlaveNode1, syn, add_node_to_scopes, [[custom_scope_bc]]),
+    ok = rpc:call(SlaveNode2, syn, add_node_to_scopes, [[custom_scope_bc]]),
+
+    %% start processes
+    PidRemoteOn1 = syn_test_suite_helper:start_process(SlaveNode1),
+    PidRemoteOn2 = syn_test_suite_helper:start_process(SlaveNode2),
+
+    %% join
+    ok = rpc:call(SlaveNode1, syn, join, [<<"common-group">>, PidRemoteOn1, "meta-1"]),
+    ok = rpc:call(SlaveNode2, syn, join, [<<"common-group">>, PidRemoteOn2, "meta-2"]),
+    ok = rpc:call(SlaveNode2, syn, join, [<<"group-2">>, PidRemoteOn2, "other-meta"]),
+    ok = rpc:call(SlaveNode1, syn, join, [custom_scope_bc, <<"scoped-on-bc">>, PidRemoteOn1, "scoped-meta-1"]),
+    ok = rpc:call(SlaveNode2, syn, join, [custom_scope_bc, <<"scoped-on-bc">>, PidRemoteOn2, "scoped-meta-2"]),
+
+    %% form full cluster
+    ok = syn:start(),
+    rpc:call(SlaveNode1, syn_test_suite_helper, connect_node, [SlaveNode2]),
+    syn_test_suite_helper:assert_cluster(node(), [SlaveNode1, SlaveNode2]),
+    syn_test_suite_helper:assert_cluster(SlaveNode1, [node(), SlaveNode2]),
+    syn_test_suite_helper:assert_cluster(SlaveNode2, [node(), SlaveNode1]),
+    syn_test_suite_helper:wait_process_name_ready(syn_groups_default),
+
+    %% retrieve
+    syn_test_suite_helper:assert_wait(
+        lists:sort([{PidRemoteOn1, "meta-1"}, {PidRemoteOn2, "meta-2"}]),
+        fun() -> lists:sort(syn:get_members(<<"common-group">>)) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        lists:sort([{PidRemoteOn1, "meta-1"}, {PidRemoteOn2, "meta-2"}]),
+        fun() -> lists:sort(rpc:call(SlaveNode1, syn, get_members, [<<"common-group">>])) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        lists:sort([{PidRemoteOn1, "meta-1"}, {PidRemoteOn2, "meta-2"}]),
+        fun() -> lists:sort(rpc:call(SlaveNode2, syn, get_members, [<<"common-group">>])) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        [{PidRemoteOn2, "other-meta"}],
+        fun() -> lists:sort(syn:get_members(<<"group-2">>)) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        [{PidRemoteOn2, "other-meta"}],
+        fun() -> lists:sort(rpc:call(SlaveNode1, syn, get_members, [<<"group-2">>])) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        [{PidRemoteOn2, "other-meta"}],
+        fun() -> lists:sort(rpc:call(SlaveNode2, syn, get_members, [<<"group-2">>])) end
+    ),
+    2 = syn:groups_count(default),
+    0 = syn:groups_count(default, node()),
+    1 = syn:groups_count(default, SlaveNode1),
+    2 = syn:groups_count(default, SlaveNode2),
+    2 = rpc:call(SlaveNode1, syn, groups_count, [default]),
+    0 = rpc:call(SlaveNode1, syn, groups_count, [default, node()]),
+    1 = rpc:call(SlaveNode1, syn, groups_count, [default, SlaveNode1]),
+    2 = rpc:call(SlaveNode1, syn, groups_count, [default, SlaveNode2]),
+    2 = rpc:call(SlaveNode2, syn, groups_count, [default]),
+    0 = rpc:call(SlaveNode2, syn, groups_count, [default, node()]),
+    1 = rpc:call(SlaveNode2, syn, groups_count, [default, SlaveNode1]),
+    2 = rpc:call(SlaveNode2, syn, groups_count, [default, SlaveNode2]),
+
+    {'EXIT', {{invalid_scope, custom_scope_bc}, _}} = catch syn:groups_count(custom_scope_bc),
+    syn_test_suite_helper:assert_wait(
+        lists:sort([{PidRemoteOn1, "scoped-meta-1"}, {PidRemoteOn2, "scoped-meta-2"}]),
+        fun() -> lists:sort(rpc:call(SlaveNode1, syn, get_members, [custom_scope_bc, <<"scoped-on-bc">>])) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        lists:sort([{PidRemoteOn1, "scoped-meta-1"}, {PidRemoteOn2, "scoped-meta-2"}]),
+        fun() -> lists:sort(rpc:call(SlaveNode2, syn, get_members, [custom_scope_bc, <<"scoped-on-bc">>])) end
+    ),
+    {'EXIT', {{invalid_scope, custom_scope_bc}, _}} = catch syn:groups_count(custom_scope_bc),
+    {'EXIT', {{invalid_scope, custom_scope_bc}, _}} = catch syn:groups_count(custom_scope_bc, node()),
+    {'EXIT', {{invalid_scope, custom_scope_bc}, _}} = catch syn:groups_count(custom_scope_bc, SlaveNode1),
+    {'EXIT', {{invalid_scope, custom_scope_bc}, _}} = catch syn:groups_count(custom_scope_bc, SlaveNode2),
+    1 = rpc:call(SlaveNode1, syn, groups_count, [custom_scope_bc]),
+    0 = rpc:call(SlaveNode1, syn, groups_count, [custom_scope_bc, node()]),
+    1 = rpc:call(SlaveNode1, syn, groups_count, [custom_scope_bc, SlaveNode1]),
+    1 = rpc:call(SlaveNode1, syn, groups_count, [custom_scope_bc, SlaveNode2]),
+    1 = rpc:call(SlaveNode2, syn, groups_count, [custom_scope_bc]),
+    0 = rpc:call(SlaveNode2, syn, groups_count, [custom_scope_bc, node()]),
+    1 = rpc:call(SlaveNode2, syn, groups_count, [custom_scope_bc, SlaveNode1]),
+    1 = rpc:call(SlaveNode2, syn, groups_count, [custom_scope_bc, SlaveNode2]),
+
+    %% partial netsplit (1 cannot see 2)
+    rpc:call(SlaveNode1, syn_test_suite_helper, disconnect_node, [SlaveNode2]),
+    syn_test_suite_helper:assert_cluster(node(), [SlaveNode1, SlaveNode2]),
+    syn_test_suite_helper:assert_cluster(SlaveNode1, [node()]),
+    syn_test_suite_helper:assert_cluster(SlaveNode2, [node()]),
+
+    %% retrieve
+    syn_test_suite_helper:assert_wait(
+        lists:sort([{PidRemoteOn1, "meta-1"}, {PidRemoteOn2, "meta-2"}]),
+        fun() -> lists:sort(syn:get_members(<<"common-group">>)) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        [{PidRemoteOn1, "meta-1"}],
+        fun() -> lists:sort(rpc:call(SlaveNode1, syn, get_members, [<<"common-group">>])) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        [{PidRemoteOn2, "meta-2"}],
+        fun() -> lists:sort(rpc:call(SlaveNode2, syn, get_members, [<<"common-group">>])) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        [{PidRemoteOn2, "other-meta"}],
+        fun() -> lists:sort(syn:get_members(<<"group-2">>)) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        [],
+        fun() -> lists:sort(rpc:call(SlaveNode1, syn, get_members, [<<"group-2">>])) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        [{PidRemoteOn2, "other-meta"}],
+        fun() -> lists:sort(rpc:call(SlaveNode2, syn, get_members, [<<"group-2">>])) end
+    ),
+    2 = syn:groups_count(default),
+    0 = syn:groups_count(default, node()),
+    1 = syn:groups_count(default, SlaveNode1),
+    2 = syn:groups_count(default, SlaveNode2),
+    1 = rpc:call(SlaveNode1, syn, groups_count, [default]),
+    0 = rpc:call(SlaveNode1, syn, groups_count, [default, node()]),
+    1 = rpc:call(SlaveNode1, syn, groups_count, [default, SlaveNode1]),
+    0 = rpc:call(SlaveNode1, syn, groups_count, [default, SlaveNode2]),
+    2 = rpc:call(SlaveNode2, syn, groups_count, [default]),
+    0 = rpc:call(SlaveNode2, syn, groups_count, [default, node()]),
+    0 = rpc:call(SlaveNode2, syn, groups_count, [default, SlaveNode1]),
+    2 = rpc:call(SlaveNode2, syn, groups_count, [default, SlaveNode2]),
+
+    {'EXIT', {{invalid_scope, custom_scope_bc}, _}} = catch syn:groups_count(custom_scope_bc),
+    syn_test_suite_helper:assert_wait(
+        [{PidRemoteOn1, "scoped-meta-1"}],
+        fun() -> lists:sort(rpc:call(SlaveNode1, syn, get_members, [custom_scope_bc, <<"scoped-on-bc">>])) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        [{PidRemoteOn2, "scoped-meta-2"}],
+        fun() -> lists:sort(rpc:call(SlaveNode2, syn, get_members, [custom_scope_bc, <<"scoped-on-bc">>])) end
+    ),
+    {'EXIT', {{invalid_scope, custom_scope_bc}, _}} = catch syn:groups_count(custom_scope_bc),
+    {'EXIT', {{invalid_scope, custom_scope_bc}, _}} = catch syn:groups_count(custom_scope_bc, node()),
+    {'EXIT', {{invalid_scope, custom_scope_bc}, _}} = catch syn:groups_count(custom_scope_bc, SlaveNode1),
+    {'EXIT', {{invalid_scope, custom_scope_bc}, _}} = catch syn:groups_count(custom_scope_bc, SlaveNode2),
+    1 = rpc:call(SlaveNode1, syn, groups_count, [custom_scope_bc]),
+    0 = rpc:call(SlaveNode1, syn, groups_count, [custom_scope_bc, node()]),
+    1 = rpc:call(SlaveNode1, syn, groups_count, [custom_scope_bc, SlaveNode1]),
+    0 = rpc:call(SlaveNode1, syn, groups_count, [custom_scope_bc, SlaveNode2]),
+    1 = rpc:call(SlaveNode2, syn, groups_count, [custom_scope_bc]),
+    0 = rpc:call(SlaveNode2, syn, groups_count, [custom_scope_bc, node()]),
+    0 = rpc:call(SlaveNode2, syn, groups_count, [custom_scope_bc, SlaveNode1]),
+    1 = rpc:call(SlaveNode2, syn, groups_count, [custom_scope_bc, SlaveNode2]),
+
+    %% re-join
+    rpc:call(SlaveNode1, syn_test_suite_helper, connect_node, [SlaveNode2]),
+    syn_test_suite_helper:assert_cluster(node(), [SlaveNode1, SlaveNode2]),
+    syn_test_suite_helper:assert_cluster(SlaveNode1, [node(), SlaveNode2]),
+    syn_test_suite_helper:assert_cluster(SlaveNode2, [node(), SlaveNode1]),
+
+    %% retrieve
+    syn_test_suite_helper:assert_wait(
+        lists:sort([{PidRemoteOn1, "meta-1"}, {PidRemoteOn2, "meta-2"}]),
+        fun() -> lists:sort(syn:get_members(<<"common-group">>)) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        lists:sort([{PidRemoteOn1, "meta-1"}, {PidRemoteOn2, "meta-2"}]),
+        fun() -> lists:sort(rpc:call(SlaveNode1, syn, get_members, [<<"common-group">>])) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        lists:sort([{PidRemoteOn1, "meta-1"}, {PidRemoteOn2, "meta-2"}]),
+        fun() -> lists:sort(rpc:call(SlaveNode2, syn, get_members, [<<"common-group">>])) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        [{PidRemoteOn2, "other-meta"}],
+        fun() -> lists:sort(syn:get_members(<<"group-2">>)) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        [{PidRemoteOn2, "other-meta"}],
+        fun() -> lists:sort(rpc:call(SlaveNode1, syn, get_members, [<<"group-2">>])) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        [{PidRemoteOn2, "other-meta"}],
+        fun() -> lists:sort(rpc:call(SlaveNode2, syn, get_members, [<<"group-2">>])) end
+    ),
+    2 = syn:groups_count(default),
+    0 = syn:groups_count(default, node()),
+    1 = syn:groups_count(default, SlaveNode1),
+    2 = syn:groups_count(default, SlaveNode2),
+    2 = rpc:call(SlaveNode1, syn, groups_count, [default]),
+    0 = rpc:call(SlaveNode1, syn, groups_count, [default, node()]),
+    1 = rpc:call(SlaveNode1, syn, groups_count, [default, SlaveNode1]),
+    2 = rpc:call(SlaveNode1, syn, groups_count, [default, SlaveNode2]),
+    2 = rpc:call(SlaveNode2, syn, groups_count, [default]),
+    0 = rpc:call(SlaveNode2, syn, groups_count, [default, node()]),
+    1 = rpc:call(SlaveNode2, syn, groups_count, [default, SlaveNode1]),
+    2 = rpc:call(SlaveNode2, syn, groups_count, [default, SlaveNode2]),
+
+    {'EXIT', {{invalid_scope, custom_scope_bc}, _}} = catch syn:groups_count(custom_scope_bc),
+    syn_test_suite_helper:assert_wait(
+        lists:sort([{PidRemoteOn1, "scoped-meta-1"}, {PidRemoteOn2, "scoped-meta-2"}]),
+        fun() -> lists:sort(rpc:call(SlaveNode1, syn, get_members, [custom_scope_bc, <<"scoped-on-bc">>])) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        lists:sort([{PidRemoteOn1, "scoped-meta-1"}, {PidRemoteOn2, "scoped-meta-2"}]),
+        fun() -> lists:sort(rpc:call(SlaveNode2, syn, get_members, [custom_scope_bc, <<"scoped-on-bc">>])) end
+    ),
+    {'EXIT', {{invalid_scope, custom_scope_bc}, _}} = catch syn:groups_count(custom_scope_bc),
+    {'EXIT', {{invalid_scope, custom_scope_bc}, _}} = catch syn:groups_count(custom_scope_bc, node()),
+    {'EXIT', {{invalid_scope, custom_scope_bc}, _}} = catch syn:groups_count(custom_scope_bc, SlaveNode1),
+    {'EXIT', {{invalid_scope, custom_scope_bc}, _}} = catch syn:groups_count(custom_scope_bc, SlaveNode2),
+    1 = rpc:call(SlaveNode1, syn, groups_count, [custom_scope_bc]),
+    0 = rpc:call(SlaveNode1, syn, groups_count, [custom_scope_bc, node()]),
+    1 = rpc:call(SlaveNode1, syn, groups_count, [custom_scope_bc, SlaveNode1]),
+    1 = rpc:call(SlaveNode1, syn, groups_count, [custom_scope_bc, SlaveNode2]),
+    1 = rpc:call(SlaveNode2, syn, groups_count, [custom_scope_bc]),
+    0 = rpc:call(SlaveNode2, syn, groups_count, [custom_scope_bc, node()]),
+    1 = rpc:call(SlaveNode2, syn, groups_count, [custom_scope_bc, SlaveNode1]),
+    1 = rpc:call(SlaveNode2, syn, groups_count, [custom_scope_bc, SlaveNode2]).
