@@ -208,7 +208,7 @@ handle_call({register_on_owner, RequesterNode, Name, Pid, Meta}, _From, #state{
                     %% callback
                     syn_event_handler:do_on_process_registered(Scope, Name, {undefined, undefined}, {Pid, Meta}),
                     %% broadcast
-                    syn_gen_scope:broadcast({'3.0', sync_register, Scope, Name, Pid, Meta, Time}, [RequesterNode], State),
+                    syn_gen_scope:broadcast({'3.0', sync_register, Name, Pid, Meta, Time}, [RequesterNode], State),
                     %% return
                     {reply, {ok, {undefined, undefined, Time, TableByName, TableByPid}}, State};
 
@@ -219,7 +219,7 @@ handle_call({register_on_owner, RequesterNode, Name, Pid, Meta}, _From, #state{
                     %% callback
                     syn_event_handler:do_on_process_registered(Scope, Name, {Pid, TableMeta}, {Pid, Meta}),
                     %% broadcast
-                    syn_gen_scope:broadcast({'3.0', sync_register, Scope, Name, Pid, Meta, Time}, State),
+                    syn_gen_scope:broadcast({'3.0', sync_register, Name, Pid, Meta, Time}, State),
                     %% return
                     {reply, {ok, {Pid, TableMeta, Time, TableByName, TableByPid}}, State};
 
@@ -268,7 +268,7 @@ handle_call(Request, From, State) ->
     {noreply, #state{}} |
     {noreply, #state{}, timeout() | hibernate | {continue, term()}} |
     {stop, Reason :: term(), #state{}}.
-handle_info({'3.0', sync_register, _Scope, Name, Pid, Meta, Time}, State) ->
+handle_info({'3.0', sync_register, Name, Pid, Meta, Time}, State) ->
     handle_registry_sync(Name, Pid, Meta, Time, State),
     {noreply, State};
 
@@ -563,7 +563,7 @@ resolve_conflict(Scope, Name, {Pid, Meta, Time}, {TablePid, TableMeta, TableTime
             ResolveTime = erlang:system_time(),
             add_to_local_table(Name, TablePid, TableMeta, ResolveTime, TableMRef, TableByName, TableByPid),
             %% broadcast to all but remote node
-            syn_gen_scope:broadcast({'3.0', sync_register, Scope, Name, TablePid, TableMeta, ResolveTime}, State);
+            syn_gen_scope:broadcast({'3.0', sync_register, Name, TablePid, TableMeta, ResolveTime}, State);
 
         Invalid ->
             error_logger:info_msg("SYN[~s] Registry CONFLICT for name ~p@~s: ~p vs ~p -> none chosen (got: ~p)",

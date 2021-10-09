@@ -75,10 +75,10 @@ all() ->
 groups() ->
     [
         {three_nodes_groups, [shuffle], [
-%%            three_nodes_discover_default_scope,
-%%            three_nodes_discover_custom_scope,
-%%            three_nodes_join_leave_and_monitor_default_scope,
-%%            three_nodes_join_leave_and_monitor_custom_scope,
+            three_nodes_discover_default_scope,
+            three_nodes_discover_custom_scope,
+            three_nodes_join_leave_and_monitor_default_scope,
+            three_nodes_join_leave_and_monitor_custom_scope,
             three_nodes_cluster_changes
         ]}
     ].
