@@ -42,7 +42,9 @@
     three_nodes_publish_default_scope/1,
     three_nodes_publish_custom_scope/1,
     three_nodes_multi_call_default_scope/1,
-    three_nodes_multi_call_custom_scope/1
+    three_nodes_multi_call_custom_scope/1,
+    three_nodes_group_names_default_scope/1,
+    three_nodes_group_names_custom_scope/1
 ]).
 
 %% internals
@@ -95,7 +97,9 @@ groups() ->
             three_nodes_publish_default_scope,
             three_nodes_publish_custom_scope,
             three_nodes_multi_call_default_scope,
-            three_nodes_multi_call_custom_scope
+            three_nodes_multi_call_custom_scope,
+            three_nodes_group_names_default_scope,
+            three_nodes_group_names_custom_scope
         ]}
     ].
 %% -------------------------------------------------------------------
@@ -1838,6 +1842,356 @@ three_nodes_multi_call_custom_scope(Config) ->
         {{PidRemoteOn2, "meta-on-bc-2"}, {reply, test_message_bc, PidRemoteOn2, "meta-on-bc-2"}}
     ]),
     BadRepliesBC = [].
+
+three_nodes_group_names_default_scope(Config) ->
+    %% get slaves
+    SlaveNode1 = proplists:get_value(slave_node_1, Config),
+    SlaveNode2 = proplists:get_value(slave_node_2, Config),
+
+    %% start syn on nodes
+    ok = syn:start(),
+    ok = rpc:call(SlaveNode1, syn, start, []),
+    ok = rpc:call(SlaveNode2, syn, start, []),
+
+    %% start processes
+    Pid = syn_test_suite_helper:start_process(),
+    Pid2 = syn_test_suite_helper:start_process(),
+    PidRemoteOn1 = syn_test_suite_helper:start_process(SlaveNode1),
+    PidRemoteOn2 = syn_test_suite_helper:start_process(SlaveNode2),
+
+    %% join
+    ok = syn:join(<<"subscribers">>, Pid),
+    ok = syn:join(<<"subscribers">>, Pid2),
+    ok = syn:join(<<"subscribers-2">>, Pid),
+    ok = syn:join(<<"subscribers-2">>, PidRemoteOn1),
+    ok = syn:join(<<"subscribers-2">>, PidRemoteOn2),
+    ok = syn:join(<<"subscribers-3">>, PidRemoteOn1),
+
+    %% retrieve
+    syn_test_suite_helper:assert_wait(
+        lists:sort([<<"subscribers">>, <<"subscribers-2">>, <<"subscribers-3">>]),
+        fun() -> lists:sort(syn:group_names()) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        lists:sort([<<"subscribers">>, <<"subscribers-2">>]),
+        fun() -> lists:sort(syn:group_names(default, node())) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        lists:sort([<<"subscribers-2">>, <<"subscribers-3">>]),
+        fun() -> lists:sort(syn:group_names(default, SlaveNode1)) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        [<<"subscribers-2">>],
+        fun() -> lists:sort(syn:group_names(default, SlaveNode2)) end
+    ),
+
+    syn_test_suite_helper:assert_wait(
+        lists:sort([<<"subscribers">>, <<"subscribers-2">>, <<"subscribers-3">>]),
+        fun() -> lists:sort(rpc:call(SlaveNode1, syn, group_names, [])) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        lists:sort([<<"subscribers">>, <<"subscribers-2">>]),
+        fun() -> lists:sort(rpc:call(SlaveNode1, syn, group_names, [default, node()])) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        lists:sort([<<"subscribers-2">>, <<"subscribers-3">>]),
+        fun() -> lists:sort(rpc:call(SlaveNode1, syn, group_names, [default, SlaveNode1])) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        [<<"subscribers-2">>],
+        fun() -> lists:sort(rpc:call(SlaveNode1, syn, group_names, [default, SlaveNode2])) end
+    ),
+
+    syn_test_suite_helper:assert_wait(
+        lists:sort([<<"subscribers">>, <<"subscribers-2">>, <<"subscribers-3">>]),
+        fun() -> lists:sort(rpc:call(SlaveNode2, syn, group_names, [])) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        lists:sort([<<"subscribers">>, <<"subscribers-2">>]),
+        fun() -> lists:sort(rpc:call(SlaveNode2, syn, group_names, [default, node()])) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        lists:sort([<<"subscribers-2">>, <<"subscribers-3">>]),
+        fun() -> lists:sort(rpc:call(SlaveNode2, syn, group_names, [default, SlaveNode1])) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        [<<"subscribers-2">>],
+        fun() -> lists:sort(rpc:call(SlaveNode2, syn, group_names, [default, SlaveNode2])) end
+    ),
+
+    %% leave
+    ok = syn:leave(<<"subscribers-2">>, Pid),
+    ok = syn:leave(<<"subscribers-2">>, PidRemoteOn1),
+    ok = syn:leave(<<"subscribers-2">>, PidRemoteOn2),
+
+    %% retrieve
+    syn_test_suite_helper:assert_wait(
+        lists:sort([<<"subscribers">>, <<"subscribers-3">>]),
+        fun() -> lists:sort(syn:group_names()) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        [<<"subscribers">>],
+        fun() -> lists:sort(syn:group_names(default, node())) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        [<<"subscribers-3">>],
+        fun() -> lists:sort(syn:group_names(default, SlaveNode1)) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        [],
+        fun() -> lists:sort(syn:group_names(default, SlaveNode2)) end
+    ),
+
+    syn_test_suite_helper:assert_wait(
+        lists:sort([<<"subscribers">>, <<"subscribers-3">>]),
+        fun() -> lists:sort(rpc:call(SlaveNode1, syn, group_names, [])) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        [<<"subscribers">>],
+        fun() -> lists:sort(rpc:call(SlaveNode1, syn, group_names, [default, node()])) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        [<<"subscribers-3">>],
+        fun() -> lists:sort(rpc:call(SlaveNode1, syn, group_names, [default, SlaveNode1])) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        [],
+        fun() -> lists:sort(rpc:call(SlaveNode1, syn, group_names, [default, SlaveNode2])) end
+    ),
+
+    syn_test_suite_helper:assert_wait(
+        lists:sort([<<"subscribers">>, <<"subscribers-3">>]),
+        fun() -> lists:sort(rpc:call(SlaveNode2, syn, group_names, [])) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        [<<"subscribers">>],
+        fun() -> lists:sort(rpc:call(SlaveNode2, syn, group_names, [default, node()])) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        [<<"subscribers-3">>],
+        fun() -> lists:sort(rpc:call(SlaveNode2, syn, group_names, [default, SlaveNode1])) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        [],
+        fun() -> lists:sort(rpc:call(SlaveNode2, syn, group_names, [default, SlaveNode2])) end
+    ),
+
+    %% partial netsplit (1 cannot see 2)
+    rpc:call(SlaveNode1, syn_test_suite_helper, disconnect_node, [SlaveNode2]),
+    syn_test_suite_helper:assert_cluster(node(), [SlaveNode1, SlaveNode2]),
+    syn_test_suite_helper:assert_cluster(SlaveNode1, [node()]),
+    syn_test_suite_helper:assert_cluster(SlaveNode2, [node()]),
+
+    %% retrieve
+    syn_test_suite_helper:assert_wait(
+        lists:sort([<<"subscribers">>, <<"subscribers-3">>]),
+        fun() -> lists:sort(syn:group_names()) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        [<<"subscribers">>],
+        fun() -> lists:sort(syn:group_names(default, node())) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        [<<"subscribers-3">>],
+        fun() -> lists:sort(syn:group_names(default, SlaveNode1)) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        [],
+        fun() -> lists:sort(syn:group_names(default, SlaveNode2)) end
+    ),
+
+    syn_test_suite_helper:assert_wait(
+        lists:sort([<<"subscribers">>, <<"subscribers-3">>]),
+        fun() -> lists:sort(rpc:call(SlaveNode1, syn, group_names, [])) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        [<<"subscribers">>],
+        fun() -> lists:sort(rpc:call(SlaveNode1, syn, group_names, [default, node()])) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        [<<"subscribers-3">>],
+        fun() -> lists:sort(rpc:call(SlaveNode1, syn, group_names, [default, SlaveNode1])) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        [],
+        fun() -> lists:sort(rpc:call(SlaveNode1, syn, group_names, [default, SlaveNode2])) end
+    ),
+
+    syn_test_suite_helper:assert_wait(
+        [<<"subscribers">>],
+        fun() -> lists:sort(rpc:call(SlaveNode2, syn, group_names, [])) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        [<<"subscribers">>],
+        fun() -> lists:sort(rpc:call(SlaveNode2, syn, group_names, [default, node()])) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        [],
+        fun() -> lists:sort(rpc:call(SlaveNode2, syn, group_names, [default, SlaveNode1])) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        [],
+        fun() -> lists:sort(rpc:call(SlaveNode2, syn, group_names, [default, SlaveNode2])) end
+    ),
+
+    %% re-join
+    rpc:call(SlaveNode1, syn_test_suite_helper, connect_node, [SlaveNode2]),
+    syn_test_suite_helper:assert_cluster(node(), [SlaveNode1, SlaveNode2]),
+    syn_test_suite_helper:assert_cluster(SlaveNode1, [node(), SlaveNode2]),
+    syn_test_suite_helper:assert_cluster(SlaveNode2, [node(), SlaveNode1]),
+
+    %% retrieve
+    syn_test_suite_helper:assert_wait(
+        lists:sort([<<"subscribers">>, <<"subscribers-3">>]),
+        fun() -> lists:sort(syn:group_names()) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        [<<"subscribers">>],
+        fun() -> lists:sort(syn:group_names(default, node())) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        [<<"subscribers-3">>],
+        fun() -> lists:sort(syn:group_names(default, SlaveNode1)) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        [],
+        fun() -> lists:sort(syn:group_names(default, SlaveNode2)) end
+    ),
+
+    syn_test_suite_helper:assert_wait(
+        lists:sort([<<"subscribers">>, <<"subscribers-3">>]),
+        fun() -> lists:sort(rpc:call(SlaveNode1, syn, group_names, [])) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        [<<"subscribers">>],
+        fun() -> lists:sort(rpc:call(SlaveNode1, syn, group_names, [default, node()])) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        [<<"subscribers-3">>],
+        fun() -> lists:sort(rpc:call(SlaveNode1, syn, group_names, [default, SlaveNode1])) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        [],
+        fun() -> lists:sort(rpc:call(SlaveNode1, syn, group_names, [default, SlaveNode2])) end
+    ),
+
+    syn_test_suite_helper:assert_wait(
+        lists:sort([<<"subscribers">>, <<"subscribers-3">>]),
+        fun() -> lists:sort(rpc:call(SlaveNode2, syn, group_names, [])) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        [<<"subscribers">>],
+        fun() -> lists:sort(rpc:call(SlaveNode2, syn, group_names, [default, node()])) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        [<<"subscribers-3">>],
+        fun() -> lists:sort(rpc:call(SlaveNode2, syn, group_names, [default, SlaveNode1])) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        [],
+        fun() -> lists:sort(rpc:call(SlaveNode2, syn, group_names, [default, SlaveNode2])) end
+    ).
+
+three_nodes_group_names_custom_scope(Config) ->
+    %% get slaves
+    SlaveNode1 = proplists:get_value(slave_node_1, Config),
+    SlaveNode2 = proplists:get_value(slave_node_2, Config),
+
+    %% start syn on nodes
+    ok = syn:start(),
+    ok = rpc:call(SlaveNode1, syn, start, []),
+    ok = rpc:call(SlaveNode2, syn, start, []),
+
+    %% add custom scopes
+    ok = syn:add_node_to_scope(custom_scope_ab),
+    ok = rpc:call(SlaveNode1, syn, add_node_to_scopes, [[custom_scope_ab, custom_scope_bc]]),
+    ok = rpc:call(SlaveNode2, syn, add_node_to_scopes, [[custom_scope_bc]]),
+
+    %% start processes
+    Pid = syn_test_suite_helper:start_process(),
+    Pid2 = syn_test_suite_helper:start_process(),
+    PidRemoteOn1 = syn_test_suite_helper:start_process(SlaveNode1),
+    PidRemoteOn2 = syn_test_suite_helper:start_process(SlaveNode2),
+
+    %% join
+    ok = syn:join(custom_scope_ab, <<"subscribers">>, Pid),
+    ok = syn:join(custom_scope_ab, <<"subscribers">>, Pid2),
+    ok = syn:join(custom_scope_ab, <<"subscribers">>, PidRemoteOn1),
+    ok = syn:join(custom_scope_ab, <<"subscribers-2">>, Pid),
+    ok = rpc:call(SlaveNode1, syn, join, [custom_scope_bc, <<"subscribers">>, PidRemoteOn1]),
+    ok = rpc:call(SlaveNode2, syn, join, [custom_scope_bc, <<"subscribers-2">>, PidRemoteOn2]),
+
+    %% errors
+    {'EXIT', {{invalid_scope, custom_scope_bc}, _}} = catch syn:group_names(custom_scope_bc),
+
+    %% retrieve
+    syn_test_suite_helper:assert_wait(
+        lists:sort([<<"subscribers">>, <<"subscribers-2">>]),
+        fun() -> lists:sort(syn:group_names(custom_scope_ab)) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        lists:sort([<<"subscribers">>, <<"subscribers-2">>]),
+        fun() -> lists:sort(syn:group_names(custom_scope_ab, node())) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        [<<"subscribers">>],
+        fun() -> lists:sort(syn:group_names(custom_scope_ab, SlaveNode1)) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        [],
+        fun() -> lists:sort(syn:group_names(custom_scope_ab, SlaveNode2)) end
+    ),
+
+    syn_test_suite_helper:assert_wait(
+        lists:sort([<<"subscribers">>, <<"subscribers-2">>]),
+        fun() -> lists:sort(rpc:call(SlaveNode1, syn, group_names, [custom_scope_ab])) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        lists:sort([<<"subscribers">>, <<"subscribers-2">>]),
+        fun() -> lists:sort(rpc:call(SlaveNode1, syn, group_names, [custom_scope_ab, node()])) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        [<<"subscribers">>],
+        fun() -> lists:sort(rpc:call(SlaveNode1, syn, group_names, [custom_scope_ab, SlaveNode1])) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        [],
+        fun() -> lists:sort(rpc:call(SlaveNode1, syn, group_names, [custom_scope_ab, SlaveNode2])) end
+    ),
+
+    syn_test_suite_helper:assert_wait(
+        lists:sort([<<"subscribers">>, <<"subscribers-2">>]),
+        fun() -> lists:sort(rpc:call(SlaveNode1, syn, group_names, [custom_scope_bc])) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        [],
+        fun() -> lists:sort(rpc:call(SlaveNode1, syn, group_names, [custom_scope_bc, node()])) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        [<<"subscribers">>],
+        fun() -> lists:sort(rpc:call(SlaveNode1, syn, group_names, [custom_scope_bc, SlaveNode1])) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        [<<"subscribers-2">>],
+        fun() -> lists:sort(rpc:call(SlaveNode1, syn, group_names, [custom_scope_bc, SlaveNode2])) end
+    ),
+
+    syn_test_suite_helper:assert_wait(
+        lists:sort([<<"subscribers">>, <<"subscribers-2">>]),
+        fun() -> lists:sort(rpc:call(SlaveNode2, syn, group_names, [custom_scope_bc])) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        [],
+        fun() -> lists:sort(rpc:call(SlaveNode2, syn, group_names, [custom_scope_bc, node()])) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        [<<"subscribers">>],
+        fun() -> lists:sort(rpc:call(SlaveNode2, syn, group_names, [custom_scope_bc, SlaveNode1])) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        [<<"subscribers-2">>],
+        fun() -> lists:sort(rpc:call(SlaveNode2, syn, group_names, [custom_scope_bc, SlaveNode2])) end
+    ).
 
 %% ===================================================================
 %% Internal

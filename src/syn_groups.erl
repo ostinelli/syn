@@ -36,6 +36,8 @@
 -export([local_members/1, local_members/2]).
 -export([is_local_member/2, is_local_member/3]).
 -export([count/1, count/2]).
+-export([group_names/0, group_names/1, group_names/2]).
+-export([local_group_names/0, local_group_names/1]).
 -export([publish/2, publish/3]).
 -export([local_publish/2, local_publish/3]).
 -export([multi_call/2, multi_call/3, multi_call/4, multi_call_reply/2]).
@@ -211,6 +213,42 @@ do_count(Scope, NodeParam) ->
             Set = ordsets:from_list(Entries),
             ordsets:size(Set)
     end.
+
+-spec group_names() -> [GroupName :: term()].
+group_names() ->
+    group_names(?DEFAULT_SCOPE).
+
+-spec group_names(Scope :: atom()) -> [GroupName :: term()].
+group_names(Scope) ->
+    do_group_names(Scope, '_').
+
+-spec group_names(Scope :: atom(), Node :: node()) -> [GroupName :: term()].
+group_names(Scope, Node) ->
+    do_group_names(Scope, Node).
+
+-spec do_group_names(Scope :: atom(), Node :: node()) -> [GroupName :: term()].
+do_group_names(Scope, NodeParam) ->
+    case syn_backbone:get_table_name(syn_groups_by_name, Scope) of
+        undefined ->
+            error({invalid_scope, Scope});
+
+        TableByName ->
+            Groups = ets:select(TableByName, [{
+                {{'$1', '_'}, '_', '_', '_', NodeParam},
+                [],
+                ['$1']
+            }]),
+            Set = ordsets:from_list(Groups),
+            ordsets:to_list(Set)
+    end.
+
+-spec local_group_names() -> [GroupName :: term()].
+local_group_names() ->
+    group_names(?DEFAULT_SCOPE, node()).
+
+-spec local_group_names(Scope :: atom()) -> [GroupName :: term()].
+local_group_names(Scope) ->
+    group_names(Scope, node()).
 
 -spec publish(GroupName :: any(), Message :: any()) -> {ok, RecipientCount :: non_neg_integer()}.
 publish(GroupName, Message) ->

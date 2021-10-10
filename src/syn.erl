@@ -45,6 +45,8 @@
 -export([join/2, join/3, join/4]).
 -export([leave/2, leave/3]).
 -export([groups_count/1, groups_count/2]).
+-export([group_names/0, group_names/1, group_names/2]).
+-export([local_group_names/0, local_group_names/1]).
 -export([publish/2, publish/3]).
 -export([local_publish/2, local_publish/3]).
 -export([multi_call/2, multi_call/3, multi_call/4, multi_call_reply/2]).
@@ -209,6 +211,26 @@ groups_count(Scope) ->
 -spec groups_count(Scope :: atom(), Node :: node()) -> non_neg_integer().
 groups_count(Scope, Node) ->
     syn_groups:count(Scope, Node).
+
+-spec group_names() -> [GroupName :: term()].
+group_names() ->
+    syn_groups:group_names().
+
+-spec group_names(Scope :: atom()) -> [GroupName :: term()].
+group_names(Scope) ->
+    syn_groups:group_names(Scope).
+
+-spec group_names(Scope :: atom(), Node :: node()) -> [GroupName :: term()].
+group_names(Scope, Node) ->
+    syn_groups:group_names(Scope, Node).
+
+-spec local_group_names() -> [GroupName :: term()].
+local_group_names() ->
+    syn_groups:local_group_names().
+
+-spec local_group_names(Scope :: atom()) -> [GroupName :: term()].
+local_group_names(Scope) ->
+    syn_groups:local_group_names(Scope).
 
 -spec publish(GroupName :: any(), Message :: any()) -> {ok, RecipientCount :: non_neg_integer()}.
 publish(GroupName, Message) ->
