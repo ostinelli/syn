@@ -34,7 +34,8 @@
 -export([lookup/1, lookup/2]).
 -export([register/2, register/3, register/4]).
 -export([unregister/1, unregister/2]).
--export([registry_count/1, registry_count/2]).
+-export([registry_count/0, registry_count/1, registry_count/2]).
+-export([local_registry_count/0, local_registry_count/1]).
 %% gen_server via interface
 -export([register_name/2, unregister_name/1, whereis_name/1, send/2]).
 %% groups
@@ -44,7 +45,8 @@
 -export([is_local_member/2, is_local_member/3]).
 -export([join/2, join/3, join/4]).
 -export([leave/2, leave/3]).
--export([groups_count/1, groups_count/2]).
+-export([group_count/0, group_count/1, group_count/2]).
+-export([local_group_count/0, local_group_count/1]).
 -export([group_names/0, group_names/1, group_names/2]).
 -export([local_group_names/0, local_group_names/1]).
 -export([publish/2, publish/3]).
@@ -111,6 +113,10 @@ unregister(Name) ->
 unregister(Scope, Name) ->
     syn_registry:unregister(Scope, Name).
 
+-spec registry_count() -> non_neg_integer().
+registry_count() ->
+    syn_registry:count().
+
 -spec registry_count(Scope :: atom()) -> non_neg_integer().
 registry_count(Scope) ->
     syn_registry:count(Scope).
@@ -118,6 +124,14 @@ registry_count(Scope) ->
 -spec registry_count(Scope :: atom(), Node :: node()) -> non_neg_integer().
 registry_count(Scope, Node) ->
     syn_registry:count(Scope, Node).
+
+-spec local_registry_count() -> non_neg_integer().
+local_registry_count() ->
+    syn_registry:local_count().
+
+-spec local_registry_count(Scope :: atom()) -> non_neg_integer().
+local_registry_count(Scope) ->
+    syn_registry:local_count(Scope).
 
 %% ----- \/ gen_server via module interface --------------------------
 -spec register_name(Name :: any(), Pid :: pid()) -> yes | no.
@@ -204,13 +218,25 @@ leave(GroupName, Pid) ->
 leave(Scope, GroupName, Pid) ->
     syn_groups:leave(Scope, GroupName, Pid).
 
--spec groups_count(Scope :: atom()) -> non_neg_integer().
-groups_count(Scope) ->
+-spec group_count() -> non_neg_integer().
+group_count() ->
+    syn_groups:count().
+
+-spec group_count(Scope :: atom()) -> non_neg_integer().
+group_count(Scope) ->
     syn_groups:count(Scope).
 
--spec groups_count(Scope :: atom(), Node :: node()) -> non_neg_integer().
-groups_count(Scope, Node) ->
+-spec group_count(Scope :: atom(), Node :: node()) -> non_neg_integer().
+group_count(Scope, Node) ->
     syn_groups:count(Scope, Node).
+
+-spec local_group_count() -> non_neg_integer().
+local_group_count() ->
+    syn_groups:local_count().
+
+-spec local_group_count(Scope :: atom()) -> non_neg_integer().
+local_group_count(Scope) ->
+    syn_groups:local_count(Scope).
 
 -spec group_names() -> [GroupName :: term()].
 group_names() ->

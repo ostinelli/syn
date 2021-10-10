@@ -32,7 +32,8 @@
 -export([lookup/1, lookup/2]).
 -export([register/2, register/3, register/4]).
 -export([unregister/1, unregister/2]).
--export([count/1, count/2]).
+-export([count/0, count/1, count/2]).
+-export([local_count/0, local_count/1]).
 
 %% syn_gen_scope callbacks
 -export([
@@ -141,6 +142,10 @@ unregister(Scope, Name) ->
             end
     end.
 
+-spec count() -> non_neg_integer().
+count() ->
+    count(?DEFAULT_SCOPE).
+
 -spec count(Scope :: atom()) -> non_neg_integer().
 count(Scope) ->
     TableByName = syn_backbone:get_table_name(syn_registry_by_name, Scope),
@@ -162,6 +167,14 @@ count(Scope, Node) ->
                 [true]
             }])
     end.
+
+-spec local_count() -> non_neg_integer().
+local_count() ->
+    count(?DEFAULT_SCOPE, node()).
+
+-spec local_count(Scope :: atom()) -> non_neg_integer().
+local_count(Scope) ->
+    count(Scope, node()).
 
 %% ===================================================================
 %% Callbacks

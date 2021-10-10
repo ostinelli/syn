@@ -35,7 +35,8 @@
 -export([is_member/2, is_member/3]).
 -export([local_members/1, local_members/2]).
 -export([is_local_member/2, is_local_member/3]).
--export([count/1, count/2]).
+-export([count/0, count/1, count/2]).
+-export([local_count/0, local_count/1]).
 -export([group_names/0, group_names/1, group_names/2]).
 -export([local_group_names/0, local_group_names/1]).
 -export([publish/2, publish/3]).
@@ -190,6 +191,10 @@ leave(Scope, GroupName, Pid) ->
             end
     end.
 
+-spec count() -> non_neg_integer().
+count() ->
+    count(?DEFAULT_SCOPE).
+
 -spec count(Scope :: atom()) -> non_neg_integer().
 count(Scope) ->
     do_count(Scope, '_').
@@ -197,6 +202,14 @@ count(Scope) ->
 -spec count(Scope :: atom(), Node :: node()) -> non_neg_integer().
 count(Scope, Node) ->
     do_count(Scope, Node).
+
+-spec local_count() -> non_neg_integer().
+local_count() ->
+    count(?DEFAULT_SCOPE, node()).
+
+-spec local_count(Scope :: atom()) -> non_neg_integer().
+local_count(Scope) ->
+    count(Scope, node()).
 
 -spec do_count(Scope :: atom(), NodeParam :: atom()) -> non_neg_integer().
 do_count(Scope, NodeParam) ->
@@ -226,6 +239,14 @@ group_names(Scope) ->
 group_names(Scope, Node) ->
     do_group_names(Scope, Node).
 
+-spec local_group_names() -> [GroupName :: term()].
+local_group_names() ->
+    group_names(?DEFAULT_SCOPE, node()).
+
+-spec local_group_names(Scope :: atom()) -> [GroupName :: term()].
+local_group_names(Scope) ->
+    group_names(Scope, node()).
+
 -spec do_group_names(Scope :: atom(), Node :: node()) -> [GroupName :: term()].
 do_group_names(Scope, NodeParam) ->
     case syn_backbone:get_table_name(syn_groups_by_name, Scope) of
@@ -241,14 +262,6 @@ do_group_names(Scope, NodeParam) ->
             Set = ordsets:from_list(Groups),
             ordsets:to_list(Set)
     end.
-
--spec local_group_names() -> [GroupName :: term()].
-local_group_names() ->
-    group_names(?DEFAULT_SCOPE, node()).
-
--spec local_group_names(Scope :: atom()) -> [GroupName :: term()].
-local_group_names(Scope) ->
-    group_names(Scope, node()).
 
 -spec publish(GroupName :: any(), Message :: any()) -> {ok, RecipientCount :: non_neg_integer()}.
 publish(GroupName, Message) ->
