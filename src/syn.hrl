@@ -63,7 +63,8 @@
 -type syn_groups_tuple() :: {
     GroupName :: any(),
     Pid :: pid(),
-    Meta :: any()
+    Meta :: any(),
+    Time :: non_neg_integer()
 }.
 
 %% records

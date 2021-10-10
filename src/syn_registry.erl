@@ -331,7 +331,7 @@ rebuild_monitors(#state{
     RegistryTuples = get_registry_tuples_for_node(node(), TableByName),
     do_rebuild_monitors(RegistryTuples, #{}, State).
 
--spec do_rebuild_monitors([syn_registry_tuple()], [reference()], #state{}) -> ok.
+-spec do_rebuild_monitors([syn_registry_tuple()], #{pid() => reference()}, #state{}) -> ok.
 do_rebuild_monitors([], _, _) -> ok;
 do_rebuild_monitors([{Name, Pid, Meta, Time} | T], NewMonitorRefs, #state{
     table_by_name = TableByName,
@@ -366,12 +366,12 @@ do_rebuild_monitors([{Name, Pid, Meta, Time} | T], NewMonitorRefs, #state{
 ) ->
     {
         reply,
-        {
+        {ok, {
             CallbackMethod :: atom(),
             Time :: non_neg_integer(),
             TableByName :: atom(),
             TableByPid :: atom()
-        },
+        }},
         #state{}
     }.
 do_register_on_node(Name, Pid, Meta, MRef, RequesterNode, CallbackMethod, #state{
