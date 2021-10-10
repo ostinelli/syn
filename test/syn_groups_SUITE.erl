@@ -1777,9 +1777,9 @@ three_nodes_multi_call_default_scope(Config) ->
 
     RepliesSorted = lists:sort(Replies),
     RepliesSorted = lists:sort([
-        {{Pid, "meta-1"}, {reply, Pid, "meta-1", test_message}},
-        {{PidRemoteOn1, "meta-on-1"}, {reply, PidRemoteOn1, "meta-on-1", test_message}},
-        {{PidRemoteOn2, "meta-on-2"}, {reply, PidRemoteOn2, "meta-on-2", test_message}}
+        {{Pid, "meta-1"}, {reply, test_message, Pid, "meta-1"}},
+        {{PidRemoteOn1, "meta-on-1"}, {reply, test_message, PidRemoteOn1, "meta-on-1"}},
+        {{PidRemoteOn2, "meta-on-2"}, {reply, test_message, PidRemoteOn2, "meta-on-2"}}
     ]),
     BadReplies = [{Pid2, undefined}],
 
@@ -1824,8 +1824,8 @@ three_nodes_multi_call_custom_scope(Config) ->
 
     RepliesABSorted = lists:sort(RepliesAB),
     RepliesABSorted = lists:sort([
-        {{Pid, "meta-1"}, {reply, Pid, "meta-1", test_message_ab}},
-        {{PidRemoteOn1, "meta-on-ab-1"}, {reply, PidRemoteOn1, "meta-on-ab-1", test_message_ab}}
+        {{Pid, "meta-1"}, {reply, test_message_ab, Pid, "meta-1"}},
+        {{PidRemoteOn1, "meta-on-ab-1"}, {reply, test_message_ab, PidRemoteOn1, "meta-on-ab-1"}}
     ]),
     BadRepliesAB = [{Pid2, undefined}],
 
@@ -1834,8 +1834,8 @@ three_nodes_multi_call_custom_scope(Config) ->
 
     RepliesBCSorted = lists:sort(RepliesBC),
     RepliesBCSorted = lists:sort([
-        {{PidRemoteOn1, "meta-on-bc-1"}, {reply, PidRemoteOn1, "meta-on-bc-1", test_message_bc}},
-        {{PidRemoteOn2, "meta-on-bc-2"}, {reply, PidRemoteOn2, "meta-on-bc-2", test_message_bc}}
+        {{PidRemoteOn1, "meta-on-bc-1"}, {reply, test_message_bc, PidRemoteOn1, "meta-on-bc-1"}},
+        {{PidRemoteOn2, "meta-on-bc-2"}, {reply, test_message_bc, PidRemoteOn2, "meta-on-bc-2"}}
     ]),
     BadRepliesBC = [].
 
@@ -1851,7 +1851,7 @@ subscriber_loop(TestPid, TestMessage) ->
 
 recipient_loop() ->
     receive
-        {syn_multi_call, CallerPid, Meta, TestMessage} ->
-            syn:multi_call_reply(CallerPid, {reply, self(), Meta, TestMessage}),
+        {syn_multi_call, TestMessage, CallerPid, Meta} ->
+            syn:multi_call_reply(CallerPid, {reply, TestMessage, self(), Meta}),
             recipient_loop()
     end.

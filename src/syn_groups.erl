@@ -616,7 +616,7 @@ multi_call_and_receive(CollectorPid, Pid, Meta, Message, Timeout) ->
     %% monitor
     MonitorRef = monitor(process, Pid),
     %% send
-    Pid ! {syn_multi_call, self(), Meta, Message},
+    Pid ! {syn_multi_call, Message, self(), Meta},
     %% wait for reply
     receive
         {syn_multi_call_reply, Pid, Reply} ->
