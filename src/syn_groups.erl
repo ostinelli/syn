@@ -208,8 +208,8 @@ do_count(Scope, NodeParam) ->
                 [],
                 ['$1']
             }]),
-            Set = sets:from_list(Entries),
-            sets:size(Set)
+            Set = ordsets:from_list(Entries),
+            ordsets:size(Set)
     end.
 
 -spec publish(GroupName :: any(), Message :: any()) -> {ok, RecipientCount :: non_neg_integer()}.
