@@ -40,12 +40,15 @@
     three_nodes_cluster_changes/1,
     three_nodes_custom_event_handler_joined_left/1,
     three_nodes_publish_default_scope/1,
-    three_nodes_publish_custom_scope/1
+    three_nodes_publish_custom_scope/1,
+    three_nodes_multi_call_default_scope/1,
+    three_nodes_multi_call_custom_scope/1
 ]).
 
 %% internals
 -export([
-    subscriber_loop/2
+    subscriber_loop/2,
+    recipient_loop/0
 ]).
 
 %% include
@@ -90,7 +93,9 @@ groups() ->
             three_nodes_cluster_changes,
             three_nodes_custom_event_handler_joined_left,
             three_nodes_publish_default_scope,
-            three_nodes_publish_custom_scope
+            three_nodes_publish_custom_scope,
+            three_nodes_multi_call_default_scope,
+            three_nodes_multi_call_custom_scope
         ]}
     ].
 %% -------------------------------------------------------------------
@@ -1658,8 +1663,8 @@ three_nodes_publish_default_scope(Config) ->
     ]),
     syn_test_suite_helper:assert_empty_queue(self()),
 
-    %% non-existent
-    {ok, 0} = syn:publish(<<"non-existent">>, TestMessage),
+    %% non-existant
+    {ok, 0} = syn:publish(<<"non-existant">>, TestMessage),
     syn_test_suite_helper:assert_empty_queue(self()),
 
     %% ---> publish local
@@ -1670,8 +1675,8 @@ three_nodes_publish_default_scope(Config) ->
     ]),
     syn_test_suite_helper:assert_empty_queue(self()),
 
-    %% non-existent
-    {ok, 0} = syn:local_publish(<<"non-existent">>, TestMessage),
+    %% non-existant
+    {ok, 0} = syn:local_publish(<<"non-existant">>, TestMessage),
     syn_test_suite_helper:assert_empty_queue(self()).
 
 three_nodes_publish_custom_scope(Config) ->
@@ -1703,8 +1708,8 @@ three_nodes_publish_custom_scope(Config) ->
     ok = syn:join(custom_scope_ab, <<"subscribers">>, Pid),
     ok = syn:join(custom_scope_ab, <<"subscribers-2">>, Pid2),
     ok = syn:join(custom_scope_ab, <<"subscribers">>, PidRemoteOn1),
-    ok = rpc:call(SlaveNode1, syn, join, [custom_scope_bc, <<"subscribers-bc">>, PidRemoteOn1]),
-    ok = rpc:call(SlaveNode2, syn, join, [custom_scope_bc, <<"subscribers-bc">>, PidRemoteOn2]),
+    ok = rpc:call(SlaveNode1, syn, join, [custom_scope_bc, <<"subscribers">>, PidRemoteOn1]),
+    ok = rpc:call(SlaveNode2, syn, join, [custom_scope_bc, <<"subscribers">>, PidRemoteOn2]),
 
     %% ---> publish
     {ok, 2} = syn:publish(custom_scope_ab, <<"subscribers">>, TestMessage),
@@ -1719,7 +1724,7 @@ three_nodes_publish_custom_scope(Config) ->
     {'EXIT', {{invalid_scope, custom_scope_bc}, _}} = catch syn:publish(custom_scope_bc, <<"subscribers">>, TestMessage),
 
     %% on other scope
-    {ok, 2} = rpc:call(SlaveNode1, syn, publish, [custom_scope_bc, <<"subscribers-bc">>, TestMessage]),
+    {ok, 2} = rpc:call(SlaveNode1, syn, publish, [custom_scope_bc, <<"subscribers">>, TestMessage]),
 
     syn_test_suite_helper:assert_received_messages([
         {done, PidRemoteOn1},
@@ -1727,8 +1732,8 @@ three_nodes_publish_custom_scope(Config) ->
     ]),
     syn_test_suite_helper:assert_empty_queue(self()),
 
-    %% non-existent
-    {ok, 0} = syn:publish(custom_scope_ab, <<"non-existent">>, TestMessage),
+    %% non-existant
+    {ok, 0} = syn:publish(custom_scope_ab, <<"non-existant">>, TestMessage),
     syn_test_suite_helper:assert_empty_queue(self()),
 
     %% ---> publish local
@@ -1739,9 +1744,100 @@ three_nodes_publish_custom_scope(Config) ->
     ]),
     syn_test_suite_helper:assert_empty_queue(self()),
 
-    %% non-existent
-    {ok, 0} = syn:local_publish(custom_scope_ab, <<"non-existent">>, TestMessage),
+    %% non-existant
+    {ok, 0} = syn:local_publish(custom_scope_ab, <<"non-existant">>, TestMessage),
     syn_test_suite_helper:assert_empty_queue(self()).
+
+three_nodes_multi_call_default_scope(Config) ->
+    %% get slaves
+    SlaveNode1 = proplists:get_value(slave_node_1, Config),
+    SlaveNode2 = proplists:get_value(slave_node_2, Config),
+
+    %% start syn on nodes
+    ok = syn:start(),
+    ok = rpc:call(SlaveNode1, syn, start, []),
+    ok = rpc:call(SlaveNode2, syn, start, []),
+
+    %% start processes
+    RecipientLoopLate = fun() -> timer:sleep(200), recipient_loop() end,
+
+    Pid = syn_test_suite_helper:start_process(fun recipient_loop/0),
+    Pid2 = syn_test_suite_helper:start_process(RecipientLoopLate),
+    PidRemoteOn1 = syn_test_suite_helper:start_process(SlaveNode1, fun recipient_loop/0),
+    PidRemoteOn2 = syn_test_suite_helper:start_process(SlaveNode2, fun recipient_loop/0),
+
+    %% join
+    ok = syn:join(<<"recipients">>, Pid, "meta-1"),
+    ok = syn:join(<<"recipients">>, Pid2),
+    ok = syn:join(<<"recipients">>, PidRemoteOn1, "meta-on-1"),
+    ok = syn:join(<<"recipients">>, PidRemoteOn2, "meta-on-2"),
+
+    %% ---> multi_call
+    {Replies, BadReplies} = syn:multi_call(default, <<"recipients">>, test_message, 100),
+
+    RepliesSorted = lists:sort(Replies),
+    RepliesSorted = lists:sort([
+        {{Pid, "meta-1"}, {reply, Pid, "meta-1", test_message}},
+        {{PidRemoteOn1, "meta-on-1"}, {reply, PidRemoteOn1, "meta-on-1", test_message}},
+        {{PidRemoteOn2, "meta-on-2"}, {reply, PidRemoteOn2, "meta-on-2", test_message}}
+    ]),
+    BadReplies = [{Pid2, undefined}],
+
+    %% empty
+    {[], []} = syn:multi_call(default, <<"non-existant">>, test_message, 100).
+
+three_nodes_multi_call_custom_scope(Config) ->
+    %% get slaves
+    SlaveNode1 = proplists:get_value(slave_node_1, Config),
+    SlaveNode2 = proplists:get_value(slave_node_2, Config),
+
+    %% start syn on nodes
+    ok = syn:start(),
+    ok = rpc:call(SlaveNode1, syn, start, []),
+    ok = rpc:call(SlaveNode2, syn, start, []),
+
+    %% add custom scopes
+    ok = syn:add_node_to_scope(custom_scope_ab),
+    ok = rpc:call(SlaveNode1, syn, add_node_to_scopes, [[custom_scope_ab, custom_scope_bc]]),
+    ok = rpc:call(SlaveNode2, syn, add_node_to_scopes, [[custom_scope_bc]]),
+
+    %% start processes
+    RecipientLoopLate = fun() -> timer:sleep(200), recipient_loop() end,
+
+    Pid = syn_test_suite_helper:start_process(fun recipient_loop/0),
+    Pid2 = syn_test_suite_helper:start_process(RecipientLoopLate),
+    PidRemoteOn1 = syn_test_suite_helper:start_process(SlaveNode1, fun recipient_loop/0),
+    PidRemoteOn2 = syn_test_suite_helper:start_process(SlaveNode2, fun recipient_loop/0),
+
+    %% join
+    ok = syn:join(custom_scope_ab, <<"recipients">>, Pid, "meta-1"),
+    ok = syn:join(custom_scope_ab, <<"recipients">>, Pid2),
+    ok = syn:join(custom_scope_ab, <<"recipients">>, PidRemoteOn1, "meta-on-ab-1"),
+    ok = rpc:call(SlaveNode1, syn, join, [custom_scope_bc, <<"recipients">>, PidRemoteOn1, "meta-on-bc-1"]),
+    ok = rpc:call(SlaveNode2, syn, join, [custom_scope_bc, <<"recipients">>, PidRemoteOn2, "meta-on-bc-2"]),
+
+    %% errors
+    {'EXIT', {{invalid_scope, custom_scope_bc}, _}} = catch syn:multi_call(custom_scope_bc, <<"recipients">>, test_message, 100),
+
+    %% ---> multi_call
+    {RepliesAB, BadRepliesAB} = syn:multi_call(custom_scope_ab, <<"recipients">>, test_message_ab, 100),
+
+    RepliesABSorted = lists:sort(RepliesAB),
+    RepliesABSorted = lists:sort([
+        {{Pid, "meta-1"}, {reply, Pid, "meta-1", test_message_ab}},
+        {{PidRemoteOn1, "meta-on-ab-1"}, {reply, PidRemoteOn1, "meta-on-ab-1", test_message_ab}}
+    ]),
+    BadRepliesAB = [{Pid2, undefined}],
+
+    %% different scope
+    {RepliesBC, BadRepliesBC} = rpc:call(SlaveNode1, syn, multi_call, [custom_scope_bc, <<"recipients">>, test_message_bc, 100]),
+
+    RepliesBCSorted = lists:sort(RepliesBC),
+    RepliesBCSorted = lists:sort([
+        {{PidRemoteOn1, "meta-on-bc-1"}, {reply, PidRemoteOn1, "meta-on-bc-1", test_message_bc}},
+        {{PidRemoteOn2, "meta-on-bc-2"}, {reply, PidRemoteOn2, "meta-on-bc-2", test_message_bc}}
+    ]),
+    BadRepliesBC = [].
 
 %% ===================================================================
 %% Internal
@@ -1751,4 +1847,11 @@ subscriber_loop(TestPid, TestMessage) ->
         TestMessage ->
             TestPid ! {done, self()},
             subscriber_loop(TestPid, TestMessage)
+    end.
+
+recipient_loop() ->
+    receive
+        {syn_multi_call, CallerPid, Meta, TestMessage} ->
+            syn:multi_call_reply(CallerPid, {reply, self(), Meta, TestMessage}),
+            recipient_loop()
     end.

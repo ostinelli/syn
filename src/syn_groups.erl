@@ -38,6 +38,7 @@
 -export([count/1, count/2]).
 -export([publish/2, publish/3]).
 -export([local_publish/2, local_publish/3]).
+-export([multi_call/2, multi_call/3, multi_call/4, multi_call_reply/2]).
 
 %% syn_gen_scope callbacks
 -export([
@@ -48,6 +49,12 @@
     get_local_data/1,
     purge_local_data_for_node/2
 ]).
+
+%% internal
+-export([multi_call_and_receive/5]).
+
+%% macros
+-define(DEFAULT_MULTI_CALL_TIMEOUT_MS, 5000).
 
 %% includes
 -include("syn.hrl").
@@ -230,6 +237,28 @@ do_publish(Members, Message) ->
         Pid ! Message
     end, Members),
     {ok, length(Members)}.
+
+-spec multi_call(GroupName :: any(), Message :: any()) -> {[{pid(), Reply :: any()}], [BadPid :: pid()]}.
+multi_call(GroupName, Message) ->
+    multi_call(?DEFAULT_SCOPE, GroupName, Message).
+
+-spec multi_call(Scope :: atom(), GroupName :: any(), Message :: any()) -> {[{pid(), Reply :: any()}], [BadPid :: pid()]}.
+multi_call(Scope, GroupName, Message) ->
+    multi_call(Scope, GroupName, Message, ?DEFAULT_MULTI_CALL_TIMEOUT_MS).
+
+-spec multi_call(Scope :: atom(), GroupName :: any(), Message :: any(), Timeout :: non_neg_integer()) ->
+    {[{pid(), Reply :: any()}], [BadPid :: pid()]}.
+multi_call(Scope, GroupName, Message, Timeout) ->
+    Self = self(),
+    Members = members(Scope, GroupName),
+    lists:foreach(fun({Pid, Meta}) ->
+        spawn_link(?MODULE, multi_call_and_receive, [Self, Pid, Meta, Message, Timeout])
+    end, Members),
+    collect_replies(Members).
+
+-spec multi_call_reply(CallerPid :: pid(), Reply :: any()) -> {syn_multi_call_reply, pid(), Reply :: any()}.
+multi_call_reply(CallerPid, Reply) ->
+    CallerPid ! {syn_multi_call_reply, self(), Reply}.
 
 %% ===================================================================
 %% Callbacks
@@ -574,4 +603,46 @@ handle_groups_sync(GroupName, Pid, Meta, Time, #state{
         {{GroupName, Pid}, _TableMeta, _TableTime, _TableMRef, _TableNode} ->
             %% race condition: incoming data is older, ignore
             ok
+    end.
+
+-spec multi_call_and_receive(
+    CollectorPid :: pid(),
+    Pid :: pid(),
+    Meta :: term(),
+    Message :: any(),
+    Timeout :: non_neg_integer()
+) -> any().
+multi_call_and_receive(CollectorPid, Pid, Meta, Message, Timeout) ->
+    %% monitor
+    MonitorRef = monitor(process, Pid),
+    %% send
+    Pid ! {syn_multi_call, self(), Meta, Message},
+    %% wait for reply
+    receive
+        {syn_multi_call_reply, Pid, Reply} ->
+            CollectorPid ! {reply, Pid, Reply};
+
+        {'DOWN', MonitorRef, _, _, _} ->
+            CollectorPid ! {bad_pid, Pid}
+
+    after Timeout ->
+        CollectorPid ! {bad_pid, Pid}
+    end.
+
+-spec collect_replies(Members :: [{pid(), Meta :: any()}]) -> {[{pid(), Reply :: any()}], [BadPid :: pid()]}.
+collect_replies(Members) ->
+    collect_replies(Members, [], []).
+
+-spec collect_replies(MemberPids :: [{pid(), Meta :: any()}], [{pid(), Reply :: any()}], [pid()]) ->
+    {[{pid(), Reply :: any()}], [BadPid :: pid()]}.
+collect_replies([], Replies, BadPids) -> {Replies, BadPids};
+collect_replies(Members, Replies, BadPids) ->
+    receive
+        {reply, Pid, Reply} ->
+            {value, {Pid, Meta}, Members1} = lists:keytake(Pid, 1, Members),
+            collect_replies(Members1, [{{Pid, Meta}, Reply} | Replies], BadPids);
+
+        {bad_pid, Pid} ->
+            {value, {Pid, Meta}, Members1} = lists:keytake(Pid, 1, Members),
+            collect_replies(Members1, Replies, [{Pid, Meta} | BadPids])
     end.

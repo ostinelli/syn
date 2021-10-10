@@ -47,6 +47,7 @@
 -export([groups_count/1, groups_count/2]).
 -export([publish/2, publish/3]).
 -export([local_publish/2, local_publish/3]).
+-export([multi_call/2, multi_call/3, multi_call/4, multi_call_reply/2]).
 
 %% ===================================================================
 %% API
@@ -224,3 +225,22 @@ local_publish(GroupName, Message) ->
 -spec local_publish(Scope :: atom(), GroupName :: any(), Message :: any()) -> {ok, RecipientCount :: non_neg_integer()}.
 local_publish(Scope, GroupName, Message) ->
     syn_groups:local_publish(Scope, GroupName, Message).
+
+-spec multi_call(GroupName :: any(), Message :: any()) ->
+    {[{pid(), Reply :: any()}], [BadPid :: pid()]}.
+multi_call(GroupName, Message) ->
+    syn_groups:multi_call(GroupName, Message).
+
+-spec multi_call(Scope :: atom(), GroupName :: any(), Message :: any()) ->
+    {[{pid(), Reply :: any()}], [BadPid :: pid()]}.
+multi_call(Scope, GroupName, Message) ->
+    syn_groups:multi_call(Scope, GroupName, Message).
+
+-spec multi_call(Scope :: atom(), GroupName :: any(), Message :: any(), Timeout :: non_neg_integer()) ->
+    {[{pid(), Reply :: any()}], [BadPid :: pid()]}.
+multi_call(Scope, GroupName, Message, Timeout) ->
+    syn_groups:multi_call(Scope, GroupName, Message, Timeout).
+
+-spec multi_call_reply(CallerPid :: pid(), Reply :: any()) -> {syn_multi_call_reply, pid(), Reply :: any()}.
+multi_call_reply(CallerPid, Reply) ->
+    syn_groups:multi_call_reply(CallerPid, Reply).

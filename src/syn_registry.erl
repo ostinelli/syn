@@ -189,7 +189,6 @@ init(State) ->
     {stop, Reason :: term(), Reply :: term(), #state{}} |
     {stop, Reason :: term(), #state{}}.
 handle_call({register_on_node, RequesterNode, Name, Pid, Meta}, _From, #state{
-    scope = Scope,
     table_by_name = TableByName,
     table_by_pid = TableByPid
 } = State) ->
