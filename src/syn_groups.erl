@@ -197,11 +197,13 @@ count() ->
 
 -spec count(Scope :: atom()) -> non_neg_integer().
 count(Scope) ->
-    do_count(Scope, '_').
+    Set = group_names_ordset(Scope, '_'),
+    ordsets:size(Set).
 
 -spec count(Scope :: atom(), Node :: node()) -> non_neg_integer().
 count(Scope, Node) ->
-    do_count(Scope, Node).
+    Set = group_names_ordset(Scope, Node),
+    ordsets:size(Set).
 
 -spec local_count() -> non_neg_integer().
 local_count() ->
@@ -211,33 +213,19 @@ local_count() ->
 local_count(Scope) ->
     count(Scope, node()).
 
--spec do_count(Scope :: atom(), NodeParam :: atom()) -> non_neg_integer().
-do_count(Scope, NodeParam) ->
-    case syn_backbone:get_table_name(syn_groups_by_name, Scope) of
-        undefined ->
-            error({invalid_scope, Scope});
-
-        TableByName ->
-            Entries = ets:select(TableByName, [{
-                {{'$1', '_'}, '_', '_', '_', NodeParam},
-                [],
-                ['$1']
-            }]),
-            Set = ordsets:from_list(Entries),
-            ordsets:size(Set)
-    end.
-
 -spec group_names() -> [GroupName :: term()].
 group_names() ->
     group_names(?DEFAULT_SCOPE).
 
 -spec group_names(Scope :: atom()) -> [GroupName :: term()].
 group_names(Scope) ->
-    do_group_names(Scope, '_').
+    Set = group_names_ordset(Scope, '_'),
+    ordsets:to_list(Set).
 
 -spec group_names(Scope :: atom(), Node :: node()) -> [GroupName :: term()].
 group_names(Scope, Node) ->
-    do_group_names(Scope, Node).
+    Set = group_names_ordset(Scope, Node),
+    ordsets:to_list(Set).
 
 -spec local_group_names() -> [GroupName :: term()].
 local_group_names() ->
@@ -247,8 +235,8 @@ local_group_names() ->
 local_group_names(Scope) ->
     group_names(Scope, node()).
 
--spec do_group_names(Scope :: atom(), Node :: node()) -> [GroupName :: term()].
-do_group_names(Scope, NodeParam) ->
+-spec group_names_ordset(Scope :: atom(), Node :: node()) -> ordsets:ordset(GroupName :: term()).
+group_names_ordset(Scope, NodeParam) ->
     case syn_backbone:get_table_name(syn_groups_by_name, Scope) of
         undefined ->
             error({invalid_scope, Scope});
@@ -259,8 +247,7 @@ do_group_names(Scope, NodeParam) ->
                 [],
                 ['$1']
             }]),
-            Set = ordsets:from_list(Groups),
-            ordsets:to_list(Set)
+            ordsets:from_list(Groups)
     end.
 
 -spec publish(GroupName :: term(), Message :: term()) -> {ok, RecipientCount :: non_neg_integer()}.
