@@ -38,8 +38,10 @@
     wait_groups_propagation/1
 ]).
 -export([
-    start_profiling/0,
-    stop_profiling/0
+    start_profiling/1,
+    stop_profiling/1,
+    start_profiling_on_node/0,
+    stop_profiling_on_node/0
 ]).
 
 %% macros
@@ -179,7 +181,7 @@ start() ->
             io:format("====> Unregistered after kill rate (with propagation): ~p/sec.~n~n", [RegKillRate]);
 
         true ->
-            io:format("====> Skipping REGISTRY.~n")
+            io:format("~n====> Skipping REGISTRY.~n~n")
     end,
 
     case SkipGroups of
@@ -264,7 +266,7 @@ start() ->
             io:format("====> Left after kill rate (with propagation): ~p/sec.~n~n", [GroupsKillRate]);
 
         true ->
-            io:format("====> Skipping GROUPS.~n")
+            io:format("~n====> Skipping GROUPS.~n")
     end,
 
     %% stop node
@@ -454,10 +456,20 @@ wait_groups_propagation(DesiredCount) ->
             wait_groups_propagation(DesiredCount)
     end.
 
-start_profiling() ->
-    {ok, P} = eprof:start(),
-    eprof:start_profiling(erlang:processes() -- [P]).
+start_profiling(NodesInfo) ->
+    {Node, _FromName, _ToName} = hd(NodesInfo),
+    ok = rpc:call(Node, ?MODULE, start_profiling_on_node, []).
 
-stop_profiling() ->
+stop_profiling(NodesInfo) ->
+    {Node, _FromName, _ToName} = hd(NodesInfo),
+    ok = rpc:call(Node, ?MODULE, stop_profiling_on_node, []).
+
+start_profiling_on_node() ->
+    {ok, P} = eprof:start(),
+    eprof:start_profiling(erlang:processes() -- [P]),
+    ok.
+
+stop_profiling_on_node() ->
     eprof:stop_profiling(),
-    eprof:analyze(total).
+    eprof:analyze(total),
+    ok.
