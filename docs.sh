@@ -11,5 +11,5 @@ rebar3 compile
 rebar3 as docs edoc
 version=3.0.0
 ex_doc "syn" $version "_build/default/lib/syn/ebin" \
-  --source-ref v${version} \
+  --source-ref ${version} \
   --config docs.config $@

@@ -1,4 +1,4 @@
-# The MIT License (MIT)
+# License
 
 Copyright (c) 2015-2021 Roberto Ostinelli and Neato Robotics, Inc.
 
