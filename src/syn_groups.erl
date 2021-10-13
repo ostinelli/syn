@@ -37,8 +37,8 @@
 -export([is_local_member/2, is_local_member/3]).
 -export([count/0, count/1, count/2]).
 -export([local_count/0, local_count/1]).
--export([groups_names/0, groups_names/1, groups_names/2]).
--export([local_groups_names/0, local_groups_names/1]).
+-export([group_names/0, group_names/1, group_names/2]).
+-export([local_group_names/0, local_group_names/1]).
 -export([publish/2, publish/3]).
 -export([local_publish/2, local_publish/3]).
 -export([multi_call/2, multi_call/3, multi_call/4, multi_call_reply/2]).
@@ -197,12 +197,12 @@ count() ->
 
 -spec count(Scope :: atom()) -> non_neg_integer().
 count(Scope) ->
-    Set = groups_names_ordset(Scope, '_'),
+    Set = group_names_ordset(Scope, '_'),
     ordsets:size(Set).
 
 -spec count(Scope :: atom(), Node :: node()) -> non_neg_integer().
 count(Scope, Node) ->
-    Set = groups_names_ordset(Scope, Node),
+    Set = group_names_ordset(Scope, Node),
     ordsets:size(Set).
 
 -spec local_count() -> non_neg_integer().
@@ -213,30 +213,30 @@ local_count() ->
 local_count(Scope) ->
     count(Scope, node()).
 
--spec groups_names() -> [GroupName :: term()].
-groups_names() ->
-    groups_names(?DEFAULT_SCOPE).
+-spec group_names() -> [GroupName :: term()].
+group_names() ->
+    group_names(?DEFAULT_SCOPE).
 
--spec groups_names(Scope :: atom()) -> [GroupName :: term()].
-groups_names(Scope) ->
-    Set = groups_names_ordset(Scope, '_'),
+-spec group_names(Scope :: atom()) -> [GroupName :: term()].
+group_names(Scope) ->
+    Set = group_names_ordset(Scope, '_'),
     ordsets:to_list(Set).
 
--spec groups_names(Scope :: atom(), Node :: node()) -> [GroupName :: term()].
-groups_names(Scope, Node) ->
-    Set = groups_names_ordset(Scope, Node),
+-spec group_names(Scope :: atom(), Node :: node()) -> [GroupName :: term()].
+group_names(Scope, Node) ->
+    Set = group_names_ordset(Scope, Node),
     ordsets:to_list(Set).
 
--spec local_groups_names() -> [GroupName :: term()].
-local_groups_names() ->
-    groups_names(?DEFAULT_SCOPE, node()).
+-spec local_group_names() -> [GroupName :: term()].
+local_group_names() ->
+    group_names(?DEFAULT_SCOPE, node()).
 
--spec local_groups_names(Scope :: atom()) -> [GroupName :: term()].
-local_groups_names(Scope) ->
-    groups_names(Scope, node()).
+-spec local_group_names(Scope :: atom()) -> [GroupName :: term()].
+local_group_names(Scope) ->
+    group_names(Scope, node()).
 
--spec groups_names_ordset(Scope :: atom(), Node :: node()) -> ordsets:ordset(GroupName :: term()).
-groups_names_ordset(Scope, NodeParam) ->
+-spec group_names_ordset(Scope :: atom(), Node :: node()) -> ordsets:ordset(GroupName :: term()).
+group_names_ordset(Scope, NodeParam) ->
     case syn_backbone:get_table_name(syn_groups_by_name, Scope) of
         undefined ->
             error({invalid_scope, Scope});
@@ -280,12 +280,19 @@ do_publish(Members, Message) ->
 multi_call(GroupName, Message) ->
     multi_call(?DEFAULT_SCOPE, GroupName, Message).
 
--spec multi_call(Scope :: atom(), GroupName :: term(), Message :: term()) -> {[{pid(), Reply :: term()}], [BadPid :: pid()]}.
+-spec multi_call(Scope :: atom(), GroupName :: term(), Message :: term()) ->
+    {
+        Replies :: [{{pid(), Meta :: term()}, Reply :: term()}],
+        BadReplies :: [{pid(), Meta :: term()}]
+    }.
 multi_call(Scope, GroupName, Message) ->
     multi_call(Scope, GroupName, Message, ?DEFAULT_MULTI_CALL_TIMEOUT_MS).
 
 -spec multi_call(Scope :: atom(), GroupName :: term(), Message :: term(), Timeout :: non_neg_integer()) ->
-    {[{pid(), Reply :: term()}], [BadPid :: pid()]}.
+    {
+        Replies :: [{{pid(), Meta :: term()}, Reply :: term()}],
+        BadReplies :: [{pid(), Meta :: term()}]
+    }.
 multi_call(Scope, GroupName, Message, Timeout) ->
     Self = self(),
     Members = members(Scope, GroupName),

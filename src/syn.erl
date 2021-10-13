@@ -64,10 +64,10 @@
 -export([is_local_member/2, is_local_member/3]).
 -export([join/2, join/3, join/4]).
 -export([leave/2, leave/3]).
--export([groups_count/0, groups_count/1, groups_count/2]).
--export([local_groups_count/0, local_groups_count/1]).
--export([groups_names/0, groups_names/1, groups_names/2]).
--export([local_groups_names/0, local_groups_names/1]).
+-export([group_count/0, group_count/1, group_count/2]).
+-export([local_group_count/0, local_group_count/1]).
+-export([group_names/0, group_names/1, group_names/2]).
+-export([local_group_names/0, local_group_names/1]).
 -export([publish/2, publish/3]).
 -export([local_publish/2, local_publish/3]).
 -export([multi_call/2, multi_call/3, multi_call/4, multi_call_reply/2]).
@@ -95,29 +95,15 @@ stop() ->
 node_scopes() ->
     syn_sup:node_scopes().
 
-%% @doc Add the local node to the specified Scope.
+%% @doc Add the local node to the specified `Scope'.
 %%
 %% <h2>Examples</h2>
 %% The following adds the local node to the scope "devices" and then register a process handling a device in that scope:
-%% <h3>Elixir</h3>
-%% ```
-%% iex> :syn.add_node_to_scope(:devices)
-%% :ok
-%% iex> :syn.register(:devices, "hedy", self())
-%% :ok
-%% '''
-%% <h3>Erlang</h3>
-%% ```
-%% 1> syn:add_node_to_scope(devices).
-%% ok
-%% 2> syn:register(devices, "SN-123-456789", self()).
-%% ok
-%% '''
 -spec add_node_to_scope(Scope :: atom()) -> ok.
 add_node_to_scope(Scope) ->
     syn_sup:add_node_to_scope(Scope).
 
-%% @doc Add the local node to the specified Scopes.
+%% @doc Add the local node to the specified `Scope's.
 -spec add_node_to_scopes(Scopes :: [atom()]) -> ok.
 add_node_to_scopes(Scopes) ->
     lists:foreach(fun(Scope) ->
@@ -146,44 +132,64 @@ set_event_handler(Module) ->
 %% ----- \/ registry -------------------------------------------------
 %% @doc Looks up a registry entry in the `default' scope.
 %%
-%% Same as `lookup(default, Name)'.
--spec lookup(Name :: any()) -> {pid(), Meta :: any()} | undefined.
-lookup(Name) ->
-    syn_registry:lookup(Name).
-
-%% @doc Looks up a registry entry in the specified Scope.
+%% Same as calling `lookup(default, Name)', see {@link lookup/2}.
 %%
 %% <h2>Examples</h2>
 %% <h3>Elixir</h3>
 %% ```
-%% iex> :syn.lookup(:devices, "SN-123-456789")
+%% iex> :syn.register("SN-123-456789", self())
+%% :ok
+%% iex> :syn.lookup("SN-123-456789")
 %% {#PID<0.105.0>, undefined}
 %% '''
 %% <h3>Erlang</h3>
 %% ```
-%% 1> syn:lookup(devices, "SN-123-456789").
+%% 1> syn:register("SN-123-456789", self()).
+%% ok
+%% 2> syn:lookup(devices, "SN-123-456789").
 %% {<0.79.0>, undefined}
 %% '''
+-spec lookup(Name :: any()) -> {pid(), Meta :: any()} | undefined.
+lookup(Name) ->
+    syn_registry:lookup(Name).
+
+%% @doc Looks up a registry entry in the specified `Scope'.
 -spec lookup(Scope :: atom(), Name :: any()) -> {pid(), Meta :: any()} | undefined.
 lookup(Scope, Name) ->
     syn_registry:lookup(Scope, Name).
 
 %% @doc Registers a process in the `default' scope.
 %%
-%% Same as `register(default, Name, Pid, undefined)'.
+%% Same as calling `register(default, Name, Pid, undefined)', see {@link register/4}.
+%%
+%% <h2>Examples</h2>
+%% <h3>Elixir</h3>
+%% ```
+%% iex> :syn.register("SN-123-456789", self())
+%% :ok
+%% iex> :syn.lookup("SN-123-456789")
+%% {#PID<0.105.0>, undefined}
+%% '''
+%% <h3>Erlang</h3>
+%% ```
+%% 1> syn:register("SN-123-456789", self()).
+%% ok
+%% 2> syn:lookup(devices, "SN-123-456789").
+%% {<0.79.0>, undefined}
+%% '''
 -spec register(Name :: any(), Pid :: pid()) -> ok | {error, Reason :: any()}.
 register(Name, Pid) ->
     syn_registry:register(Name, Pid).
 
-%% @doc Registers a process with metadata in the `default' scope OR with undefined metadata in the specified Scope.
+%% @doc Registers a process with metadata in the `default' scope OR with undefined metadata in the specified `Scope'.
 %%
-%% Same as `register(default, Name, Pid, Meta)' or `register(Scope, Name, Pid, undefined)'
-%% depending on the position of the `pid()' value.
+%% Same as calling `register(default, Name, Pid, Meta)' or `register(Scope, Name, Pid, undefined)'
+%% depending on the position of the `pid()' value. See {@link register/4} for more info.
 -spec register(NameOrScope :: any(), PidOrName :: any(), MetaOrPid :: any()) -> ok | {error, Reason :: any()}.
 register(NameOrScope, PidOrName, MetaOrPid) ->
     syn_registry:register(NameOrScope, PidOrName, MetaOrPid).
 
-%% @doc Registers a process with metadata in the specified Scope.
+%% @doc Registers a process with metadata in the specified `Scope'.
 %%
 %% Possible error reasons:
 %% <ul>
@@ -200,21 +206,29 @@ register(NameOrScope, PidOrName, MetaOrPid) ->
 %% <h2>Examples</h2>
 %% <h3>Elixir</h3>
 %% ```
+%% iex> :syn.add_node_to_scope(:devices).
+%% :ok
 %% iex> :syn.register(:devices, "SN-123-456789", self(), [meta: :one])
 %% :ok
+%% iex> :syn.lookup(:devices, "SN-123-456789")
+%% {#PID<0.105.0>, [meta: :one]}
 %% '''
 %% ```
 %% iex> tuple = {:via, :syn, <<"your process name">>}.
 %% :ok
 %% iex> GenServer.start_link(__MODULE__, [], name: tuple)
 %% {ok, #PID<0.105.0>}
-%% iex> GenServer.call(tuple, your_message).
-%% your_message
+%% iex> GenServer.call(tuple, :your_message).
+%% :your_message
 %% '''
 %% <h3>Erlang</h3>
 %% ```
-%% 1> syn:register(devices, "SN-123-456789", self(), [{meta, one}]).
+%% 1> syn:add_node_to_scope(devices).
 %% ok
+%% 2> syn:register(devices, "SN-123-456789", self(), [{meta, one}]).
+%% ok
+%% 3> syn:lookup(devices, "SN-123-456789").
+%% {<0.79.0>, [{meta, one}]}
 %% '''
 %% ```
 %% 1> Tuple = {via, syn, <<"your process name">>}.
@@ -230,7 +244,7 @@ register(Scope, Name, Pid, Meta) ->
 
 %% @doc Unregisters a process.
 %%
-%% Same as `unregister(default, Name)'.
+%% Same as calling `unregister(default, Name)', see {@link unregister/2}.
 -spec unregister(Name :: any()) -> ok | {error, Reason :: any()}.
 unregister(Name) ->
     syn_registry:unregister(Name).
@@ -245,73 +259,49 @@ unregister(Name) ->
 %%
 %% You don't need to unregister names of processes that are about to die, since they are monitored by Syn
 %% and they will be removed automatically. If you manually unregister a process before it dies, the Syn callbacks will not be called.
-%%
-%% <h2>Examples</h2>
-%% <h3>Elixir</h3>
-%% ```
-%% iex> :syn.unregister(:devices, "SN-123-456789")
-%% :ok
-%% '''
-%% <h3>Erlang</h3>
-%% ```
-%% 1> syn:unregister(devices, "SN-123-456789").
-%% ok
-%% '''
 -spec unregister(Scope :: atom(), Name :: any()) -> ok | {error, Reason :: any()}.
 unregister(Scope, Name) ->
     syn_registry:unregister(Scope, Name).
 
 %% @doc Returns the count of all registered processes for the `default' scope.
 %%
-%% Same as `registry_count(default)'.
+%% Same as calling `registry_count(default)', see {@link registry_count/1}.
+%%
+%% <h2>Examples</h2>
+%% <h3>Elixir</h3>
+%% ```
+%% iex> :syn.registry_count()
+%% 512473
+%% '''
+%% <h3>Erlang</h3>
+%% ```
+%% 1> syn:registry_count().
+%% 512473
+%% '''
 -spec registry_count() -> non_neg_integer().
 registry_count() ->
     syn_registry:count().
 
-%% @doc Returns the count of all registered processes for the specified Scope.
-%%
-%% <h2>Examples</h2>
-%% <h3>Elixir</h3>
-%% ```
-%% iex> :syn.registry_count(:devices)
-%% 512473
-%% '''
-%% <h3>Erlang</h3>
-%% ```
-%% 1> syn:registry_count(devices).
-%% 512473
-%% '''
+%% @doc Returns the count of all registered processes for the specified `Scope'.
 -spec registry_count(Scope :: atom()) -> non_neg_integer().
 registry_count(Scope) ->
     syn_registry:count(Scope).
 
-%% @doc Returns the count of all registered processes for the specified Scope running on a node.
-%%
-%% <h2>Examples</h2>
-%% <h3>Elixir</h3>
-%% ```
-%% iex> :syn.registry_count(:devices, :"two@example.com")
-%% 128902
-%% '''
-%% <h3>Erlang</h3>
-%% ```
-%% 1> syn:registry_count(devices, 'two@example.com').
-%% 128902
-%% '''
+%% @doc Returns the count of all registered processes for the specified `Scope' running on a node.
 -spec registry_count(Scope :: atom(), Node :: node()) -> non_neg_integer().
 registry_count(Scope, Node) ->
     syn_registry:count(Scope, Node).
 
 %% @doc Returns the count of all registered processes for the `default' scope running on the local node.
 %%
-%% Same as `registry_count(default, node())'.
+%% Same as calling `registry_count(default, node())', see {@link registry_count/2}.
 -spec local_registry_count() -> non_neg_integer().
 local_registry_count() ->
     syn_registry:local_count().
 
-%% @doc Returns the count of all registered processes for the specified Scope running on the local node.
+%% @doc Returns the count of all registered processes for the specified `Scope' running on the local node.
 %%
-%% Same as `registry_count(Scope, node())'.
+%% Same as calling `registry_count(Scope, node())', see {@link registry_count/2}.
 -spec local_registry_count(Scope :: atom()) -> non_neg_integer().
 local_registry_count(Scope) ->
     syn_registry:local_count(Scope).
@@ -351,26 +341,46 @@ send(Name, Message) ->
 %% ----- \/ groups ---------------------------------------------------
 %% @doc Returns the list of all members for GroupName in the `default' Scope.
 %%
-%% Same as `members(default, GroupName)'.
--spec members(GroupName :: term()) -> [{Pid :: pid(), Meta :: term()}].
-members(GroupName) ->
-    syn_groups:members(GroupName).
-
-%% @doc Returns the list of all members for GroupName in the specified Scope.
+%% Same as calling `members(default, GroupName)', see {@link members/2}.
 %%
 %% <h2>Examples</h2>
 %% <h3>Elixir</h3>
 %% ```
-%% iex> :syn.join(:devices, "area-1", self()).
+%% iex> :syn.join("area-1").
+%% :ok
+%% iex> :syn.members("area-1").
+%% [{#PID<0.105.0>, :undefined}]
+%% '''
+%% <h3>Erlang</h3>
+%% ```
+%% 1> syn:join("area-1", self()).
+%% ok
+%% 2> syn:members("area-1").
+%% [{<0.69.0>, undefined}]
+%% '''
+-spec members(GroupName :: term()) -> [{Pid :: pid(), Meta :: term()}].
+members(GroupName) ->
+    syn_groups:members(GroupName).
+
+%% @doc Returns the list of all members for GroupName in the specified `Scope'.
+%%
+%% <h2>Examples</h2>
+%% <h3>Elixir</h3>
+%% ```
+%% iex> :syn.add_node_to_scope(:devices)
+%% :ok
+%% iex> :syn.join(:devices, "area-1").
 %% :ok
 %% iex> :syn.members(:devices, "area-1").
 %% [{#PID<0.105.0>, :undefined}]
-%%%% '''
+%% '''
 %% <h3>Erlang</h3>
 %% ```
-%% 1> syn:join(devices, "area-1", self()).
+%% 1> syn:add_node_to_scope(devices)
 %% ok
-%% 2> syn:members(devices, "area-1").
+%% 2> syn:join(devices, "area-1", self()).
+%% ok
+%% 3> syn:members(devices, "area-1").
 %% [{<0.69.0>, undefined}]
 %% '''
 -spec members(Scope :: atom(), GroupName :: term()) -> [{Pid :: pid(), Meta :: term()}].
@@ -379,59 +389,71 @@ members(Scope, GroupName) ->
 
 %% @doc Returns whether a `pid()' is a member of GroupName in the `default' scope.
 %%
-%% Same as `is_member(default, GroupName, Pid)'.
+%% Same as calling `is_member(default, GroupName, Pid)', see {@link is_member/3}.
 -spec is_member(GroupName :: any(), Pid :: pid()) -> boolean().
 is_member(GroupName, Pid) ->
     syn_groups:is_member(GroupName, Pid).
 
-%% @doc Returns whether a `pid()' is a member of GroupName in the specified Scope.
+%% @doc Returns whether a `pid()' is a member of GroupName in the specified `Scope'.
 %%
-%% This method will raise a `error({invalid_scope, Scope})' if the node has not been added to the specified Scope.
+%% This method will raise a `error({invalid_scope, Scope})' if the node has not been added to the specified `Scope'.
 -spec is_member(Scope :: atom(), GroupName :: any(), Pid :: pid()) -> boolean().
 is_member(Scope, GroupName, Pid) ->
     syn_groups:is_member(Scope, GroupName, Pid).
 
 %% @doc Returns the list of all members for GroupName in the `default' scope running on the local node.
 %%
-%% Same as `local_members(default, GroupName)'.
+%% Same as calling `local_members(default, GroupName)', see {@link local_members/2}.
 -spec local_members(GroupName :: term()) -> [{Pid :: pid(), Meta :: term()}].
 local_members(GroupName) ->
     syn_groups:local_members(GroupName).
 
-%% @doc Returns the list of all members for GroupName in the specified Scope running on the local node.
+%% @doc Returns the list of all members for GroupName in the specified `Scope' running on the local node.
 %%
-%% This method will raise a `error({invalid_scope, Scope})' if the node has not been added to the specified Scope.
+%% This method will raise a `error({invalid_scope, Scope})' if the node has not been added to the specified `Scope'.
 -spec local_members(Scope :: atom(), GroupName :: term()) -> [{Pid :: pid(), Meta :: term()}].
 local_members(Scope, GroupName) ->
     syn_groups:local_members(Scope, GroupName).
 
 %% @doc Returns whether a `pid()' is a member of GroupName in the `default' scope running on the local node.
 %%
-%% Same as `is_local_member(default, GroupName, Pid)'.
+%% Same as calling `is_local_member(default, GroupName, Pid)', see {@link is_local_member/3}.
 -spec is_local_member(GroupName :: any(), Pid :: pid()) -> boolean().
 is_local_member(GroupName, Pid) ->
     syn_groups:is_local_member(GroupName, Pid).
 
-%% @doc Returns whether a `pid()' is a member of GroupName in the specified Scope running on the local node.
+%% @doc Returns whether a `pid()' is a member of GroupName in the specified `Scope' running on the local node.
 %%
-%% This method will raise a `error({invalid_scope, Scope})' if the node has not been added to the specified Scope.
+%% This method will raise a `error({invalid_scope, Scope})' if the node has not been added to the specified `Scope'.
 -spec is_local_member(Scope :: atom(), GroupName :: any(), Pid :: pid()) -> boolean().
 is_local_member(Scope, GroupName, Pid) ->
     syn_groups:is_local_member(Scope, GroupName, Pid).
 
 %% @doc Adds a `pid()' to GroupName in the `default' scope.
 %%
-%% Same as `join(default, GroupName, Pid)'.
+%% Same as calling `join(default, GroupName, Pid)', see {@link join/4}.
+%%
+%% <h2>Examples</h2>
+%% <h3>Elixir</h3>
+%% ```
+%% iex> :syn.join(:"area-1", self()).
+%% :ok
+%% '''
+%% <h3>Erlang</h3>
+%% ```
+%% 1> syn:join("area-1", self()).
+%% ok
+%% '''
 -spec join(GroupName :: any(), Pid :: pid()) -> ok | {error, Reason :: any()}.
 join(GroupName, Pid) ->
     syn_groups:join(GroupName, Pid).
 
-%% @doc Adds a `pid()' with metadata to GroupName in the `default' scope OR with undefined metadata in the specified Scope.
+%% @doc Adds a `pid()' with metadata to GroupName in the `default' scope OR with undefined metadata in the specified `Scope'.
 -spec join(GroupNameOrScope :: any(), PidOrGroupName :: any(), MetaOrPid :: any()) -> ok | {error, Reason :: any()}.
 join(GroupNameOrScope, PidOrGroupName, MetaOrPid) ->
     syn_groups:join(GroupNameOrScope, PidOrGroupName, MetaOrPid).
 
-%% @doc Adds a `pid()' with metadata to GroupName in the specified Scope.
+%% @doc Adds a `pid()' with metadata to GroupName in the specified `Scope'.
 %%
 %% Possible error reasons:
 %% <ul>
@@ -445,12 +467,16 @@ join(GroupNameOrScope, PidOrGroupName, MetaOrPid) ->
 %% <h2>Examples</h2>
 %% <h3>Elixir</h3>
 %% ```
+%% iex> :syn.add_node_to_scope(:devices)
+%% :ok
 %% iex> :syn.join(:devices, "area-1", self(), [meta: :one]).
 %% :ok
-%%%% '''
+%% '''
 %% <h3>Erlang</h3>
 %% ```
-%% 1> syn:join(devices, "area-1", self(), [{meta, one}]).
+%% 1> syn:add_node_to_scope(devices).
+%% ok
+%% 2> syn:join(devices, "area-1", self(), [{meta, one}]).
 %% ok
 %% '''
 -spec join(Scope :: atom(), GroupName :: any(), Pid :: pid(), Meta :: any()) -> ok | {error, Reason :: any()}.
@@ -459,145 +485,232 @@ join(Scope, GroupName, Pid, Meta) ->
 
 %% @doc Removes a `pid()' from GroupName in the `default' Scope.
 %%
-%% Same as `leave(default, GroupName, Pid)'.
+%% Same as calling `leave(default, GroupName, Pid)', see {@link leave/3}.
 -spec leave(GroupName :: any(), Pid :: pid()) -> ok | {error, Reason :: any()}.
 leave(GroupName, Pid) ->
     syn_groups:leave(GroupName, Pid).
 
-%% @doc Removes a `pid()' from GroupName in the specified Scope.
+%% @doc Removes a `pid()' from GroupName in the specified `Scope'.
 %%
 %% Possible error reasons:
 %% <ul>
-%% <li>`not_in_group': The `pid()' is not in GroupName for the specified Scope.</li>
+%% <li>`not_in_group': The `pid()' is not in GroupName for the specified `Scope'.</li>
 %% </ul>
 %%
 %% You don't need to remove processes that are about to die, since they are monitored by Syn and they will be removed
 %% automatically from their groups.
-%%
-%% <h2>Examples</h2>
-%% <h3>Elixir</h3>
-%% ```
-%% iex> :syn.leave(:devices, "area-1", self()).
-%% :ok
-%%%% '''
-%% <h3>Erlang</h3>
-%% ```
-%% 1> syn:leave(devices, "area-1", self()).
-%% ok
-%% '''
 -spec leave(Scope :: atom(), GroupName :: any(), Pid :: pid()) -> ok | {error, Reason :: any()}.
 leave(Scope, GroupName, Pid) ->
     syn_groups:leave(Scope, GroupName, Pid).
 
 %% @doc Returns the count of all the groups for the `default' scope.
 %%
-%% Same as `groups_count(default)'.
--spec groups_count() -> non_neg_integer().
-groups_count() ->
+%% Same as calling `group_count(default)', see {@link group_count/1}.
+%%
+%% <h2>Examples</h2>
+%% <h3>Elixir</h3>
+%% ```
+%% iex> :syn.group_count()
+%% 321778
+%% '''
+%% <h3>Erlang</h3>
+%% ```
+%% 1> syn:group_count().
+%% 321778
+%% '''
+-spec group_count() -> non_neg_integer().
+group_count() ->
     syn_groups:count().
 
-%% @doc Returns the count of all the groups for the specified Scope.
-%%
-%% <h2>Examples</h2>
-%% <h3>Elixir</h3>
-%% ```
-%% iex> :syn.groups_count(:devices)
-%% 321778
-%% '''
-%% <h3>Erlang</h3>
-%% ```
-%% 1> syn:groups_count(devices).
-%% 321778
-%% '''
--spec groups_count(Scope :: atom()) -> non_neg_integer().
-groups_count(Scope) ->
+%% @doc Returns the count of all the groups for the specified `Scope'.
+-spec group_count(Scope :: atom()) -> non_neg_integer().
+group_count(Scope) ->
     syn_groups:count(Scope).
 
-%% @doc Returns the count of all the groups for the specified Scope which have at least 1 process running
-%% on Node.
+%% @doc Returns the count of all the groups for the specified `Scope' which have at least 1 process running on `Node'.
+-spec group_count(Scope :: atom(), Node :: node()) -> non_neg_integer().
+group_count(Scope, Node) ->
+    syn_groups:count(Scope, Node).
+
+%% @doc Returns the count of all the groups which have at least 1 process running on `Node' for the `default' scope.
+%%
+%% Same as calling `group_count(default, node())', see {@link group_count/2}.
+-spec local_group_count() -> non_neg_integer().
+local_group_count() ->
+    syn_groups:local_count().
+
+%% @doc Returns the count of all the groups which have at least 1 process running on `Node' for the specified `Scope'.
+%%
+%% Same as calling `group_count(Scope, node())', see {@link group_count/2}.
+-spec local_group_count(Scope :: atom()) -> non_neg_integer().
+local_group_count(Scope) ->
+    syn_groups:local_count(Scope).
+
+%% @doc Returns the group names for the `default' scope.
+%%
+%% The order of the group names is not guaranteed to be the same on all calls.
+%% Same as calling `group_names(default)', see {@link group_names/1}.
 %%
 %% <h2>Examples</h2>
 %% <h3>Elixir</h3>
 %% ```
-%% iex> :syn.groups_count(:devices, :"two@example.com")
-%% 15422
+%% iex> :syn.group_names()
+%% ["area-1", "area-2"]
 %% '''
 %% <h3>Erlang</h3>
 %% ```
-%% 1> syn:groups_count(devices, 'two@example.com').
-%% 15422
+%% 1> syn:group_names().
+%% ["area-1", "area-2"]
 %% '''
--spec groups_count(Scope :: atom(), Node :: node()) -> non_neg_integer().
-groups_count(Scope, Node) ->
-    syn_groups:count(Scope, Node).
+-spec group_names() -> [GroupName :: term()].
+group_names() ->
+    syn_groups:group_names().
 
-%% @doc Returns the count of all the groups for the `default' scope which have at least 1 process running
-%% on Node.
+%% @doc Returns the group names for the specified `Scope'.
 %%
-%% Same as `groups_count(default, node())'.
--spec local_groups_count() -> non_neg_integer().
-local_groups_count() ->
-    syn_groups:local_count().
+%% The order of the group names is not guaranteed to be the same on all calls.
+-spec group_names(Scope :: atom()) -> [GroupName :: term()].
+group_names(Scope) ->
+    syn_groups:group_names(Scope).
 
-%% @doc Returns the count of all the groups for the specified Scope which have at least 1 process running
-%% on Node.
+%% @doc Returns the group names for the specified `Scope' which have at least 1 process running on `Node'.
 %%
-%% Same as `groups_count(Scope, node())'.
--spec local_groups_count(Scope :: atom()) -> non_neg_integer().
-local_groups_count(Scope) ->
-    syn_groups:local_count(Scope).
+%% The order of the group names is not guaranteed to be the same on all calls.
+-spec group_names(Scope :: atom(), Node :: node()) -> [GroupName :: term()].
+group_names(Scope, Node) ->
+    syn_groups:group_names(Scope, Node).
 
--spec groups_names() -> [GroupName :: term()].
-groups_names() ->
-    syn_groups:groups_names().
+%% @doc Returns the group names which have at least 1 process running on `Node' for the `default' scope.
+%%
+%% Same as calling `group_names(default, node())', see {@link group_names/2}.
+-spec local_group_names() -> [GroupName :: term()].
+local_group_names() ->
+    syn_groups:local_group_names().
 
--spec groups_names(Scope :: atom()) -> [GroupName :: term()].
-groups_names(Scope) ->
-    syn_groups:groups_names(Scope).
+%% @doc Returns the group names which have at least 1 process running on `Node' for the specified `Scope'.
+%%
+%% Same as calling `group_names(Scope, node())', see {@link group_names/2}.
+-spec local_group_names(Scope :: atom()) -> [GroupName :: term()].
+local_group_names(Scope) ->
+    syn_groups:local_group_names(Scope).
 
--spec groups_names(Scope :: atom(), Node :: node()) -> [GroupName :: term()].
-groups_names(Scope, Node) ->
-    syn_groups:groups_names(Scope, Node).
-
--spec local_groups_names() -> [GroupName :: term()].
-local_groups_names() ->
-    syn_groups:local_groups_names().
-
--spec local_groups_names(Scope :: atom()) -> [GroupName :: term()].
-local_groups_names(Scope) ->
-    syn_groups:local_groups_names(Scope).
-
+%% @doc Publish a message to all group members in the `default' scope.
+%%
+%% Same as calling `publish(default, GroupName, Message)', see {@link publish/3}.
+%%
+%% <h2>Examples</h2>
+%% <h3>Elixir</h3>
+%% ```
+%% iex> :syn.join("area-1", self())
+%% :ok
+%% iex> :syn.publish("area-1", :my_message)
+%% {:ok,1}
+%% iex> flush().
+%% Shell got :my_message
+%% :ok
+%% '''
+%% <h3>Erlang</h3>
+%% ```
+%% 1> syn:join("area-1", self()).
+%% ok
+%% 2> syn:publish("area-1", my_message).
+%% {ok,1}
+%% 3> flush().
+%% Shell got my_message
+%% ok
+%% '''
 -spec publish(GroupName :: any(), Message :: any()) -> {ok, RecipientCount :: non_neg_integer()}.
 publish(GroupName, Message) ->
     syn_groups:publish(GroupName, Message).
 
+%% @doc Publish a message to all group members in the Specified scope.
+%%
+%% `RecipientCount' is the count of the intended recipients.
+%%
+%% <h2>Examples</h2>
+%% <h3>Elixir</h3>
+%% ```
+%% iex> :syn.add_node_to_scope(:devices)
+%% :ok
+%% iex> :syn.join(:devices, "area-1", self())
+%% :ok
+%% iex> :syn.publish(:devices, "area-1", :my_message)
+%% {:ok,1}
+%% iex> flush().
+%% Shell got :my_message
+%% :ok
+%% '''
+%% <h3>Erlang</h3>
+%% ```
+%% 1> syn:add_node_to_scope(devices).
+%% ok
+%% 2> syn:join(devices, "area-1", self()).
+%% ok
+%% 3> syn:publish(devices, "area-1", my_message).
+%% {ok,1}
+%% 4> flush().
+%% Shell got my_message
+%% ok
+%% '''
 -spec publish(Scope :: atom(), GroupName :: any(), Message :: any()) -> {ok, RecipientCount :: non_neg_integer()}.
 publish(Scope, GroupName, Message) ->
     syn_groups:publish(Scope, GroupName, Message).
 
+%% @doc Publish a message to all group members running on the local node in the `default' scope.
+%%
+%% Same as calling `local_publish(default, GroupName, Message)', see {@link local_publish/3}.
 -spec local_publish(GroupName :: any(), Message :: any()) -> {ok, RecipientCount :: non_neg_integer()}.
 local_publish(GroupName, Message) ->
     syn_groups:local_publish(GroupName, Message).
 
+%% @doc Publish a message to all group members running on the local node in the specified `Scope'.
+%%
+%% `RecipientCount' is the count of the intended recipients.
 -spec local_publish(Scope :: atom(), GroupName :: any(), Message :: any()) -> {ok, RecipientCount :: non_neg_integer()}.
 local_publish(Scope, GroupName, Message) ->
     syn_groups:local_publish(Scope, GroupName, Message).
 
+%% @doc Calls all group members node in the `default' scope and collects their replies.
+%%
+%% Same as calling `multi_call(default, GroupName, Message, 5000)', see {@link multi_call/4}.
 -spec multi_call(GroupName :: any(), Message :: any()) ->
     {[{pid(), Reply :: any()}], [BadPid :: pid()]}.
 multi_call(GroupName, Message) ->
     syn_groups:multi_call(GroupName, Message).
 
+%% @doc Calls all group members running in the specified `Scope' and collects their replies.
+%%
+%% Same as calling `multi_call(Scope, GroupName, Message, 5000)', see {@link multi_call/4}.
 -spec multi_call(Scope :: atom(), GroupName :: any(), Message :: any()) ->
-    {[{pid(), Reply :: any()}], [BadPid :: pid()]}.
+    {
+        Replies :: [{{pid(), Meta :: term()}, Reply :: term()}],
+        BadReplies :: [{pid(), Meta :: term()}]
+    }.
 multi_call(Scope, GroupName, Message) ->
     syn_groups:multi_call(Scope, GroupName, Message).
 
+%% @doc Calls all group members running  in the specified `Scope' and collects their replies.
+%%
+%% When this call is issued, all members will receive a tuple in the format:
+%%
+%% `{syn_multi_call, CallerPid, Message}'
+%%
+%% To reply, every member MUST use the method {@link multi_call_reply/2}.
+%%
+%% Syn will wait up to the value specified in `Timeout' to receive all replies from the members.
+%% The responses will be added to the `Replies' list, while the members that do not reply in time or that crash
+%% before sending a reply will be added to the `BadReplies' list.
 -spec multi_call(Scope :: atom(), GroupName :: any(), Message :: any(), Timeout :: non_neg_integer()) ->
-    {[{pid(), Reply :: any()}], [BadPid :: pid()]}.
+    {
+        Replies :: [{{pid(), Meta :: term()}, Reply :: term()}],
+        BadReplies :: [{pid(), Meta :: term()}]
+    }.
 multi_call(Scope, GroupName, Message, Timeout) ->
     syn_groups:multi_call(Scope, GroupName, Message, Timeout).
 
+%% @doc Allows a group member to reply to a multi call.
+%%
+%% See {@link multi_call/4} for info.
 -spec multi_call_reply(CallerPid :: pid(), Reply :: any()) -> {syn_multi_call_reply, pid(), Reply :: any()}.
 multi_call_reply(CallerPid, Reply) ->
     syn_groups:multi_call_reply(CallerPid, Reply).
