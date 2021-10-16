@@ -214,14 +214,14 @@ handle_call({register_on_node, RequesterNode, Name, Pid, Meta}, _From, #state{
                         undefined -> erlang:monitor(process, Pid);  %% process is not monitored yet, add
                         MRef0 -> MRef0
                     end,
-                    do_register_on_node(Name, Pid, Meta, normal, MRef, RequesterNode, on_process_registered, State);
+                    do_register_on_node(Name, Pid, Meta, MRef, normal, RequesterNode, on_process_registered, State);
 
                 {Name, Pid, Meta, _, _, _} ->
                     %% same pid, same meta
                     {reply, {ok, noop}, State};
 
                 {Name, Pid, _, _, MRef, _} ->
-                    do_register_on_node(Name, Pid, Meta, normal, MRef, RequesterNode, on_registry_process_updated, State);
+                    do_register_on_node(Name, Pid, Meta, MRef, normal, RequesterNode, on_registry_process_updated, State);
 
                 _ ->
                     {reply, {{error, taken}, undefined}, State}
@@ -379,8 +379,8 @@ do_rebuild_monitors([{Name, Pid, Meta, Time} | T], NewMonitorRefs, #state{
     Name :: term(),
     Pid :: pid(),
     Meta :: term(),
-    Reason :: atom(),
     MRef :: reference() | undefined,
+    Reason :: term(),
     RequesterNode :: node(),
     CallbackMethod :: atom(),
     #state{}
@@ -395,7 +395,7 @@ do_rebuild_monitors([{Name, Pid, Meta, Time} | T], NewMonitorRefs, #state{
         }},
         #state{}
     }.
-do_register_on_node(Name, Pid, Meta, Reason, MRef, RequesterNode, CallbackMethod, #state{
+do_register_on_node(Name, Pid, Meta,  MRef, Reason,RequesterNode, CallbackMethod, #state{
     scope = Scope,
     table_by_name = TableByName,
     table_by_pid = TableByPid
@@ -524,7 +524,7 @@ purge_registry_for_remote_node(Scope, Node, TableByName, TableByPid) when Node =
     Name :: term(),
     Pid :: pid(),
     Meta :: term(),
-    Reason :: atom(),
+    Reason :: term(),
     Time :: non_neg_integer(),
     #state{}
 ) -> any().
