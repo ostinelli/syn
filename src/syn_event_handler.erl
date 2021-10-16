@@ -34,6 +34,9 @@
 %% In your module you need to specify the behavior `syn_event_handler' and implement the callbacks.
 %% All callbacks are optional, so you just need to define the ones you need.
 %%
+%% All of the callbacks, except for `resolve_registry_conflict/3', are called on all the nodes of the cluster.
+%% This allows you to receive events for the processes running on nodes that get shut down, or in case of net splits.
+%%
 %% While all callbacks do not have a direct effect on Syn (their return value is ignored), a special case is the callback
 %% `resolve_registry_conflict/3'. If specified, this is the method that will be used to resolve registry conflicts when detected.
 %%
@@ -41,18 +44,19 @@
 %% When this happens, the cluster experiences a registry naming conflict.
 %%
 %% Syn will resolve this Process Registry conflict by choosing a single process. By default, Syn keeps track of the time
-%% when a registration takes place with {@link erlang:system_time/0},
-%% compares values between conflicting processes and:
+%% when a registration takes place with {@link erlang:system_time/0}, compares values between conflicting processes and:
 %% <ul>
 %% <li>Keeps the one with the higher value (the process that was registered more recently).</li>
 %% <li>Kills the other process by sending a kill signal with `exit(Pid, {syn_resolve_kill, Name, Meta})'.</li>
 %% </ul>
 %% This is a very simple mechanism that can be imprecise, as system clocks are not perfectly aligned in a cluster.
-%% If something more elaborate is desired you MAY specify a custom handler that implements the `resolve_registry_conflict/3' callback.
+%% If something more elaborate is desired, or if you do not want the discarded process to be killed (i.e. to perform
+%% a graceful shutdown), you MAY specify a custom handler that implements the `resolve_registry_conflict/3' callback.
 %% To this effect, you may also store additional data to resolve conflicts in the `Meta' value, since it will be passed
 %% into the callback for both of the conflicting processes.
 %%
-%% If implemented, this method MUST return the `pid()' of the process that you wish to keep. The other process will be killed.
+%% If implemented, this method MUST return the `pid()' of the process that you wish to keep. The other process will not
+%% be killed, so you will have to decide what to do with it.
 %%
 %% Important Note: the conflict resolution method will be called on the two nodes where the conflicting processes are running on.
 %% Therefore, this method MUST be defined in the same way across all nodes of the cluster and have the same effect

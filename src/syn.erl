@@ -30,11 +30,9 @@
 %% Syn implement Scopes. A Scope is a way to create a logical overlay network running on top of the Erlang distribution cluster.
 %% Nodes that belong to the same Scope will form a "sub-cluster", and will synchronize data between themselves and themselves only.
 %%
-%% This allows for improved scalability, as it is possible to divide an Erlang cluster into sub-clusters which
-%% hold specific portions of data.
-%%
 %% Every node in an Erlang cluster is automatically added to the Scope `default'. It is therefore not mandatory
-%% to use scopes, but it is advisable to do so when scalability is a concern.
+%% to use scopes, but it is advisable to do so when scalability is a concern, as it is possible to divide
+%% an Erlang cluster into sub-clusters which hold specific portions of data.
 %%
 %% Please note that most of the methods documented here that allow to specify a Scope will raise a
 %% `error({invalid_scope, Scope})' if the local node has not been added to the specified Scope or if the Pids
