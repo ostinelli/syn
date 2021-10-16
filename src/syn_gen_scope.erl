@@ -127,7 +127,7 @@ broadcast_all_cluster(Message, #state{multicast_pid = MulticastPid} = State) ->
 
 -spec send_to_node(RemoteNode :: node(), Message :: term(), #state{}) -> any().
 send_to_node(RemoteNode, Message, #state{process_name = ProcessName}) ->
-    erlang:send({ProcessName, RemoteNode}, Message, [noconnect]).
+    {ProcessName, RemoteNode} ! Message.
 
 %% ===================================================================
 %% Callbacks
@@ -329,13 +329,13 @@ multicast_loop() ->
     receive
         {broadcast, Message, ExcludedNodes, #state{process_name = ProcessName, nodes_map = NodesMap}} ->
             lists:foreach(fun(RemoteNode) ->
-                erlang:send({ProcessName, RemoteNode}, Message, [noconnect])
+                {ProcessName, RemoteNode} ! Message
             end, maps:keys(NodesMap) -- ExcludedNodes),
             multicast_loop();
 
         {broadcast_all_cluster, Message, #state{process_name = ProcessName}} ->
             lists:foreach(fun(RemoteNode) ->
-                erlang:send({ProcessName, RemoteNode}, Message, [noconnect])
+                {ProcessName, RemoteNode} ! Message
             end, nodes()),
             multicast_loop();
 

@@ -887,7 +887,7 @@ three_nodes_cluster_changes(Config) ->
 
     %% register
     ok = rpc:call(SlaveNode1, syn, register, ["proc-1", PidRemoteOn1, "meta-1"]),
-    ok = rpc:call(SlaveNode1, syn, register, ["proc-2", PidRemoteOn2, "meta-2"]),
+    ok = rpc:call(SlaveNode2, syn, register, ["proc-2", PidRemoteOn2, "meta-2"]),
     ok = rpc:call(SlaveNode1, syn, register, [custom_scope_bc, "BC-proc-1", PidRemoteOn1, "meta-1"]),
     ok = rpc:call(SlaveNode1, syn, register, [custom_scope_bc, "BC-proc-1 alias", PidRemoteOn1, "meta-1 alias"]),
 

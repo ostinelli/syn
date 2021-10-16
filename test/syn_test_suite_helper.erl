@@ -54,7 +54,7 @@
 start_slave(NodeShortName) ->
     {ok, Node} = ct_slave:start(NodeShortName, [
         {boot_timeout, 10},
-        {erl_flags, "-connect_all false"}
+        {erl_flags, "-connect_all false -kernel dist_auto_connect never"}
     ]),
     CodePath = code:get_path(),
     true = rpc:call(Node, code, set_path, [CodePath]),
