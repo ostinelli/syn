@@ -302,8 +302,8 @@ multi_call(Scope, GroupName, Message, Timeout) ->
     collect_replies(orddict:from_list(Members)).
 
 -spec multi_call_reply(CallerPid :: pid(), Reply :: term()) -> {syn_multi_call_reply, pid(), Reply :: term()}.
-multi_call_reply(CallerPid, Reply) ->
-    CallerPid ! {syn_multi_call_reply, self(), Reply}.
+multi_call_reply({Ref, ClientPid}, Reply) ->
+    ClientPid ! {syn_multi_call_reply, Ref, Reply}.
 
 %% ===================================================================
 %% Callbacks
@@ -673,17 +673,19 @@ multi_call_and_receive(CollectorPid, Pid, Meta, Message, Timeout) ->
     %% monitor
     MRef = monitor(process, Pid),
     %% send
-    Pid ! {syn_multi_call, Message, self(), Meta},
+    Ref = make_ref(),
+    From = {Ref, self()},
+    Pid ! {syn_multi_call, Message, From, Meta},
     %% wait for reply
     receive
-        {syn_multi_call_reply, Pid, Reply} ->
-            CollectorPid ! {reply, Pid, Reply};
+        {syn_multi_call_reply, Ref, Reply} ->
+            CollectorPid ! {syn_reply, Pid, Reply};
 
         {'DOWN', MRef, _, _, _} ->
-            CollectorPid ! {bad_pid, Pid}
+            CollectorPid ! {syn_bad_reply, Pid}
 
     after Timeout ->
-        CollectorPid ! {bad_pid, Pid}
+        CollectorPid ! {syn_bad_reply, Pid}
     end.
 
 -spec collect_replies(MembersOD :: orddict:orddict({pid(), Meta :: term()})) ->
@@ -706,11 +708,11 @@ collect_replies(MembersOD) ->
 collect_replies([], Replies, BadReplies) -> {Replies, BadReplies};
 collect_replies(MembersOD, Replies, BadReplies) ->
     receive
-        {reply, Pid, Reply} ->
+        {syn_reply, Pid, Reply} ->
             {Meta, MembersOD1} = orddict:take(Pid, MembersOD),
             collect_replies(MembersOD1, [{{Pid, Meta}, Reply} | Replies], BadReplies);
 
-        {bad_pid, Pid} ->
+        {syn_bad_reply, Pid} ->
             {Meta, MembersOD1} = orddict:take(Pid, MembersOD),
             collect_replies(MembersOD1, Replies, [{Pid, Meta} | BadReplies])
     end.
