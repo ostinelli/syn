@@ -524,8 +524,8 @@ purge_registry_for_remote_node(Scope, Node, TableByName, TableByPid) when Node =
     Name :: term(),
     Pid :: pid(),
     Meta :: term(),
-    Reason :: term(),
     Time :: non_neg_integer(),
+    Reason :: term(),
     #state{}
 ) -> any().
 handle_registry_sync(Name, Pid, Meta, Time, Reason, #state{
