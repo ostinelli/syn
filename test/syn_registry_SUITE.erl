@@ -1237,9 +1237,9 @@ three_nodes_custom_event_handler_reg_unreg(Config) ->
 
     %% check callbacks called
     syn_test_suite_helper:assert_received_messages([
-        {on_process_registered, CurrentNode, default, "proc-handler", Pid, <<"meta">>},
-        {on_process_registered, SlaveNode1, default, "proc-handler", Pid, <<"meta">>},
-        {on_process_registered, SlaveNode2, default, "proc-handler", Pid, <<"meta">>}
+        {on_process_registered, CurrentNode, default, "proc-handler", Pid, <<"meta">>, normal},
+        {on_process_registered, SlaveNode1, default, "proc-handler", Pid, <<"meta">>, normal},
+        {on_process_registered, SlaveNode2, default, "proc-handler", Pid, <<"meta">>, normal}
     ]),
     syn_test_suite_helper:assert_empty_queue(self()),
 
@@ -1248,9 +1248,9 @@ three_nodes_custom_event_handler_reg_unreg(Config) ->
 
     %% check callbacks called
     syn_test_suite_helper:assert_received_messages([
-        {on_process_registered, CurrentNode, default, "proc-handler-2", Pid2, <<"meta-for-2">>},
-        {on_process_registered, SlaveNode1, default, "proc-handler-2", Pid2, <<"meta-for-2">>},
-        {on_process_registered, SlaveNode2, default, "proc-handler-2", Pid2, <<"meta-for-2">>}
+        {on_process_registered, CurrentNode, default, "proc-handler-2", Pid2, <<"meta-for-2">>, normal},
+        {on_process_registered, SlaveNode1, default, "proc-handler-2", Pid2, <<"meta-for-2">>, normal},
+        {on_process_registered, SlaveNode2, default, "proc-handler-2", Pid2, <<"meta-for-2">>, normal}
     ]),
     syn_test_suite_helper:assert_empty_queue(self()),
 
@@ -1259,9 +1259,9 @@ three_nodes_custom_event_handler_reg_unreg(Config) ->
 
     %% check callbacks called
     syn_test_suite_helper:assert_received_messages([
-        {on_registry_process_updated, CurrentNode, default, "proc-handler", Pid, <<"new-meta">>},
-        {on_registry_process_updated, SlaveNode1, default, "proc-handler", Pid, <<"new-meta">>},
-        {on_registry_process_updated, SlaveNode2, default, "proc-handler", Pid, <<"new-meta">>}
+        {on_registry_process_updated, CurrentNode, default, "proc-handler", Pid, <<"new-meta">>, normal},
+        {on_registry_process_updated, SlaveNode1, default, "proc-handler", Pid, <<"new-meta">>, normal},
+        {on_registry_process_updated, SlaveNode2, default, "proc-handler", Pid, <<"new-meta">>, normal}
     ]),
     syn_test_suite_helper:assert_empty_queue(self()),
 
@@ -1270,9 +1270,9 @@ three_nodes_custom_event_handler_reg_unreg(Config) ->
 
     %% check callbacks called
     syn_test_suite_helper:assert_received_messages([
-        {on_registry_process_updated, CurrentNode, default, "proc-handler-2", Pid2, <<"meta-for-2-update">>},
-        {on_registry_process_updated, SlaveNode1, default, "proc-handler-2", Pid2, <<"meta-for-2-update">>},
-        {on_registry_process_updated, SlaveNode2, default, "proc-handler-2", Pid2, <<"meta-for-2-update">>}
+        {on_registry_process_updated, CurrentNode, default, "proc-handler-2", Pid2, <<"meta-for-2-update">>, normal},
+        {on_registry_process_updated, SlaveNode1, default, "proc-handler-2", Pid2, <<"meta-for-2-update">>, normal},
+        {on_registry_process_updated, SlaveNode2, default, "proc-handler-2", Pid2, <<"meta-for-2-update">>, normal}
     ]),
     syn_test_suite_helper:assert_empty_queue(self()),
 
@@ -1281,9 +1281,9 @@ three_nodes_custom_event_handler_reg_unreg(Config) ->
 
     %% check callbacks called
     syn_test_suite_helper:assert_received_messages([
-        {on_process_unregistered, CurrentNode, default, "proc-handler", Pid, <<"new-meta">>},
-        {on_process_unregistered, SlaveNode1, default, "proc-handler", Pid, <<"new-meta">>},
-        {on_process_unregistered, SlaveNode2, default, "proc-handler", Pid, <<"new-meta">>}
+        {on_process_unregistered, CurrentNode, default, "proc-handler", Pid, <<"new-meta">>, normal},
+        {on_process_unregistered, SlaveNode1, default, "proc-handler", Pid, <<"new-meta">>, normal},
+        {on_process_unregistered, SlaveNode2, default, "proc-handler", Pid, <<"new-meta">>, normal}
     ]),
     syn_test_suite_helper:assert_empty_queue(self()),
 
@@ -1292,9 +1292,9 @@ three_nodes_custom_event_handler_reg_unreg(Config) ->
 
     %% check callbacks called
     syn_test_suite_helper:assert_received_messages([
-        {on_process_unregistered, CurrentNode, default, "proc-handler-2", Pid2, <<"meta-for-2-update">>},
-        {on_process_unregistered, SlaveNode1, default, "proc-handler-2", Pid2, <<"meta-for-2-update">>},
-        {on_process_unregistered, SlaveNode2, default, "proc-handler-2", Pid2, <<"meta-for-2-update">>}
+        {on_process_unregistered, CurrentNode, default, "proc-handler-2", Pid2, <<"meta-for-2-update">>, normal},
+        {on_process_unregistered, SlaveNode1, default, "proc-handler-2", Pid2, <<"meta-for-2-update">>, normal},
+        {on_process_unregistered, SlaveNode2, default, "proc-handler-2", Pid2, <<"meta-for-2-update">>, normal}
     ]),
     syn_test_suite_helper:assert_empty_queue(self()),
 
@@ -1308,9 +1308,9 @@ three_nodes_custom_event_handler_reg_unreg(Config) ->
 
     %% check callbacks called
     syn_test_suite_helper:assert_received_messages([
-        {on_process_registered, CurrentNode, default, remote_on_1, PidRemoteOn1, <<"netsplit">>},
-        {on_process_registered, SlaveNode1, default, remote_on_1, PidRemoteOn1, <<"netsplit">>},
-        {on_process_registered, SlaveNode2, default, remote_on_1, PidRemoteOn1, <<"netsplit">>}
+        {on_process_registered, CurrentNode, default, remote_on_1, PidRemoteOn1, <<"netsplit">>, normal},
+        {on_process_registered, SlaveNode1, default, remote_on_1, PidRemoteOn1, <<"netsplit">>, normal},
+        {on_process_registered, SlaveNode2, default, remote_on_1, PidRemoteOn1, <<"netsplit">>, normal}
     ]),
     syn_test_suite_helper:assert_empty_queue(self()),
 
@@ -1322,7 +1322,7 @@ three_nodes_custom_event_handler_reg_unreg(Config) ->
 
     %% check callbacks called
     syn_test_suite_helper:assert_received_messages([
-        {on_process_unregistered, SlaveNode2, default, remote_on_1, PidRemoteOn1, <<"netsplit">>}
+        {on_process_unregistered, SlaveNode2, default, remote_on_1, PidRemoteOn1, <<"netsplit">>, {syn_remote_scope_node_down, default, SlaveNode1}}
     ]),
     syn_test_suite_helper:assert_empty_queue(self()),
 
@@ -1335,7 +1335,7 @@ three_nodes_custom_event_handler_reg_unreg(Config) ->
 
     %% check callbacks called
     syn_test_suite_helper:assert_received_messages([
-        {on_process_registered, SlaveNode2, default, remote_on_1, PidRemoteOn1, <<"netsplit">>}
+        {on_process_registered, SlaveNode2, default, remote_on_1, PidRemoteOn1, <<"netsplit">>, {syn_remote_scope_node_up, default, SlaveNode1}}
     ]),
     syn_test_suite_helper:assert_empty_queue(self()),
 
@@ -1344,9 +1344,9 @@ three_nodes_custom_event_handler_reg_unreg(Config) ->
 
     %% check callbacks called
     syn_test_suite_helper:assert_received_messages([
-        {on_process_unregistered, CurrentNode, default, remote_on_1, PidRemoteOn1, <<"netsplit">>},
-        {on_process_unregistered, SlaveNode1, default, remote_on_1, PidRemoteOn1, <<"netsplit">>},
-        {on_process_unregistered, SlaveNode2, default, remote_on_1, PidRemoteOn1, <<"netsplit">>}
+        {on_process_unregistered, CurrentNode, default, remote_on_1, PidRemoteOn1, <<"netsplit">>, killed},
+        {on_process_unregistered, SlaveNode1, default, remote_on_1, PidRemoteOn1, <<"netsplit">>, killed},
+        {on_process_unregistered, SlaveNode2, default, remote_on_1, PidRemoteOn1, <<"netsplit">>, killed}
     ]),
     syn_test_suite_helper:assert_empty_queue(self()),
 
@@ -1366,11 +1366,11 @@ three_nodes_custom_event_handler_reg_unreg(Config) ->
 
     %% check callbacks called
     syn_test_suite_helper:assert_received_messages([
-        {on_process_registered, CurrentNode, default, "proc-confict", Pid2RemoteOn1, <<"meta-1">>},
-        {on_process_unregistered, CurrentNode, default, "proc-confict", Pid2RemoteOn1, <<"meta-1">>},
-        {on_process_registered, CurrentNode, default, "proc-confict", Pid2RemoteOn2, <<"meta-2">>},
-        {on_process_registered, SlaveNode1, default, "proc-confict", Pid2RemoteOn1, <<"meta-1">>},
-        {on_process_registered, SlaveNode2, default, "proc-confict", Pid2RemoteOn2, <<"meta-2">>}
+        {on_process_registered, CurrentNode, default, "proc-confict", Pid2RemoteOn1, <<"meta-1">>, normal},
+        {on_process_unregistered, CurrentNode, default, "proc-confict", Pid2RemoteOn1, <<"meta-1">>, normal},
+        {on_process_registered, CurrentNode, default, "proc-confict", Pid2RemoteOn2, <<"meta-2">>, normal},
+        {on_process_registered, SlaveNode1, default, "proc-confict", Pid2RemoteOn1, <<"meta-1">>, normal},
+        {on_process_registered, SlaveNode2, default, "proc-confict", Pid2RemoteOn2, <<"meta-2">>, normal}
     ]),
     syn_test_suite_helper:assert_empty_queue(self()),
 
@@ -1382,20 +1382,20 @@ three_nodes_custom_event_handler_reg_unreg(Config) ->
 
     %% check callbacks called
     syn_test_suite_helper:assert_received_messages([
-        {on_process_unregistered, SlaveNode1, default, "proc-confict", Pid2RemoteOn1, <<"meta-1">>},
-        {on_process_registered, SlaveNode1, default, "proc-confict", Pid2RemoteOn2, <<"meta-2">>}
+        {on_process_unregistered, SlaveNode1, default, "proc-confict", Pid2RemoteOn1, <<"meta-1">>, syn_conflict_resolution},
+        {on_process_registered, SlaveNode1, default, "proc-confict", Pid2RemoteOn2, <<"meta-2">>, syn_conflict_resolution}
     ]),
     syn_test_suite_helper:assert_empty_queue(self()),
 
-    %% clean
+    %% kill
     syn_test_suite_helper:kill_process(Pid2RemoteOn1),
     syn_test_suite_helper:kill_process(Pid2RemoteOn2),
 
     %% check callbacks called
     syn_test_suite_helper:assert_received_messages([
-        {on_process_unregistered, CurrentNode, default, "proc-confict", Pid2RemoteOn2, <<"meta-2">>},
-        {on_process_unregistered, SlaveNode1, default, "proc-confict", Pid2RemoteOn2, <<"meta-2">>},
-        {on_process_unregistered, SlaveNode2, default, "proc-confict", Pid2RemoteOn2, <<"meta-2">>}
+        {on_process_unregistered, CurrentNode, default, "proc-confict", Pid2RemoteOn2, <<"meta-2">>, killed},
+        {on_process_unregistered, SlaveNode1, default, "proc-confict", Pid2RemoteOn2, <<"meta-2">>, killed},
+        {on_process_unregistered, SlaveNode2, default, "proc-confict", Pid2RemoteOn2, <<"meta-2">>, killed}
     ]),
     syn_test_suite_helper:assert_empty_queue(self()),
 
@@ -1428,6 +1428,10 @@ three_nodes_custom_event_handler_conflict_resolution(Config) ->
     ok = rpc:call(SlaveNode1, syn, add_node_to_scopes, [[custom_scope_bc]]),
     ok = rpc:call(SlaveNode2, syn, add_node_to_scopes, [[custom_scope_bc]]),
 
+    %% current node
+    TestPid = self(),
+    CurrentNode = node(),
+
     %% partial netsplit (1 cannot see 2)
     rpc:call(SlaveNode1, syn_test_suite_helper, disconnect_node, [SlaveNode2]),
     syn_test_suite_helper:assert_cluster(node(), [SlaveNode1, SlaveNode2]),
@@ -1439,10 +1443,23 @@ three_nodes_custom_event_handler_conflict_resolution(Config) ->
     PidOn2 = syn_test_suite_helper:start_process(SlaveNode2),
 
     %% --> conflict by netsplit
-    ok = rpc:call(SlaveNode1, syn, register, ["proc-confict-by-netsplit-custom", PidOn1, keepthis]),
-    ok = rpc:call(SlaveNode2, syn, register, ["proc-confict-by-netsplit-custom", PidOn2, "meta-2"]),
-    ok = rpc:call(SlaveNode1, syn, register, [custom_scope_bc, "proc-confict-by-netsplit-scoped-custom", PidOn1, keepthis]),
-    ok = rpc:call(SlaveNode2, syn, register, [custom_scope_bc, "proc-confict-by-netsplit-scoped-custom", PidOn2, "meta-2"]),
+    ok = rpc:call(SlaveNode1, syn, register, ["proc-confict-by-netsplit-custom", PidOn1, {recipient, TestPid, keepthis}]),
+    ok = rpc:call(SlaveNode2, syn, register, ["proc-confict-by-netsplit-custom", PidOn2, {recipient, TestPid, "meta-2"}]),
+    ok = rpc:call(SlaveNode1, syn, register, [custom_scope_bc, "proc-confict-by-netsplit-scoped-custom", PidOn1, {recipient, TestPid, keepthis}]),
+    ok = rpc:call(SlaveNode2, syn, register, [custom_scope_bc, "proc-confict-by-netsplit-scoped-custom", PidOn2, {recipient, TestPid, "meta-2"}]),
+
+    %% check callbacks
+    syn_test_suite_helper:assert_received_messages([
+        {on_process_registered, CurrentNode, default, "proc-confict-by-netsplit-custom", PidOn1, keepthis, normal},
+        {on_process_unregistered, CurrentNode, default, "proc-confict-by-netsplit-custom", PidOn1, keepthis, normal},
+        {on_process_registered, CurrentNode, default, "proc-confict-by-netsplit-custom", PidOn2, "meta-2", normal},
+
+        {on_process_registered, SlaveNode1, default, "proc-confict-by-netsplit-custom", PidOn1, keepthis, normal},
+        {on_process_registered, SlaveNode2, default, "proc-confict-by-netsplit-custom", PidOn2, "meta-2", normal},
+        {on_process_registered, SlaveNode1, custom_scope_bc, "proc-confict-by-netsplit-scoped-custom", PidOn1, keepthis, normal},
+        {on_process_registered, SlaveNode2, custom_scope_bc, "proc-confict-by-netsplit-scoped-custom", PidOn2, "meta-2", normal}
+    ]),
+    syn_test_suite_helper:assert_empty_queue(self()),
 
     %% re-join
     rpc:call(SlaveNode1, syn_test_suite_helper, connect_node, [SlaveNode2]),
@@ -1452,15 +1469,15 @@ three_nodes_custom_event_handler_conflict_resolution(Config) ->
 
     %% retrieve
     syn_test_suite_helper:assert_wait(
-        {PidOn1, keepthis},
+        {PidOn1, {recipient, TestPid, keepthis}},
         fun() -> syn:lookup("proc-confict-by-netsplit-custom") end
     ),
     syn_test_suite_helper:assert_wait(
-        {PidOn1, keepthis},
+        {PidOn1, {recipient, TestPid, keepthis}},
         fun() -> rpc:call(SlaveNode1, syn, lookup, ["proc-confict-by-netsplit-custom"]) end
     ),
     syn_test_suite_helper:assert_wait(
-        {PidOn1, keepthis},
+        {PidOn1, {recipient, TestPid, keepthis}},
         fun() -> rpc:call(SlaveNode2, syn, lookup, ["proc-confict-by-netsplit-custom"]) end
     ),
     1 = syn:registry_count(),
@@ -1476,11 +1493,11 @@ three_nodes_custom_event_handler_conflict_resolution(Config) ->
     1 = rpc:call(SlaveNode2, syn, registry_count, [default, SlaveNode1]),
     0 = rpc:call(SlaveNode2, syn, registry_count, [default, SlaveNode2]),
     syn_test_suite_helper:assert_wait(
-        {PidOn1, keepthis},
+        {PidOn1, {recipient, TestPid, keepthis}},
         fun() -> rpc:call(SlaveNode1, syn, lookup, [custom_scope_bc, "proc-confict-by-netsplit-scoped-custom"]) end
     ),
     syn_test_suite_helper:assert_wait(
-        {PidOn1, keepthis},
+        {PidOn1, {recipient, TestPid, keepthis}},
         fun() -> rpc:call(SlaveNode2, syn, lookup, [custom_scope_bc, "proc-confict-by-netsplit-scoped-custom"]) end
     ),
     1 = rpc:call(SlaveNode1, syn, registry_count, [custom_scope_bc]),
@@ -1491,6 +1508,17 @@ three_nodes_custom_event_handler_conflict_resolution(Config) ->
     0 = rpc:call(SlaveNode2, syn, registry_count, [custom_scope_bc, node()]),
     1 = rpc:call(SlaveNode2, syn, registry_count, [custom_scope_bc, SlaveNode1]),
     0 = rpc:call(SlaveNode2, syn, registry_count, [custom_scope_bc, SlaveNode2]),
+
+    syn_test_suite_helper:assert_received_messages([
+        {on_process_unregistered, CurrentNode, default, "proc-confict-by-netsplit-custom", PidOn2, "meta-2", syn_conflict_resolution},
+        {on_process_registered, CurrentNode, default, "proc-confict-by-netsplit-custom", PidOn1, keepthis, syn_conflict_resolution},
+
+        {on_process_unregistered, SlaveNode2, default, "proc-confict-by-netsplit-custom", PidOn2, "meta-2", syn_conflict_resolution},
+        {on_process_registered, SlaveNode2, default, "proc-confict-by-netsplit-custom", PidOn1, keepthis, syn_conflict_resolution},
+        {on_process_unregistered, SlaveNode2, custom_scope_bc, "proc-confict-by-netsplit-scoped-custom", PidOn2, "meta-2", syn_conflict_resolution},
+        {on_process_registered, SlaveNode2, custom_scope_bc, "proc-confict-by-netsplit-scoped-custom", PidOn1, keepthis, syn_conflict_resolution}
+    ]),
+    syn_test_suite_helper:assert_empty_queue(self()),
 
     %% process alive (discarded process does not get killed with a custom handler)
     syn_test_suite_helper:assert_wait(
@@ -1504,6 +1532,9 @@ three_nodes_custom_event_handler_conflict_resolution(Config) ->
 
     %% clean up default scope
     syn:unregister("proc-confict-by-netsplit-custom"),
+    ok = rpc:call(SlaveNode1, syn, unregister, [custom_scope_bc, "proc-confict-by-netsplit-scoped-custom"]),
+
+    %% retrieve
     syn_test_suite_helper:assert_wait(
         undefined,
         fun() -> syn:lookup("proc-confict-by-netsplit-custom") end
@@ -1516,6 +1547,24 @@ three_nodes_custom_event_handler_conflict_resolution(Config) ->
         undefined,
         fun() -> rpc:call(SlaveNode2, syn, lookup, ["proc-confict-by-netsplit-custom"]) end
     ),
+    syn_test_suite_helper:assert_wait(
+        undefined,
+        fun() -> rpc:call(SlaveNode1, syn, lookup, [custom_scope_bc, "proc-confict-by-netsplit-scoped-custom"]) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        undefined,
+        fun() -> rpc:call(SlaveNode2, syn, lookup, [custom_scope_bc, "proc-confict-by-netsplit-scoped-custom"]) end
+    ),
+
+    %% check callbacks
+    syn_test_suite_helper:assert_received_messages([
+        {on_process_unregistered, CurrentNode, default, "proc-confict-by-netsplit-custom", PidOn1, keepthis, normal},
+        {on_process_unregistered, SlaveNode1, default, "proc-confict-by-netsplit-custom", PidOn1, keepthis, normal},
+        {on_process_unregistered, SlaveNode2, default, "proc-confict-by-netsplit-custom", PidOn1, keepthis, normal},
+        {on_process_unregistered, SlaveNode1, custom_scope_bc, "proc-confict-by-netsplit-scoped-custom", PidOn1, keepthis, normal},
+        {on_process_unregistered, SlaveNode2, custom_scope_bc, "proc-confict-by-netsplit-scoped-custom", PidOn1, keepthis, normal}
+    ]),
+    syn_test_suite_helper:assert_empty_queue(self()),
 
     %% --> conflict by netsplit, which returns invalid pid
     %% partial netsplit (1 cannot see 2)
@@ -1524,9 +1573,20 @@ three_nodes_custom_event_handler_conflict_resolution(Config) ->
     syn_test_suite_helper:assert_cluster(SlaveNode1, [node()]),
     syn_test_suite_helper:assert_cluster(SlaveNode2, [node()]),
 
-    %% update meta to not select any process
-    ok = rpc:call(SlaveNode1, syn, register, ["proc-confict-by-netsplit-custom-other-pid", PidOn1, "meta-1"]),
-    ok = rpc:call(SlaveNode2, syn, register, ["proc-confict-by-netsplit-custom-other-pid", PidOn2, "meta-2"]),
+    %% register with meta with no 'keepthis' element
+    ok = rpc:call(SlaveNode1, syn, register, ["proc-confict-by-netsplit-custom-other-pid", PidOn1, {recipient, TestPid, "meta-1"}]),
+    ok = rpc:call(SlaveNode2, syn, register, ["proc-confict-by-netsplit-custom-other-pid", PidOn2, {recipient, TestPid, "meta-2"}]),
+
+    %% check callbacks
+    syn_test_suite_helper:assert_received_messages([
+        {on_process_registered, CurrentNode, default, "proc-confict-by-netsplit-custom-other-pid", PidOn1, "meta-1", normal},
+        {on_process_unregistered, CurrentNode, default, "proc-confict-by-netsplit-custom-other-pid", PidOn1, "meta-1", normal},
+        {on_process_registered, CurrentNode, default, "proc-confict-by-netsplit-custom-other-pid", PidOn2, "meta-2", normal},
+
+        {on_process_registered, SlaveNode1, default, "proc-confict-by-netsplit-custom-other-pid", PidOn1, "meta-1", normal},
+        {on_process_registered, SlaveNode2, default, "proc-confict-by-netsplit-custom-other-pid", PidOn2, "meta-2", normal}
+    ]),
+    syn_test_suite_helper:assert_empty_queue(self()),
 
     %% re-join
     rpc:call(SlaveNode1, syn_test_suite_helper, connect_node, [SlaveNode2]),
@@ -1560,6 +1620,14 @@ three_nodes_custom_event_handler_conflict_resolution(Config) ->
     0 = rpc:call(SlaveNode2, syn, registry_count, [default, SlaveNode1]),
     0 = rpc:call(SlaveNode2, syn, registry_count, [default, SlaveNode2]),
 
+    %% check callbacks
+    syn_test_suite_helper:assert_received_messages([
+        {on_process_unregistered, CurrentNode, default, "proc-confict-by-netsplit-custom-other-pid", PidOn2, "meta-2", syn_conflict_resolution},
+        {on_process_unregistered, SlaveNode1, default, "proc-confict-by-netsplit-custom-other-pid", PidOn1, "meta-1", syn_conflict_resolution},
+        {on_process_unregistered, SlaveNode2, default, "proc-confict-by-netsplit-custom-other-pid", PidOn2, "meta-2", syn_conflict_resolution}
+    ]),
+    syn_test_suite_helper:assert_empty_queue(self()),
+
     %% process alive (discarded process does not get killed with a custom handler)
     syn_test_suite_helper:assert_wait(
         true,
@@ -1578,9 +1646,20 @@ three_nodes_custom_event_handler_conflict_resolution(Config) ->
     syn_test_suite_helper:assert_cluster(SlaveNode1, [node()]),
     syn_test_suite_helper:assert_cluster(SlaveNode2, [node()]),
 
-    %% update meta to not select any process
-    ok = rpc:call(SlaveNode1, syn, register, ["proc-confict-by-netsplit-custom-crash", PidOn1, crash]),
-    ok = rpc:call(SlaveNode2, syn, register, ["proc-confict-by-netsplit-custom-crash", PidOn2, crash]),
+    %% register with meta with no 'crash' element
+    ok = rpc:call(SlaveNode1, syn, register, ["proc-confict-by-netsplit-custom-crash", PidOn1, {recipient, TestPid, crash}]),
+    ok = rpc:call(SlaveNode2, syn, register, ["proc-confict-by-netsplit-custom-crash", PidOn2, {recipient, TestPid, crash}]),
+
+    %% check callbacks
+    syn_test_suite_helper:assert_received_messages([
+        {on_process_registered, CurrentNode, default, "proc-confict-by-netsplit-custom-crash", PidOn1, crash, normal},
+        {on_process_unregistered, CurrentNode, default, "proc-confict-by-netsplit-custom-crash", PidOn1, crash, normal},
+        {on_process_registered, CurrentNode, default, "proc-confict-by-netsplit-custom-crash", PidOn2, crash, normal},
+
+        {on_process_registered, SlaveNode1, default, "proc-confict-by-netsplit-custom-crash", PidOn1, crash, normal},
+        {on_process_registered, SlaveNode2, default, "proc-confict-by-netsplit-custom-crash", PidOn2, crash, normal}
+    ]),
+    syn_test_suite_helper:assert_empty_queue(self()),
 
     %% re-join
     rpc:call(SlaveNode1, syn_test_suite_helper, connect_node, [SlaveNode2]),
@@ -1613,6 +1692,14 @@ three_nodes_custom_event_handler_conflict_resolution(Config) ->
     0 = rpc:call(SlaveNode2, syn, registry_count, [default, node()]),
     0 = rpc:call(SlaveNode2, syn, registry_count, [default, SlaveNode1]),
     0 = rpc:call(SlaveNode2, syn, registry_count, [default, SlaveNode2]),
+
+    %% check callbacks
+    syn_test_suite_helper:assert_received_messages([
+        {on_process_unregistered, CurrentNode, default, "proc-confict-by-netsplit-custom-crash", PidOn2, crash, syn_conflict_resolution},
+        {on_process_unregistered, SlaveNode1, default, "proc-confict-by-netsplit-custom-crash", PidOn1, crash, syn_conflict_resolution},
+        {on_process_unregistered, SlaveNode2, default, "proc-confict-by-netsplit-custom-crash", PidOn2, crash, syn_conflict_resolution}
+    ]),
+    syn_test_suite_helper:assert_empty_queue(self()),
 
     %% process alive (discarded process does not get killed with a custom handler)
     syn_test_suite_helper:assert_wait(

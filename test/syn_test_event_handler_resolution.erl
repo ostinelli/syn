@@ -26,23 +26,21 @@
 -module(syn_test_event_handler_resolution).
 -behaviour(syn_event_handler).
 
+-export([on_process_registered/5]).
+-export([on_process_unregistered/5]).
 -export([resolve_registry_conflict/4]).
 
--spec resolve_registry_conflict(
-    Scope :: atom(),
-    Name :: any(),
-    {LocalPid :: pid(), LocalMeta :: any()},
-    {RemotePid :: pid(), RemoteMeta :: any()}
-) -> PidToKeep :: pid().
-resolve_registry_conflict(default, _Name, {Pid1, keepthis, _Time1}, {_Pid2, _Meta2, _Time2}) ->
+on_process_registered(Scope, Name, Pid, {recipient, RecipientPid, AdditionalMeta}, Reason) ->
+    RecipientPid ! {on_process_registered, node(), Scope, Name, Pid, AdditionalMeta, Reason}.
+
+on_process_unregistered(Scope, Name, Pid, {recipient, RecipientPid, AdditionalMeta}, Reason) ->
+    RecipientPid ! {on_process_unregistered, node(), Scope, Name, Pid, AdditionalMeta, Reason}.
+
+resolve_registry_conflict(_Scope, _Name, {Pid1, {recipient, _, keepthis}, _Time1}, {_Pid2, _Meta2, _Time2}) ->
     Pid1;
-resolve_registry_conflict(custom_scope_bc, _Name, {Pid1, keepthis, _Time1}, {_Pid2, _Meta2, _Time2}) ->
-    Pid1;
-resolve_registry_conflict(default, _Name, {_Pid1, _Meta1, _Time1}, {Pid2, keepthis, _Time2}) ->
-    Pid2;
-resolve_registry_conflict(custom_scope_bc, _Name, {_Pid1, _Meta1, _Time1}, {Pid2, keepthis, _Time2}) ->
+resolve_registry_conflict(_Scope, _Name, {_Pid1, _Meta1, _Time1}, {Pid2, {recipient, _, keepthis}, _Time2}) ->
     Pid2;
 resolve_registry_conflict(default, _Name, {Pid1, _Meta1, _Time1}, {_Pid2, _Meta2, _Time2}) ->
     syn_test_suite_helper:start_process(node(Pid1));
-resolve_registry_conflict(default, _Name, {_Pid1, crash, _Time1}, {_Pid2, crash, _Time2}) ->
+resolve_registry_conflict(default, _Name, {_Pid1, {recipient, _, crash}, _Time1}, {_Pid2, {recipient, _, crash}, _Time2}) ->
     exit(self(), syn_test_crash).

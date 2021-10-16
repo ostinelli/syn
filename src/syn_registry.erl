@@ -101,7 +101,7 @@ register(Scope, Name, Pid, Meta) ->
             %% update table on caller node immediately so that subsequent calls have an updated registry
             add_to_local_table(Name, Pid, Meta, Time, undefined, TableByName, TableByPid),
             %% callback
-            syn_event_handler:call_event_handler(CallbackMethod, [Scope, Name, Pid, Meta]),
+            syn_event_handler:call_event_handler(CallbackMethod, [Scope, Name, Pid, Meta, normal]),
             %% return
             ok;
 
@@ -132,7 +132,7 @@ unregister(Scope, Name) ->
                             %% remove table on caller node immediately so that subsequent calls have an updated registry
                             remove_from_local_table(Name, Pid, TableByName, TableByPid),
                             %% callback
-                            syn_event_handler:call_event_handler(on_process_unregistered, [Scope, Name, Pid, Meta]),
+                            syn_event_handler:call_event_handler(on_process_unregistered, [Scope, Name, Pid, Meta, normal]),
                             %% return
                             ok;
 
@@ -214,14 +214,14 @@ handle_call({register_on_node, RequesterNode, Name, Pid, Meta}, _From, #state{
                         undefined -> erlang:monitor(process, Pid);  %% process is not monitored yet, add
                         MRef0 -> MRef0
                     end,
-                    do_register_on_node(Name, Pid, Meta, MRef, RequesterNode, on_process_registered, State);
+                    do_register_on_node(Name, Pid, Meta, normal, MRef, RequesterNode, on_process_registered, State);
 
                 {Name, Pid, Meta, _, _, _} ->
                     %% same pid, same meta
                     {reply, {ok, noop}, State};
 
                 {Name, Pid, _, _, MRef, _} ->
-                    do_register_on_node(Name, Pid, Meta, MRef, RequesterNode, on_registry_process_updated, State);
+                    do_register_on_node(Name, Pid, Meta, normal, MRef, RequesterNode, on_registry_process_updated, State);
 
                 _ ->
                     {reply, {{error, taken}, undefined}, State}
@@ -243,9 +243,9 @@ handle_call({unregister_on_node, RequesterNode, Name, Pid}, _From, #state{
             %% remove from table
             remove_from_local_table(Name, Pid, TableByName, TableByPid),
             %% callback
-            syn_event_handler:call_event_handler(on_process_unregistered, [Scope, Name, Pid, Meta]),
+            syn_event_handler:call_event_handler(on_process_unregistered, [Scope, Name, Pid, Meta, normal]),
             %% broadcast
-            syn_gen_scope:broadcast({'3.0', sync_unregister, Name, Pid, Meta}, [RequesterNode], State),
+            syn_gen_scope:broadcast({'3.0', sync_unregister, Name, Pid, Meta, normal}, [RequesterNode], State),
             %% return
             {reply, {ok, TableByPid}, State};
 
@@ -268,18 +268,25 @@ handle_call(Request, From, #state{scope = Scope} = State) ->
     {noreply, #state{}} |
     {noreply, #state{}, timeout() | hibernate | {continue, term()}} |
     {stop, Reason :: term(), #state{}}.
-handle_info({'3.0', sync_register, Name, Pid, Meta, Time}, State) ->
-    handle_registry_sync(Name, Pid, Meta, Time, State),
+handle_info({'3.0', sync_register, Name, Pid, Meta, Time, Reason}, State) ->
+    handle_registry_sync(Name, Pid, Meta, Time, Reason, State),
     {noreply, State};
 
-handle_info({'3.0', sync_unregister, Name, Pid, Meta}, #state{
+handle_info({'3.0', sync_unregister, Name, Pid, Meta, Reason}, #state{
     scope = Scope,
     table_by_name = TableByName,
     table_by_pid = TableByPid
 } = State) ->
-    remove_from_local_table(Name, Pid, TableByName, TableByPid),
-    %% callback
-    syn_event_handler:call_event_handler(on_process_unregistered, [Scope, Name, Pid, Meta]),
+    case find_registry_entry_by_name(Name, TableByName) of
+        {_, Pid, _, _, _, _} ->
+            remove_from_local_table(Name, Pid, TableByName, TableByPid),
+            %% callback
+            syn_event_handler:call_event_handler(on_process_unregistered, [Scope, Name, Pid, Meta, Reason]);
+
+         _ ->
+             %% not in table, nothing to do
+             ok
+    end,
     %% return
     {noreply, State};
 
@@ -300,9 +307,9 @@ handle_info({'DOWN', _MRef, process, Pid, Reason}, #state{
                 %% remove from table
                 remove_from_local_table(Name, Pid, TableByName, TableByPid),
                 %% callback
-                syn_event_handler:call_event_handler(on_process_unregistered, [Scope, Name, Pid, Meta]),
+                syn_event_handler:call_event_handler(on_process_unregistered, [Scope, Name, Pid, Meta, Reason]),
                 %% broadcast
-                syn_gen_scope:broadcast({'3.0', sync_unregister, Name, Pid, Meta}, State)
+                syn_gen_scope:broadcast({'3.0', sync_unregister, Name, Pid, Meta, Reason}, State)
             end, Entries)
     end,
     %% return
@@ -320,10 +327,10 @@ get_local_data(#state{table_by_name = TableByName}) ->
     {ok, get_registry_tuples_for_node(node(), TableByName)}.
 
 -spec save_remote_data(RemoteData :: term(), #state{}) -> any().
-save_remote_data(RegistryTuplesOfRemoteNode, State) ->
+save_remote_data(RegistryTuplesOfRemoteNode, #state{scope = Scope} = State) ->
     %% insert tuples
     lists:foreach(fun({Name, Pid, Meta, Time}) ->
-        handle_registry_sync(Name, Pid, Meta, Time, State)
+        handle_registry_sync(Name, Pid, Meta, Time, {syn_remote_scope_node_up, Scope, node(Pid)}, State)
     end, RegistryTuplesOfRemoteNode).
 
 -spec purge_local_data_for_node(Node :: node(), #state{}) -> any().
@@ -372,6 +379,7 @@ do_rebuild_monitors([{Name, Pid, Meta, Time} | T], NewMonitorRefs, #state{
     Name :: term(),
     Pid :: pid(),
     Meta :: term(),
+    Reason :: atom(),
     MRef :: reference() | undefined,
     RequesterNode :: node(),
     CallbackMethod :: atom(),
@@ -387,7 +395,7 @@ do_rebuild_monitors([{Name, Pid, Meta, Time} | T], NewMonitorRefs, #state{
         }},
         #state{}
     }.
-do_register_on_node(Name, Pid, Meta, MRef, RequesterNode, CallbackMethod, #state{
+do_register_on_node(Name, Pid, Meta, Reason, MRef, RequesterNode, CallbackMethod, #state{
     scope = Scope,
     table_by_name = TableByName,
     table_by_pid = TableByPid
@@ -396,9 +404,9 @@ do_register_on_node(Name, Pid, Meta, MRef, RequesterNode, CallbackMethod, #state
     Time = erlang:system_time(),
     add_to_local_table(Name, Pid, Meta, Time, MRef, TableByName, TableByPid),
     %% callback
-    syn_event_handler:call_event_handler(CallbackMethod, [Scope, Name, Pid, Meta]),
+    syn_event_handler:call_event_handler(CallbackMethod, [Scope, Name, Pid, Meta, Reason]),
     %% broadcast
-    syn_gen_scope:broadcast({'3.0', sync_register, Name, Pid, Meta, Time}, [RequesterNode], State),
+    syn_gen_scope:broadcast({'3.0', sync_register, Name, Pid, Meta, Time, Reason}, [RequesterNode], State),
     %% return
     {reply, {ok, {CallbackMethod, Time, TableByName, TableByPid}}, State}.
 
@@ -503,7 +511,9 @@ purge_registry_for_remote_node(Scope, Node, TableByName, TableByPid) when Node =
     RegistryTuples = get_registry_tuples_for_node(Node, TableByName),
     spawn(fun() ->
         lists:foreach(fun({Name, Pid, Meta, _Time}) ->
-            syn_event_handler:call_event_handler(on_process_unregistered, [Scope, Name, Pid, Meta])
+            syn_event_handler:call_event_handler(on_process_unregistered,
+                [Scope, Name, Pid, Meta, {syn_remote_scope_node_down, Scope, Node}]
+            )
         end, RegistryTuples)
     end),
     %% remove all from pid table
@@ -514,10 +524,11 @@ purge_registry_for_remote_node(Scope, Node, TableByName, TableByPid) when Node =
     Name :: term(),
     Pid :: pid(),
     Meta :: term(),
+    Reason :: atom(),
     Time :: non_neg_integer(),
     #state{}
 ) -> any().
-handle_registry_sync(Name, Pid, Meta, Time, #state{
+handle_registry_sync(Name, Pid, Meta, Time, Reason, #state{
     scope = Scope,
     table_by_name = TableByName,
     table_by_pid = TableByPid
@@ -527,7 +538,7 @@ handle_registry_sync(Name, Pid, Meta, Time, #state{
             %% no conflict
             add_to_local_table(Name, Pid, Meta, Time, undefined, TableByName, TableByPid),
             %% callback
-            syn_event_handler:call_event_handler(on_process_registered, [Scope, Name, Pid, Meta]);
+            syn_event_handler:call_event_handler(on_process_registered, [Scope, Name, Pid, Meta, Reason]);
 
         {_, Pid, TableMeta, _, MRef, _} ->
             %% same pid, more recent (because it comes from the same node, which means that it's sequential)
@@ -535,7 +546,8 @@ handle_registry_sync(Name, Pid, Meta, Time, #state{
             add_to_local_table(Name, Pid, Meta, Time, MRef, TableByName, TableByPid),
             %% callback (call only if meta update)
             case TableMeta =/= Meta of
-                true -> syn_event_handler:call_event_handler(on_registry_process_updated, [Scope, Name, Pid, Meta]);
+                true ->
+                    syn_event_handler:call_event_handler(on_registry_process_updated, [Scope, Name, Pid, Meta, Reason]);
                 _ -> ok
             end;
 
@@ -551,8 +563,8 @@ handle_registry_sync(Name, Pid, Meta, Time, #state{
             %% current node does not own any of the conflicting processes, update
             update_local_table(Name, TablePid, {Pid, Meta, Time, undefined}, TableByName, TableByPid),
             %% callbacks
-            syn_event_handler:call_event_handler(on_process_unregistered, [Scope, Name, TablePid, TableMeta]),
-            syn_event_handler:call_event_handler(on_process_registered, [Scope, Name, Pid, Meta]);
+            syn_event_handler:call_event_handler(on_process_unregistered, [Scope, Name, TablePid, TableMeta, Reason]),
+            syn_event_handler:call_event_handler(on_process_registered, [Scope, Name, Pid, Meta, Reason]);
 
         {_, _, _, _, _, _} ->
             %% race condition: incoming data is older, ignore
@@ -592,8 +604,8 @@ resolve_conflict(Scope, Name, {Pid, Meta, Time}, {TablePid, TableMeta, TableTime
                 false -> ok
             end,
             %% callbacks
-            syn_event_handler:call_event_handler(on_process_unregistered, [Scope, Name, TablePid, TableMeta]),
-            syn_event_handler:call_event_handler(on_process_registered, [Scope, Name, Pid, Meta]);
+            syn_event_handler:call_event_handler(on_process_unregistered, [Scope, Name, TablePid, TableMeta, syn_conflict_resolution]),
+            syn_event_handler:call_event_handler(on_process_registered, [Scope, Name, Pid, Meta, syn_conflict_resolution]);
 
         TablePid ->
             %% -> we keep the local pid, remote pid will be killed by the other node in the conflict
@@ -604,7 +616,7 @@ resolve_conflict(Scope, Name, {Pid, Meta, Time}, {TablePid, TableMeta, TableTime
             ResolveTime = erlang:system_time(),
             add_to_local_table(Name, TablePid, TableMeta, ResolveTime, TableMRef, TableByName, TableByPid),
             %% broadcast to all (including remote node to update the time)
-            syn_gen_scope:broadcast({'3.0', sync_register, Name, TablePid, TableMeta, ResolveTime}, State);
+            syn_gen_scope:broadcast({'3.0', sync_register, Name, TablePid, TableMeta, ResolveTime, syn_conflict_resolution}, State);
 
         Invalid ->
             error_logger:info_msg("SYN[~s<~s>] Registry CONFLICT for name ~p: ~p vs ~p -> none chosen (got: ~p)",
@@ -619,7 +631,7 @@ resolve_conflict(Scope, Name, {Pid, Meta, Time}, {TablePid, TableMeta, TableTime
                 false -> ok
             end,
             %% callback
-            syn_event_handler:call_event_handler(on_process_unregistered, [Scope, Name, TablePid, TableMeta]),
+            syn_event_handler:call_event_handler(on_process_unregistered, [Scope, Name, TablePid, TableMeta, syn_conflict_resolution]),
             %% broadcast to all but remote node, which will remove it during conflict resolution
-            syn_gen_scope:broadcast({'3.0', sync_unregister, Name, TablePid, TableMeta}, [node(Pid)], State)
+            syn_gen_scope:broadcast({'3.0', sync_unregister, Name, TablePid, TableMeta, syn_conflict_resolution}, [node(Pid)], State)
     end.

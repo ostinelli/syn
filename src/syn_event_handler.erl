@@ -37,6 +37,17 @@
 %% All of the callbacks, except for `resolve_registry_conflict/3', are called on all the nodes of the cluster.
 %% This allows you to receive events for the processes running on nodes that get shut down, or in case of net splits.
 %%
+%% The argument `Reason' in the callbacks can be:
+%% <ul>
+%% <li> `normal' for expected operations.</li>
+%% <li> Crash reasons when processes die (for `on_process_unregistered/5' and `on_process_left/5').</li>
+%% <li> `{syn_remote_scope_node_up, Scope, Node}' for `on_process_registered/5' and `on_process_joined/5'
+%%      when the callbacks are called due to nodes syncing.</li>
+%% <li> `{syn_remote_scope_node_down, Scope, Node}' for `on_process_unregistered/5' and `on_process_left/5'
+%%      when the callbacks are called due to nodes disconnecting.</li>
+%% <li> `syn_conflict_resolution' for `on_process_registered/5' and `on_process_unregistered/5'
+%%      during registry conflict resolution.</li>
+%% </ul>
 %% While all callbacks do not have a direct effect on Syn (their return value is ignored), a special case is the callback
 %% `resolve_registry_conflict/3'. If specified, this is the method that will be used to resolve registry conflicts when detected.
 %%
@@ -75,9 +86,10 @@
 %%     scope :: atom(),
 %%     name :: any(),
 %%     pid :: pid(),
-%%     meta :: any()
+%%     meta :: any(),
+%%     reason :: atom()
 %%   ) :: any()
-%%   def on_process_unregistered(scope, name, pid, meta) do
+%%   def on_process_unregistered(scope, name, pid, meta, reason) do
 %%   end
 %%
 %%   ‎@impl true
@@ -85,9 +97,10 @@
 %%     scope :: atom(),
 %%     group_name :: any(),
 %%     pid :: pid(),
-%%     meta :: any()
+%%     meta :: any(),
+%%     reason :: atom()
 %%   ) :: any()
-%%   def on_process_left(scope, group_name, pid, meta) do
+%%   def on_process_left(scope, group_name, pid, meta, reason) do
 %%   end
 %% end
 %% '''
@@ -102,18 +115,20 @@
 %%     Scope :: atom(),
 %%     Name :: any(),
 %%     Pid :: pid(),
-%%     Meta :: any()
+%%     Meta :: any(),
+%%     Reason :: atom()
 %% ) -> any().
-%% on_process_unregistered(Scope, Name, Pid, Meta) ->
+%% on_process_unregistered(Scope, Name, Pid, Meta, Reason) ->
 %%     ok.
 %%
 %% -spec on_process_left(
 %%     Scope :: atom(),
 %%     GroupName :: any(),
 %%     Pid :: pid(),
-%%     Meta :: any()
+%%     Meta :: any(),
+%%     Reason :: atom()
 %% ) -> any().
-%% on_process_left(Scope, GroupName, Pid, Meta) ->
+%% on_process_left(Scope, GroupName, Pid, Meta, Reason) ->
 %%     ok.
 %% '''
 %%
@@ -131,42 +146,48 @@
     Scope :: any(),
     Name :: any(),
     Pid :: pid(),
-    Meta :: any()
+    Meta :: any(),
+    Reason :: atom()
 ) -> any().
 
 -callback on_registry_process_updated(
     Scope :: any(),
     Name :: any(),
     Pid :: pid(),
-    Meta :: any()
+    Meta :: any(),
+    Reason :: atom()
 ) -> any().
 
 -callback on_process_unregistered(
     Scope :: any(),
     Name :: any(),
     Pid :: pid(),
-    Meta :: any()
+    Meta :: any(),
+    Reason :: atom()
 ) -> any().
 
 -callback on_process_joined(
     Scope :: any(),
     GroupName :: any(),
     Pid :: pid(),
-    Meta :: any()
+    Meta :: any(),
+    Reason :: atom()
 ) -> any().
 
 -callback on_group_process_updated(
     Scope :: any(),
     GroupName :: any(),
     Pid :: pid(),
-    Meta :: any()
+    Meta :: any(),
+    Reason :: atom()
 ) -> any().
 
 -callback on_process_left(
     Scope :: any(),
     GroupName :: any(),
     Pid :: pid(),
-    Meta :: any()
+    Meta :: any(),
+    Reason :: atom()
 ) -> any().
 
 -callback resolve_registry_conflict(
@@ -175,8 +196,8 @@
     {Pid2 :: pid(), Meta2 :: any(), Time2 :: non_neg_integer()}
 ) -> PidToKeep :: pid().
 
--optional_callbacks([on_process_registered/4, on_registry_process_updated/4, on_process_unregistered/4]).
--optional_callbacks([on_process_joined/4, on_group_process_updated/4, on_process_left/4]).
+-optional_callbacks([on_process_registered/5, on_registry_process_updated/5, on_process_unregistered/5]).
+-optional_callbacks([on_process_joined/5, on_group_process_updated/5, on_process_left/5]).
 -optional_callbacks([resolve_registry_conflict/3]).
 
 %% ===================================================================
@@ -195,7 +216,7 @@ ensure_event_handler_loaded() ->
 ) -> any().
 call_event_handler(CallbackMethod, Args) ->
     CustomEventHandler = get_custom_event_handler(),
-    case erlang:function_exported(CustomEventHandler, CallbackMethod, 4) of
+    case erlang:function_exported(CustomEventHandler, CallbackMethod, 5) of
         true ->
             try apply(CustomEventHandler, CallbackMethod, Args)
             catch Class:Reason:Stacktrace ->

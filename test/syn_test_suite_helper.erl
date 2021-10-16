@@ -31,9 +31,9 @@
 -export([clean_after_test/0]).
 -export([start_process/0, start_process/1, start_process/2]).
 -export([kill_process/1]).
--export([flush_inbox/0]).
 -export([wait_cluster_mesh_connected/1]).
 -export([wait_process_name_ready/1, wait_process_name_ready/2]).
+-export([wait_message_queue_empty/0]).
 -export([assert_cluster/2]).
 -export([assert_registry_scope_subcluster/3, assert_groups_scope_subcluster/3]).
 -export([assert_received_messages/1]).
@@ -112,13 +112,6 @@ kill_process(Pid) when is_pid(Pid) ->
             ok
     end.
 
-flush_inbox() ->
-    receive
-        _ -> flush_inbox()
-    after 0 ->
-        ok
-    end.
-
 wait_cluster_mesh_connected(Nodes) ->
     wait_cluster_mesh_connected(Nodes, os:system_time(millisecond)).
 wait_cluster_mesh_connected(Nodes, StartAt) ->
@@ -173,6 +166,16 @@ wait_process_name_ready(Name, StartAt) ->
                     end
             end
     end.
+
+wait_message_queue_empty() ->
+    timer:sleep(500),
+    syn_test_suite_helper:assert_wait(
+        ok,
+        fun() ->
+            flush_inbox(),
+            syn_test_suite_helper:assert_empty_queue(self())
+        end
+    ).
 
 assert_cluster(Node, ExpectedNodes) ->
     assert_cluster(Node, ExpectedNodes, os:system_time(millisecond)).
@@ -315,6 +318,13 @@ do_assert_received_messages(MissingMessages, UnexpectedMessages) ->
     ct:fail("~n\tReceive messages error~n\tMissing: ~p~n\tUnexpected: ~p~n",
         [lists:reverse(MissingMessages), lists:reverse(UnexpectedMessages)]
     ).
+
+flush_inbox() ->
+    receive
+        _ -> flush_inbox()
+    after 0 ->
+        ok
+    end.
 
 get_line_from_stacktrace() ->
     {current_stacktrace, Stacktrace} = process_info(self(), current_stacktrace),
