@@ -301,9 +301,9 @@ multi_call(Scope, GroupName, Message, Timeout) ->
     end, Members),
     collect_replies(orddict:from_list(Members)).
 
--spec multi_call_reply(CallerPid :: pid(), Reply :: term()) -> {syn_multi_call_reply, pid(), Reply :: term()}.
-multi_call_reply({Ref, ClientPid}, Reply) ->
-    ClientPid ! {syn_multi_call_reply, Ref, Reply}.
+-spec multi_call_reply({reference(), ClientPid :: pid()}, Reply :: term()) -> {syn_multi_call_reply, pid(), Reply :: term()}.
+multi_call_reply({Ref, CallerPid}, Reply) ->
+    CallerPid ! {syn_multi_call_reply, Ref, Reply}.
 
 %% ===================================================================
 %% Callbacks

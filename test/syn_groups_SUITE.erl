@@ -2206,7 +2206,7 @@ subscriber_loop(TestPid, TestMessage) ->
 
 recipient_loop() ->
     receive
-        {syn_multi_call, TestMessage, CallerPid, Meta} ->
-            syn:multi_call_reply(CallerPid, {reply, TestMessage, self(), Meta}),
+        {syn_multi_call, TestMessage, Caller, Meta} ->
+            syn:multi_call_reply(Caller, {reply, TestMessage, self(), Meta}),
             recipient_loop()
     end.

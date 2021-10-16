@@ -716,7 +716,7 @@ multi_call(Scope, GroupName, Message) ->
 %%
 %% When this call is issued, all members will receive a tuple in the format:
 %%
-%% `{syn_multi_call, CallerPid, Message}'
+%% `{syn_multi_call, TestMessage, Caller, Meta}'
 %%
 %% To reply, every member MUST use the method {@link multi_call_reply/2}.
 %%
@@ -734,6 +734,6 @@ multi_call(Scope, GroupName, Message, Timeout) ->
 %% @doc Allows a group member to reply to a multi call.
 %%
 %% See {@link multi_call/4} for info.
--spec multi_call_reply(CallerPid :: pid(), Reply :: any()) -> {syn_multi_call_reply, pid(), Reply :: any()}.
-multi_call_reply(CallerPid, Reply) ->
-    syn_groups:multi_call_reply(CallerPid, Reply).
+-spec multi_call_reply(Caller :: term(), Reply :: any()) -> {syn_multi_call_reply, pid(), Reply :: any()}.
+multi_call_reply(Caller, Reply) ->
+    syn_groups:multi_call_reply(Caller, Reply).
