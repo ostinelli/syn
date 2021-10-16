@@ -16,15 +16,16 @@ dialyzer:
 	@rebar3 dialyzer
 
 run: all
-	@erl -pa `rebar3 path` \
-	-name syn@127.0.0.1 \
-	-eval 'syn:start().'
-
-node: all
-	@# 'make node sname=syn1'
+ifdef node
+	@# 'make test node=syn2@127.0.0.1
 	@erl -pa `rebar3 path` \
 	-name $(sname)@127.0.0.1 \
 	-eval 'syn:start().'
+else
+	@erl -pa `rebar3 path` \
+	-name syn@127.0.0.1 \
+	-eval 'syn:start().'
+endif
 
 test: compile_test
 ifdef suite
