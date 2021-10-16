@@ -199,7 +199,9 @@ register(NameOrScope, PidOrName, MetaOrPid) ->
 %% When a process gets registered, Syn will automatically monitor it. You may also register the same process with different names.
 %%
 %% Processes can also be registered as `gen_server' names, by usage of via-tuples. This way, you can use the `gen_server'
-%% API with these tuples without referring to the Pid directly.
+%% API with these tuples without referring to the Pid directly. If you do so, you MUST use a `gen_server' name
+%% in format `{Scope, Name}', i.e. your via tuple will look like `{via, syn, {my_scope, <<"process name">>}}'.
+%% See here below for examples.
 %%
 %% <h2>Examples</h2>
 %% <h3>Elixir</h3>
@@ -212,8 +214,8 @@ register(NameOrScope, PidOrName, MetaOrPid) ->
 %% {#PID<0.105.0>, [meta: :one]}
 %% '''
 %% ```
-%% iex> tuple = {:via, :syn, <<"your process name">>}.
-%% :ok
+%% iex> tuple = {:via, :syn, {:default, <<"your process name">>}}.
+%% {:via, :syn, {:default, <<"your process name">>}}
 %% iex> GenServer.start_link(__MODULE__, [], name: tuple)
 %% {ok, #PID<0.105.0>}
 %% iex> GenServer.call(tuple, :your_message).
@@ -229,8 +231,8 @@ register(NameOrScope, PidOrName, MetaOrPid) ->
 %% {<0.79.0>, [{meta, one}]}
 %% '''
 %% ```
-%% 1> Tuple = {via, syn, <<"your process name">>}.
-%% ok
+%% 1> Tuple = {via, syn, {default, <<"your process name">>}}.
+%% {via, syn, {default, <<"your process name">>}}
 %% 2> gen_server:start_link(Tuple, your_module, []).
 %% {ok, <0.79.0>}
 %% 3> gen_server:call(Tuple, your_message).
@@ -306,31 +308,31 @@ local_registry_count(Scope) ->
 
 %% ----- \/ gen_server via module interface --------------------------
 -spec register_name(Name :: any(), Pid :: pid()) -> yes | no.
-register_name(Name, Pid) ->
-    case syn_registry:register(Name, Pid) of
+register_name({Scope, Name}, Pid) ->
+    case syn_registry:register(Scope, Name, Pid) of
         ok -> yes;
         _ -> no
     end.
 
 -spec unregister_name(Name :: any()) -> any().
-unregister_name(Name) ->
-    case syn_registry:unregister(Name) of
+unregister_name({Scope, Name}) ->
+    case syn_registry:unregister(Scope, Name) of
         ok -> Name;
         _ -> nil
     end.
 
 -spec whereis_name(Name :: any()) -> pid() | undefined.
-whereis_name(Name) ->
-    case syn_registry:lookup(Name) of
+whereis_name({Scope, Name}) ->
+    case syn_registry:lookup(Scope, Name) of
         {Pid, _Meta} -> Pid;
         undefined -> undefined
     end.
 
 -spec send(Name :: any(), Message :: any()) -> pid().
-send(Name, Message) ->
-    case whereis_name(Name) of
+send({Scope, Name}, Message) ->
+    case whereis_name({Scope, Name}) of
         undefined ->
-            {badarg, {Name, Message}};
+            {badarg, {{Scope, Name}, Message}};
         Pid ->
             Pid ! Message,
             Pid

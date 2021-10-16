@@ -27,21 +27,21 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/0]).
--export([ping/0]).
--export([stop/0]).
+-export([start_link/1]).
+-export([ping/1]).
+-export([stop/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
-start_link() ->
-    gen_server:start_link({via, syn, ?MODULE}, ?MODULE, [], []).
+start_link(Tuple) ->
+    gen_server:start_link(Tuple, ?MODULE, [], []).
 
-ping() ->
-    gen_server:call({via, syn, ?MODULE}, ping).
+ping(Tuple) ->
+    gen_server:call(Tuple, ping).
 
-stop() ->
-    gen_server:cast({via, syn, ?MODULE}, stop).
+stop(Tuple) ->
+    gen_server:cast(Tuple, stop).
 
 init(State) ->
     {ok, State}.

@@ -187,26 +187,56 @@ end_per_testcase(_, _Config) ->
 one_node_via_register_unregister(_Config) ->
     %% start syn
     ok = syn:start(),
+
+    %% ---> default scope
     %% start gen server via syn
-    {ok, Pid} = syn_test_gen_server:start_link(),
+    GenServerName = {default, <<"my proc">>},
+    Tuple = {via, syn, GenServerName},
+    {ok, Pid} = syn_test_gen_server:start_link(Tuple),
     %% retrieve
-    {Pid, undefined} = syn:lookup(syn_test_gen_server),
+    {Pid, undefined} = syn:lookup(<<"my proc">>),
     %% call
-    pong = syn_test_gen_server:ping(),
+    pong = syn_test_gen_server:ping(Tuple),
     %% send via syn
-    syn:send(syn_test_gen_server, {self(), send_ping}),
+    syn:send(GenServerName, {self(), send_ping}),
     syn_test_suite_helper:assert_received_messages([
         reply_pong
     ]),
     %% stop server
-    syn_test_gen_server:stop(),
+    syn_test_gen_server:stop(Tuple),
     %% retrieve
     syn_test_suite_helper:assert_wait(
         undefined,
-        fun() -> syn:lookup(syn_test_gen_server) end
+        fun() -> syn:lookup(<<"my proc">>) end
     ),
     %% send via syn
-    {badarg, {syn_test_gen_server, anything}} = catch syn:send(syn_test_gen_server, anything).
+    {badarg, {GenServerName, anything}} = catch syn:send(GenServerName, anything),
+
+    %% ---> custom scope
+    syn:add_node_to_scope(custom_scope),
+
+    %% start gen server via syn
+    GenServerNameCustom = {custom_scope, <<"my proc">>},
+    TupleCustom = {via, syn, GenServerNameCustom},
+    {ok, PidCustom} = syn_test_gen_server:start_link(TupleCustom),
+    %% retrieve
+    {PidCustom, undefined} = syn:lookup(custom_scope, <<"my proc">>),
+    %% call
+    pong = syn_test_gen_server:ping(TupleCustom),
+    %% send via syn
+    syn:send(GenServerNameCustom, {self(), send_ping}),
+    syn_test_suite_helper:assert_received_messages([
+        reply_pong
+    ]),
+    %% stop server
+    syn_test_gen_server:stop(TupleCustom),
+    %% retrieve
+    syn_test_suite_helper:assert_wait(
+        undefined,
+        fun() -> syn:lookup(custom_scope, <<"my proc">>) end
+    ),
+    %% send via syn
+    {badarg, {GenServerNameCustom, anything}} = catch syn:send(GenServerNameCustom, anything).
 
 three_nodes_discover_default_scope(Config) ->
     %% get slaves
