@@ -41,4 +41,8 @@ resolve_registry_conflict(custom_scope_bc, _Name, {Pid1, keepthis, _Time1}, {_Pi
 resolve_registry_conflict(default, _Name, {_Pid1, _Meta1, _Time1}, {Pid2, keepthis, _Time2}) ->
     Pid2;
 resolve_registry_conflict(custom_scope_bc, _Name, {_Pid1, _Meta1, _Time1}, {Pid2, keepthis, _Time2}) ->
-    Pid2.
+    Pid2;
+resolve_registry_conflict(default, _Name, {Pid1, _Meta1, _Time1}, {_Pid2, _Meta2, _Time2}) ->
+    syn_test_suite_helper:start_process(node(Pid1));
+resolve_registry_conflict(default, _Name, {_Pid1, crash, _Time1}, {_Pid2, crash, _Time2}) ->
+    exit(self(), syn_test_crash).

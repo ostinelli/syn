@@ -1500,6 +1500,128 @@ three_nodes_custom_event_handler_conflict_resolution(Config) ->
     syn_test_suite_helper:assert_wait(
         true,
         fun() -> rpc:call(SlaveNode2, erlang, is_process_alive, [PidOn2]) end
+    ),
+
+    %% clean up default scope
+    syn:unregister("proc-confict-by-netsplit-custom"),
+    syn_test_suite_helper:assert_wait(
+        undefined,
+        fun() -> syn:lookup("proc-confict-by-netsplit-custom") end
+    ),
+    syn_test_suite_helper:assert_wait(
+        undefined,
+        fun() -> rpc:call(SlaveNode1, syn, lookup, ["proc-confict-by-netsplit-custom"]) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        undefined,
+        fun() -> rpc:call(SlaveNode2, syn, lookup, ["proc-confict-by-netsplit-custom"]) end
+    ),
+
+    %% --> conflict by netsplit, which returns invalid pid
+    %% partial netsplit (1 cannot see 2)
+    rpc:call(SlaveNode1, syn_test_suite_helper, disconnect_node, [SlaveNode2]),
+    syn_test_suite_helper:assert_cluster(node(), [SlaveNode1, SlaveNode2]),
+    syn_test_suite_helper:assert_cluster(SlaveNode1, [node()]),
+    syn_test_suite_helper:assert_cluster(SlaveNode2, [node()]),
+
+    %% update meta to not select any process
+    ok = rpc:call(SlaveNode1, syn, register, ["proc-confict-by-netsplit-custom-other-pid", PidOn1, "meta-1"]),
+    ok = rpc:call(SlaveNode2, syn, register, ["proc-confict-by-netsplit-custom-other-pid", PidOn2, "meta-2"]),
+
+    %% re-join
+    rpc:call(SlaveNode1, syn_test_suite_helper, connect_node, [SlaveNode2]),
+    syn_test_suite_helper:assert_cluster(node(), [SlaveNode1, SlaveNode2]),
+    syn_test_suite_helper:assert_cluster(SlaveNode1, [node(), SlaveNode2]),
+    syn_test_suite_helper:assert_cluster(SlaveNode2, [node(), SlaveNode1]),
+
+    %% retrieve (names get freed)
+    syn_test_suite_helper:assert_wait(
+        undefined,
+        fun() -> syn:lookup("proc-confict-by-netsplit-custom-other-pid") end
+    ),
+    syn_test_suite_helper:assert_wait(
+        undefined,
+        fun() -> rpc:call(SlaveNode1, syn, lookup, ["proc-confict-by-netsplit-custom-other-pid"]) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        undefined,
+        fun() -> rpc:call(SlaveNode2, syn, lookup, ["proc-confict-by-netsplit-custom-other-pid"]) end
+    ),
+    0 = syn:registry_count(),
+    0 = syn:registry_count(default, node()),
+    0 = syn:registry_count(default, SlaveNode1),
+    0 = syn:registry_count(default, SlaveNode2),
+    0 = rpc:call(SlaveNode1, syn, registry_count, []),
+    0 = rpc:call(SlaveNode1, syn, registry_count, [default, node()]),
+    0 = rpc:call(SlaveNode1, syn, registry_count, [default, SlaveNode1]),
+    0 = rpc:call(SlaveNode1, syn, registry_count, [default, SlaveNode2]),
+    0 = rpc:call(SlaveNode2, syn, registry_count, []),
+    0 = rpc:call(SlaveNode2, syn, registry_count, [default, node()]),
+    0 = rpc:call(SlaveNode2, syn, registry_count, [default, SlaveNode1]),
+    0 = rpc:call(SlaveNode2, syn, registry_count, [default, SlaveNode2]),
+
+    %% process alive (discarded process does not get killed with a custom handler)
+    syn_test_suite_helper:assert_wait(
+        true,
+        fun() -> rpc:call(SlaveNode1, erlang, is_process_alive, [PidOn1]) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        true,
+        fun() -> rpc:call(SlaveNode2, erlang, is_process_alive, [PidOn2]) end
+    ),
+
+    %% --> conflict by netsplit, which crashes
+
+    %% partial netsplit (1 cannot see 2)
+    rpc:call(SlaveNode1, syn_test_suite_helper, disconnect_node, [SlaveNode2]),
+    syn_test_suite_helper:assert_cluster(node(), [SlaveNode1, SlaveNode2]),
+    syn_test_suite_helper:assert_cluster(SlaveNode1, [node()]),
+    syn_test_suite_helper:assert_cluster(SlaveNode2, [node()]),
+
+    %% update meta to not select any process
+    ok = rpc:call(SlaveNode1, syn, register, ["proc-confict-by-netsplit-custom-crash", PidOn1, crash]),
+    ok = rpc:call(SlaveNode2, syn, register, ["proc-confict-by-netsplit-custom-crash", PidOn2, crash]),
+
+    %% re-join
+    rpc:call(SlaveNode1, syn_test_suite_helper, connect_node, [SlaveNode2]),
+    syn_test_suite_helper:assert_cluster(node(), [SlaveNode1, SlaveNode2]),
+    syn_test_suite_helper:assert_cluster(SlaveNode1, [node(), SlaveNode2]),
+    syn_test_suite_helper:assert_cluster(SlaveNode2, [node(), SlaveNode1]),
+
+    %% retrieve (names get freed)
+    syn_test_suite_helper:assert_wait(
+        undefined,
+        fun() -> syn:lookup("proc-confict-by-netsplit-custom-crash") end
+    ),
+    syn_test_suite_helper:assert_wait(
+        undefined,
+        fun() -> rpc:call(SlaveNode1, syn, lookup, ["proc-confict-by-netsplit-custom-crash"]) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        undefined,
+        fun() -> rpc:call(SlaveNode2, syn, lookup, ["proc-confict-by-netsplit-custom-crash"]) end
+    ),
+    0 = syn:registry_count(),
+    0 = syn:registry_count(default, node()),
+    0 = syn:registry_count(default, SlaveNode1),
+    0 = syn:registry_count(default, SlaveNode2),
+    0 = rpc:call(SlaveNode1, syn, registry_count, []),
+    0 = rpc:call(SlaveNode1, syn, registry_count, [default, node()]),
+    0 = rpc:call(SlaveNode1, syn, registry_count, [default, SlaveNode1]),
+    0 = rpc:call(SlaveNode1, syn, registry_count, [default, SlaveNode2]),
+    0 = rpc:call(SlaveNode2, syn, registry_count, []),
+    0 = rpc:call(SlaveNode2, syn, registry_count, [default, node()]),
+    0 = rpc:call(SlaveNode2, syn, registry_count, [default, SlaveNode1]),
+    0 = rpc:call(SlaveNode2, syn, registry_count, [default, SlaveNode2]),
+
+    %% process alive (discarded process does not get killed with a custom handler)
+    syn_test_suite_helper:assert_wait(
+        true,
+        fun() -> rpc:call(SlaveNode1, erlang, is_process_alive, [PidOn1]) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        true,
+        fun() -> rpc:call(SlaveNode2, erlang, is_process_alive, [PidOn2]) end
     ).
 
 %% ===================================================================

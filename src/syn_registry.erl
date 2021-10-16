@@ -603,7 +603,7 @@ resolve_conflict(Scope, Name, {Pid, Meta, Time}, {TablePid, TableMeta, TableTime
             %% overwrite with updated time
             ResolveTime = erlang:system_time(),
             add_to_local_table(Name, TablePid, TableMeta, ResolveTime, TableMRef, TableByName, TableByPid),
-            %% broadcast to all but remote node
+            %% broadcast to all (including remote node to update the time)
             syn_gen_scope:broadcast({'3.0', sync_register, Name, TablePid, TableMeta, ResolveTime}, State);
 
         Invalid ->
@@ -619,5 +619,7 @@ resolve_conflict(Scope, Name, {Pid, Meta, Time}, {TablePid, TableMeta, TableTime
                 false -> ok
             end,
             %% callback
-            syn_event_handler:call_event_handler(on_process_unregistered, [Scope, Name, TablePid, TableMeta])
+            syn_event_handler:call_event_handler(on_process_unregistered, [Scope, Name, TablePid, TableMeta]),
+            %% broadcast to all but remote node, which will remove it during conflict resolution
+            syn_gen_scope:broadcast({'3.0', sync_unregister, Name, TablePid, TableMeta}, [node(Pid)], State)
     end.
