@@ -571,7 +571,7 @@ resolve_conflict(Scope, Name, {Pid, Meta, Time}, {TablePid, TableMeta, TableTime
     table_by_pid = TableByPid
 } = State) ->
     %% call conflict resolution
-    PidToKeep = syn_event_handler:do_resolve_registry_conflict(
+    {PidToKeep, KillOtherPid} = syn_event_handler:do_resolve_registry_conflict(
         Scope,
         Name,
         {Pid, Meta, Time},
@@ -587,13 +587,16 @@ resolve_conflict(Scope, Name, {Pid, Meta, Time}, {TablePid, TableMeta, TableTime
             %% update locally, the incoming sync_register will update with the time coming from remote node
             update_local_table(Name, TablePid, {Pid, Meta, Time, undefined}, TableByName, TableByPid),
             %% kill
-            exit(TablePid, {syn_resolve_kill, Name, TableMeta}),
+            case KillOtherPid of
+                true -> exit(TablePid, {syn_resolve_kill, Name, TableMeta});
+                false -> ok
+            end,
             %% callbacks
             syn_event_handler:call_event_handler(on_process_unregistered, [Scope, Name, TablePid, TableMeta]),
             syn_event_handler:call_event_handler(on_process_registered, [Scope, Name, Pid, Meta]);
 
         TablePid ->
-            %% -> we keep the local pid
+            %% -> we keep the local pid, remote pid will be killed by the other node in the conflict
             error_logger:info_msg("SYN[~s<~s>] Registry CONFLICT for name ~p: ~p vs ~p -> keeping local: ~p",
                 [?MODULE, Scope, Name, Pid, TablePid, TablePid]
             ),
@@ -611,7 +614,10 @@ resolve_conflict(Scope, Name, {Pid, Meta, Time}, {TablePid, TableMeta, TableTime
             maybe_demonitor(TablePid, TableByPid),
             remove_from_local_table(Name, TablePid, TableByName, TableByPid),
             %% kill local, remote will be killed by other node performing the same resolve
-            exit(TablePid, {syn_resolve_kill, Name, TableMeta}),
+            case KillOtherPid of
+                true -> exit(TablePid, {syn_resolve_kill, Name, TableMeta});
+                false -> ok
+            end,
             %% callback
             syn_event_handler:call_event_handler(on_process_unregistered, [Scope, Name, TablePid, TableMeta])
     end.

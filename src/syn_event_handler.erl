@@ -56,7 +56,8 @@
 %% into the callback for both of the conflicting processes.
 %%
 %% If implemented, this method MUST return the `pid()' of the process that you wish to keep. The other process will not
-%% be killed, so you will have to decide what to do with it.
+%% be killed, so you will have to decide what to do with it. If the custom conflict resolution method does not return
+%% one of the two Pids, or if the method crashes, none of the Pids will be killed and the conflicting name will be freed.
 %%
 %% Important Note: the conflict resolution method will be called on the two nodes where the conflicting processes are running on.
 %% Therefore, this method MUST be defined in the same way across all nodes of the cluster and have the same effect
@@ -213,21 +214,21 @@ call_event_handler(CallbackMethod, Args) ->
     Name :: any(),
     {Pid1 :: pid(), Meta1 :: any(), Time1 :: non_neg_integer()},
     {Pid2 :: pid(), Meta2 :: any(), Time2 :: non_neg_integer()}
-) -> PidToKeep :: pid() | undefined.
+) -> {PidToKeep :: pid() | undefined, KillOtherPid :: boolean()}.
 do_resolve_registry_conflict(Scope, Name, {Pid1, Meta1, Time1}, {Pid2, Meta2, Time2}) ->
     CustomEventHandler = get_custom_event_handler(),
     case erlang:function_exported(CustomEventHandler, resolve_registry_conflict, 4) of
         true ->
             try CustomEventHandler:resolve_registry_conflict(Scope, Name, {Pid1, Meta1, Time1}, {Pid2, Meta2, Time2}) of
-                PidToKeep when is_pid(PidToKeep) -> PidToKeep;
-                _ -> undefined
+                PidToKeep when is_pid(PidToKeep) -> {PidToKeep, false};
+                _ -> {undefined, false}
 
             catch Class:Reason ->
                 error_logger:error_msg(
                     "SYN[~s] Error ~p in custom handler resolve_registry_conflict: ~p",
                     [?MODULE, Class, Reason]
                 ),
-                undefined
+                {undefined, false}
             end;
 
         _ ->
@@ -238,7 +239,7 @@ do_resolve_registry_conflict(Scope, Name, {Pid1, Meta1, Time1}, {Pid2, Meta2, Ti
                 true -> Pid1;
                 _ -> Pid2
             end,
-            PidToKeep
+            {PidToKeep, true}
     end.
 
 %% ===================================================================

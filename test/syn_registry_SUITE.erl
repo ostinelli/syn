@@ -1492,13 +1492,13 @@ three_nodes_custom_event_handler_conflict_resolution(Config) ->
     1 = rpc:call(SlaveNode2, syn, registry_count, [custom_scope_bc, SlaveNode1]),
     0 = rpc:call(SlaveNode2, syn, registry_count, [custom_scope_bc, SlaveNode2]),
 
-    %% process alive
+    %% process alive (discarded process does not get killed with a custom handler)
     syn_test_suite_helper:assert_wait(
         true,
         fun() -> rpc:call(SlaveNode1, erlang, is_process_alive, [PidOn1]) end
     ),
     syn_test_suite_helper:assert_wait(
-        false,
+        true,
         fun() -> rpc:call(SlaveNode2, erlang, is_process_alive, [PidOn2]) end
     ).
 
