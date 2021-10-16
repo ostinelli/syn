@@ -130,7 +130,8 @@ set_event_handler(Module) ->
 %% ----- \/ registry -------------------------------------------------
 %% @doc Looks up a registry entry in the `default' scope.
 %%
-%% Same as calling `lookup(default, Name)', see {@link lookup/2}.
+%% @equiv lookup(default, Name)
+%% @end
 %%
 %% <h2>Examples</h2>
 %% <h3>Elixir</h3>
@@ -158,7 +159,8 @@ lookup(Scope, Name) ->
 
 %% @doc Registers a process in the `default' scope.
 %%
-%% Same as calling `register(default, Name, Pid, undefined)', see {@link register/4}.
+%% @equiv register(default, Name, Pid, undefined)
+%% @end
 %%
 %% <h2>Examples</h2>
 %% <h3>Elixir</h3>
@@ -181,7 +183,7 @@ register(Name, Pid) ->
 
 %% @doc Registers a process with metadata in the `default' scope OR with undefined metadata in the specified `Scope'.
 %%
-%% Same as calling `register(default, Name, Pid, Meta)' or `register(Scope, Name, Pid, undefined)'
+%% Equivalent to`register(default, Name, Pid, Meta)' or `register(Scope, Name, Pid, undefined)'
 %% depending on the position of the `pid()' value. See {@link register/4} for more info.
 -spec register(NameOrScope :: any(), PidOrName :: any(), MetaOrPid :: any()) -> ok | {error, Reason :: any()}.
 register(NameOrScope, PidOrName, MetaOrPid) ->
@@ -244,7 +246,8 @@ register(Scope, Name, Pid, Meta) ->
 
 %% @doc Unregisters a process.
 %%
-%% Same as calling `unregister(default, Name)', see {@link unregister/2}.
+%% @equiv unregister(default, Name)
+%% @end
 -spec unregister(Name :: any()) -> ok | {error, Reason :: any()}.
 unregister(Name) ->
     syn_registry:unregister(Name).
@@ -265,7 +268,8 @@ unregister(Scope, Name) ->
 
 %% @doc Returns the count of all registered processes for the `default' scope.
 %%
-%% Same as calling `registry_count(default)', see {@link registry_count/1}.
+%% @equiv registry_count(default)
+%% @end
 %%
 %% <h2>Examples</h2>
 %% <h3>Elixir</h3>
@@ -294,14 +298,16 @@ registry_count(Scope, Node) ->
 
 %% @doc Returns the count of all registered processes for the `default' scope running on the local node.
 %%
-%% Same as calling `registry_count(default, node())', see {@link registry_count/2}.
+%% @equiv registry_count(default, node())
+%% @end
 -spec local_registry_count() -> non_neg_integer().
 local_registry_count() ->
     syn_registry:local_count().
 
 %% @doc Returns the count of all registered processes for the specified `Scope' running on the local node.
 %%
-%% Same as calling `registry_count(Scope, node())', see {@link registry_count/2}.
+%% @equiv registry_count(Scope, node())
+%% @end
 -spec local_registry_count(Scope :: atom()) -> non_neg_integer().
 local_registry_count(Scope) ->
     syn_registry:local_count(Scope).
@@ -341,7 +347,8 @@ send({Scope, Name}, Message) ->
 %% ----- \/ groups ---------------------------------------------------
 %% @doc Returns the list of all members for GroupName in the `default' Scope.
 %%
-%% Same as calling `members(default, GroupName)', see {@link members/2}.
+%% @equiv members(default, GroupName)
+%% @end
 %%
 %% <h2>Examples</h2>
 %% <h3>Elixir</h3>
@@ -389,7 +396,8 @@ members(Scope, GroupName) ->
 
 %% @doc Returns whether a `pid()' is a member of GroupName in the `default' scope.
 %%
-%% Same as calling `is_member(default, GroupName, Pid)', see {@link is_member/3}.
+%% @equiv is_member(default, GroupName, Pid)
+%% @end
 -spec is_member(GroupName :: any(), Pid :: pid()) -> boolean().
 is_member(GroupName, Pid) ->
     syn_groups:is_member(GroupName, Pid).
@@ -403,7 +411,8 @@ is_member(Scope, GroupName, Pid) ->
 
 %% @doc Returns the list of all members for GroupName in the `default' scope running on the local node.
 %%
-%% Same as calling `local_members(default, GroupName)', see {@link local_members/2}.
+%% @equiv local_members(default, GroupName)
+%% @end
 -spec local_members(GroupName :: term()) -> [{Pid :: pid(), Meta :: term()}].
 local_members(GroupName) ->
     syn_groups:local_members(GroupName).
@@ -417,7 +426,8 @@ local_members(Scope, GroupName) ->
 
 %% @doc Returns whether a `pid()' is a member of GroupName in the `default' scope running on the local node.
 %%
-%% Same as calling `is_local_member(default, GroupName, Pid)', see {@link is_local_member/3}.
+%% @equiv is_local_member(default, GroupName, Pid)
+%% @end
 -spec is_local_member(GroupName :: any(), Pid :: pid()) -> boolean().
 is_local_member(GroupName, Pid) ->
     syn_groups:is_local_member(GroupName, Pid).
@@ -431,7 +441,8 @@ is_local_member(Scope, GroupName, Pid) ->
 
 %% @doc Adds a `pid()' to GroupName in the `default' scope.
 %%
-%% Same as calling `join(default, GroupName, Pid)', see {@link join/4}.
+%% @equiv join(default, GroupName, Pid)
+%% @end
 %%
 %% <h2>Examples</h2>
 %% <h3>Elixir</h3>
@@ -485,7 +496,8 @@ join(Scope, GroupName, Pid, Meta) ->
 
 %% @doc Removes a `pid()' from GroupName in the `default' Scope.
 %%
-%% Same as calling `leave(default, GroupName, Pid)', see {@link leave/3}.
+%% @equiv leave(default, GroupName, Pid)
+%% @end
 -spec leave(GroupName :: any(), Pid :: pid()) -> ok | {error, Reason :: any()}.
 leave(GroupName, Pid) ->
     syn_groups:leave(GroupName, Pid).
@@ -505,7 +517,8 @@ leave(Scope, GroupName, Pid) ->
 
 %% @doc Returns the count of all the groups for the `default' scope.
 %%
-%% Same as calling `group_count(default)', see {@link group_count/1}.
+%% @equiv group_count(default)
+%% @end
 %%
 %% <h2>Examples</h2>
 %% <h3>Elixir</h3>
@@ -534,14 +547,16 @@ group_count(Scope, Node) ->
 
 %% @doc Returns the count of all the groups which have at least 1 process running on `Node' for the `default' scope.
 %%
-%% Same as calling `group_count(default, node())', see {@link group_count/2}.
+%% @equiv group_count(default, node())
+%% @end
 -spec local_group_count() -> non_neg_integer().
 local_group_count() ->
     syn_groups:local_count().
 
 %% @doc Returns the count of all the groups which have at least 1 process running on `Node' for the specified `Scope'.
 %%
-%% Same as calling `group_count(Scope, node())', see {@link group_count/2}.
+%% @equiv group_count(Scope, node())
+%% @end
 -spec local_group_count(Scope :: atom()) -> non_neg_integer().
 local_group_count(Scope) ->
     syn_groups:local_count(Scope).
@@ -549,7 +564,9 @@ local_group_count(Scope) ->
 %% @doc Returns the group names for the `default' scope.
 %%
 %% The order of the group names is not guaranteed to be the same on all calls.
-%% Same as calling `group_names(default)', see {@link group_names/1}.
+%%
+%% @equiv group_names(default)
+%% @end
 %%
 %% <h2>Examples</h2>
 %% <h3>Elixir</h3>
@@ -582,21 +599,24 @@ group_names(Scope, Node) ->
 
 %% @doc Returns the group names which have at least 1 process running on `Node' for the `default' scope.
 %%
-%% Same as calling `group_names(default, node())', see {@link group_names/2}.
+%% @equiv group_names(default, node())
+%% @end
 -spec local_group_names() -> [GroupName :: term()].
 local_group_names() ->
     syn_groups:local_group_names().
 
 %% @doc Returns the group names which have at least 1 process running on `Node' for the specified `Scope'.
 %%
-%% Same as calling `group_names(Scope, node())', see {@link group_names/2}.
+%% @equiv group_names(Scope, node())
+%% @end
 -spec local_group_names(Scope :: atom()) -> [GroupName :: term()].
 local_group_names(Scope) ->
     syn_groups:local_group_names(Scope).
 
 %% @doc Publish a message to all group members in the `default' scope.
 %%
-%% Same as calling `publish(default, GroupName, Message)', see {@link publish/3}.
+%% @equiv publish(default, GroupName, Message)
+%% @end
 %%
 %% <h2>Examples</h2>
 %% <h3>Elixir</h3>
@@ -658,7 +678,8 @@ publish(Scope, GroupName, Message) ->
 
 %% @doc Publish a message to all group members running on the local node in the `default' scope.
 %%
-%% Same as calling `local_publish(default, GroupName, Message)', see {@link local_publish/3}.
+%% @equiv local_publish(default, GroupName, Message)
+%% @end
 -spec local_publish(GroupName :: any(), Message :: any()) -> {ok, RecipientCount :: non_neg_integer()}.
 local_publish(GroupName, Message) ->
     syn_groups:local_publish(GroupName, Message).
@@ -672,7 +693,8 @@ local_publish(Scope, GroupName, Message) ->
 
 %% @doc Calls all group members node in the `default' scope and collects their replies.
 %%
-%% Same as calling `multi_call(default, GroupName, Message, 5000)', see {@link multi_call/4}.
+%% @equiv multi_call(default, GroupName, Message, 5000)
+%% @end
 -spec multi_call(GroupName :: any(), Message :: any()) ->
     {[{pid(), Reply :: any()}], [BadPid :: pid()]}.
 multi_call(GroupName, Message) ->
@@ -680,7 +702,8 @@ multi_call(GroupName, Message) ->
 
 %% @doc Calls all group members running in the specified `Scope' and collects their replies.
 %%
-%% Same as calling `multi_call(Scope, GroupName, Message, 5000)', see {@link multi_call/4}.
+%% @equiv multi_call(Scope, GroupName, Message, 5000)
+%% @end
 -spec multi_call(Scope :: atom(), GroupName :: any(), Message :: any()) ->
     {
         Replies :: [{{pid(), Meta :: term()}, Reply :: term()}],
