@@ -205,6 +205,9 @@ handle_call({'3.0', unregister_on_node, RequesterNode, Name, Pid}, _From, #state
     table_by_pid = TableByPid
 } = State) ->
     case find_registry_entry_by_name(Name, TableByName) of
+        undefined ->
+            {reply, {{error, undefined}, undefined}, State};
+
         {Name, Pid, Meta, _, _, _} ->
             %% demonitor if the process is not registered under other names
             maybe_demonitor(Pid, TableByPid),
@@ -217,12 +220,9 @@ handle_call({'3.0', unregister_on_node, RequesterNode, Name, Pid}, _From, #state
             %% return
             {reply, {ok, TableByPid}, State};
 
-        {Name, _, _, _, _, _} ->
+        _ ->
             %% process is registered locally with another pid: race condition, wait for sync to happen & return error
-            {reply, {{error, race_condition}, undefined}, State};
-
-        undefined ->
-            {reply, {{error, undefined}, undefined}, State}
+            {reply, {{error, race_condition}, undefined}, State}
     end;
 
 handle_call(Request, From, #state{scope = Scope} = State) ->
@@ -534,7 +534,7 @@ handle_registry_sync(Name, Pid, Meta, Time, Reason, #state{
             syn_event_handler:call_event_handler(on_process_unregistered, [Scope, Name, TablePid, TableMeta, Reason]),
             syn_event_handler:call_event_handler(on_process_registered, [Scope, Name, Pid, Meta, Reason]);
 
-        {_, _, _, _, _, _} ->
+        _ ->
             %% race condition: incoming data is older, ignore
             ok
     end.

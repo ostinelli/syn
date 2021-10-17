@@ -1,6 +1,6 @@
 {application, syn,
     [
-        {description, "A highly-scalable global Process Registry and Process Group manager."},
+        {description, "A scalable global Process Registry and Process Group manager."},
         {vsn, "3.0.0-rc.1"},
         {registered, [
             syn_backbone,

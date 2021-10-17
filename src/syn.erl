@@ -214,7 +214,7 @@ add_node_to_scopes(Scopes) when is_list(Scopes) ->
     end, Scopes).
 
 %% @doc Returns the nodes of the subcluster for the specified `Scope'.
--spec subcluster_nodes(registry | pg, Scope :: atom()) -> [node()].
+-spec subcluster_nodes(RegistryOrPg :: registry | pg, Scope :: atom()) -> [node()].
 subcluster_nodes(registry, Scope) ->
     syn_registry:subcluster_nodes(Scope);
 subcluster_nodes(pg, Scope) ->
@@ -300,6 +300,13 @@ register(Scope, Name, Pid) ->
 %% :ok
 %% iex> :syn.lookup(:devices, "SN-123-456789")
 %% {#PID<0.105.0>, [meta: :one]}
+%% '''
+%% <h3>Erlang</h3>
+%% ```
+%% 1> syn:register(devices, "SN-123-456789", self(), [{meta, one}]).
+%% ok
+%% 2> syn:lookup(devices, "SN-123-456789")
+%% {<0.105.0>,[{meta, one}]}
 %% '''
 %%
 %% Processes can also be registered as `gen_server' names, by usage of via-tuples. This way, you can use the `gen_server'
@@ -497,12 +504,12 @@ leave(Scope, GroupName, Pid) ->
 %% <h2>Examples</h2>
 %% <h3>Elixir</h3>
 %% ```
-%% iex> :syn.group_count("area-1")
+%% iex> :syn.group_count(:users)
 %% 321778
 %% '''
 %% <h3>Erlang</h3>
 %% ```
-%% 1> syn:group_count("area-1").
+%% 1> syn:group_count(users).
 %% 321778
 %% '''
 -spec group_count(Scope :: atom()) -> non_neg_integer().
@@ -563,7 +570,7 @@ local_group_names(Scope) ->
 %% :ok
 %% iex> :syn.publish(:users, "area-1", :my_message)
 %% {:ok,1}
-%% iex> flush().
+%% iex> flush()
 %% Shell got :my_message
 %% :ok
 %% '''
