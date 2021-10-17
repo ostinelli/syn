@@ -29,19 +29,17 @@
 %% API
 -export([start_link/1]).
 -export([get_subcluster_nodes/1]).
--export([join/2, join/3, join/4]).
--export([leave/2, leave/3]).
--export([members/1, members/2]).
--export([is_member/2, is_member/3]).
--export([local_members/1, local_members/2]).
--export([is_local_member/2, is_local_member/3]).
--export([count/0, count/1, count/2]).
--export([local_count/0, local_count/1]).
--export([group_names/0, group_names/1, group_names/2]).
--export([local_group_names/0, local_group_names/1]).
--export([publish/2, publish/3]).
--export([local_publish/2, local_publish/3]).
--export([multi_call/2, multi_call/3, multi_call/4, multi_call_reply/2]).
+-export([join/4]).
+-export([leave/3]).
+-export([members/2]).
+-export([is_member/3]).
+-export([local_members/2]).
+-export([is_local_member/3]).
+-export([count/1, count/2]).
+-export([group_names/1, group_names/2]).
+-export([publish/3]).
+-export([local_publish/3]).
+-export([multi_call/4, multi_call_reply/2]).
 
 %% syn_gen_scope callbacks
 -export([
@@ -55,9 +53,6 @@
 
 %% internal
 -export([multi_call_and_receive/5]).
-
-%% macros
--define(DEFAULT_MULTI_CALL_TIMEOUT_MS, 5000).
 
 %% includes
 -include("syn.hrl").
@@ -74,17 +69,9 @@ start_link(Scope) when is_atom(Scope) ->
 get_subcluster_nodes(Scope) ->
     syn_gen_scope:get_subcluster_nodes(?MODULE, Scope).
 
--spec members(GroupName :: term()) -> [{Pid :: pid(), Meta :: term()}].
-members(GroupName) ->
-    members(?DEFAULT_SCOPE, GroupName).
-
 -spec members(Scope :: atom(), GroupName :: term()) -> [{Pid :: pid(), Meta :: term()}].
 members(Scope, GroupName) ->
     do_get_members(Scope, GroupName, '_').
-
--spec is_member(GroupName :: term(), Pid :: pid()) -> boolean().
-is_member(GroupName, Pid) ->
-    is_member(?DEFAULT_SCOPE, GroupName, Pid).
 
 -spec is_member(Scope :: atom(), GroupName :: term(), Pid :: pid()) -> boolean().
 is_member(Scope, GroupName, Pid) ->
@@ -98,10 +85,6 @@ is_member(Scope, GroupName, Pid) ->
                 _ -> true
             end
     end.
-
--spec local_members(GroupName :: term()) -> [{Pid :: pid(), Meta :: term()}].
-local_members(GroupName) ->
-    local_members(?DEFAULT_SCOPE, GroupName).
 
 -spec local_members(Scope :: atom(), GroupName :: term()) -> [{Pid :: pid(), Meta :: term()}].
 local_members(Scope, GroupName) ->
@@ -121,10 +104,6 @@ do_get_members(Scope, GroupName, NodeParam) ->
             }])
     end.
 
--spec is_local_member(GroupName :: term(), Pid :: pid()) -> boolean().
-is_local_member(GroupName, Pid) ->
-    is_local_member(?DEFAULT_SCOPE, GroupName, Pid).
-
 -spec is_local_member(Scope :: atom(), GroupName :: term(), Pid :: pid()) -> boolean().
 is_local_member(Scope, GroupName, Pid) ->
     case syn_backbone:get_table_name(syn_groups_by_name, Scope) of
@@ -137,17 +116,6 @@ is_local_member(Scope, GroupName, Pid) ->
                 _ -> false
             end
     end.
-
--spec join(GroupName :: term(), Pid :: pid()) -> ok.
-join(GroupName, Pid) ->
-    join(GroupName, Pid, undefined).
-
--spec join(GroupNameOrScope :: term(), PidOrGroupName :: term(), MetaOrPid :: term()) -> ok.
-join(GroupName, Pid, Meta) when is_pid(Pid) ->
-    join(?DEFAULT_SCOPE, GroupName, Pid, Meta);
-
-join(Scope, GroupName, Pid) when is_pid(Pid) ->
-    join(Scope, GroupName, Pid, undefined).
 
 -spec join(Scope :: atom(), GroupName :: term(), Pid :: pid(), Meta :: term()) -> ok.
 join(Scope, GroupName, Pid, Meta) ->
@@ -164,10 +132,6 @@ join(Scope, GroupName, Pid, Meta) ->
         {Response, _} ->
             Response
     end.
-
--spec leave(GroupName :: term(), Pid :: pid()) -> ok | {error, Reason :: term()}.
-leave(GroupName, Pid) ->
-    leave(?DEFAULT_SCOPE, GroupName, Pid).
 
 -spec leave(Scope :: atom(), GroupName :: term(), Pid :: pid()) -> ok | {error, Reason :: term()}.
 leave(Scope, GroupName, Pid) ->
@@ -191,10 +155,6 @@ leave(Scope, GroupName, Pid) ->
             end
     end.
 
--spec count() -> non_neg_integer().
-count() ->
-    count(?DEFAULT_SCOPE).
-
 -spec count(Scope :: atom()) -> non_neg_integer().
 count(Scope) ->
     Set = group_names_ordset(Scope, '_'),
@@ -205,18 +165,6 @@ count(Scope, Node) ->
     Set = group_names_ordset(Scope, Node),
     ordsets:size(Set).
 
--spec local_count() -> non_neg_integer().
-local_count() ->
-    count(?DEFAULT_SCOPE, node()).
-
--spec local_count(Scope :: atom()) -> non_neg_integer().
-local_count(Scope) ->
-    count(Scope, node()).
-
--spec group_names() -> [GroupName :: term()].
-group_names() ->
-    group_names(?DEFAULT_SCOPE).
-
 -spec group_names(Scope :: atom()) -> [GroupName :: term()].
 group_names(Scope) ->
     Set = group_names_ordset(Scope, '_'),
@@ -226,14 +174,6 @@ group_names(Scope) ->
 group_names(Scope, Node) ->
     Set = group_names_ordset(Scope, Node),
     ordsets:to_list(Set).
-
--spec local_group_names() -> [GroupName :: term()].
-local_group_names() ->
-    group_names(?DEFAULT_SCOPE, node()).
-
--spec local_group_names(Scope :: atom()) -> [GroupName :: term()].
-local_group_names(Scope) ->
-    group_names(Scope, node()).
 
 -spec group_names_ordset(Scope :: atom(), Node :: node()) -> ordsets:ordset(GroupName :: term()).
 group_names_ordset(Scope, NodeParam) ->
@@ -250,18 +190,10 @@ group_names_ordset(Scope, NodeParam) ->
             ordsets:from_list(Groups)
     end.
 
--spec publish(GroupName :: term(), Message :: term()) -> {ok, RecipientCount :: non_neg_integer()}.
-publish(GroupName, Message) ->
-    publish(?DEFAULT_SCOPE, GroupName, Message).
-
 -spec publish(Scope :: atom(), GroupName :: term(), Message :: term()) -> {ok, RecipientCount :: non_neg_integer()}.
 publish(Scope, GroupName, Message) ->
     Members = members(Scope, GroupName),
     do_publish(Members, Message).
-
--spec local_publish(GroupName :: term(), Message :: term()) -> {ok, RecipientCount :: non_neg_integer()}.
-local_publish(GroupName, Message) ->
-    local_publish(?DEFAULT_SCOPE, GroupName, Message).
 
 -spec local_publish(Scope :: atom(), GroupName :: term(), Message :: term()) -> {ok, RecipientCount :: non_neg_integer()}.
 local_publish(Scope, GroupName, Message) ->
@@ -275,18 +207,6 @@ do_publish(Members, Message) ->
         Pid ! Message
     end, Members),
     {ok, length(Members)}.
-
--spec multi_call(GroupName :: term(), Message :: term()) -> {[{pid(), Reply :: term()}], [BadPid :: pid()]}.
-multi_call(GroupName, Message) ->
-    multi_call(?DEFAULT_SCOPE, GroupName, Message).
-
--spec multi_call(Scope :: atom(), GroupName :: term(), Message :: term()) ->
-    {
-        Replies :: [{{pid(), Meta :: term()}, Reply :: term()}],
-        BadReplies :: [{pid(), Meta :: term()}]
-    }.
-multi_call(Scope, GroupName, Message) ->
-    multi_call(Scope, GroupName, Message, ?DEFAULT_MULTI_CALL_TIMEOUT_MS).
 
 -spec multi_call(Scope :: atom(), GroupName :: term(), Message :: term(), Timeout :: non_neg_integer()) ->
     {

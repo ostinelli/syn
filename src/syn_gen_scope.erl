@@ -106,7 +106,7 @@ call(Handler, Node, Scope, Message) ->
         undefined -> error({invalid_scope, Scope});
         ProcessName ->
             try gen_server:call({ProcessName, Node}, Message)
-            catch exit:{noproc, {gen_server, call, _}} -> error({invalid_scope, Scope})
+            catch exit:{noproc, {gen_server, call, _}} -> error({invalid_remote_scope, Scope})
             end
     end.
 

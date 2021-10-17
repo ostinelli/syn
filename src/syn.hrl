@@ -78,6 +78,3 @@
     table_by_name :: atom(),
     table_by_pid :: atom()
 }).
-
-%% macros
--define(DEFAULT_SCOPE, default).

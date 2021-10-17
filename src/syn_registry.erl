@@ -29,11 +29,10 @@
 %% API
 -export([start_link/1]).
 -export([get_subcluster_nodes/1]).
--export([lookup/1, lookup/2]).
--export([register/2, register/3, register/4]).
--export([unregister/1, unregister/2]).
--export([count/0, count/1, count/2]).
--export([local_count/0, local_count/1]).
+-export([lookup/2]).
+-export([register/4]).
+-export([unregister/2]).
+-export([count/1, count/2]).
 
 %% syn_gen_scope callbacks
 -export([
@@ -65,10 +64,6 @@ start_link(Scope) when is_atom(Scope) ->
 get_subcluster_nodes(Scope) ->
     syn_gen_scope:get_subcluster_nodes(?MODULE, Scope).
 
--spec lookup(Name :: term()) -> {pid(), Meta :: term()} | undefined.
-lookup(Name) ->
-    lookup(?DEFAULT_SCOPE, Name).
-
 -spec lookup(Scope :: atom(), Name :: term()) -> {pid(), Meta :: term()} | undefined.
 lookup(Scope, Name) ->
     case syn_backbone:get_table_name(syn_registry_by_name, Scope) of
@@ -81,17 +76,6 @@ lookup(Scope, Name) ->
                 {Name, Pid, Meta, _, _, _} -> {Pid, Meta}
             end
     end.
-
--spec register(Name :: term(), Pid :: pid()) -> ok | {error, Reason :: term()}.
-register(Name, Pid) ->
-    register(?DEFAULT_SCOPE, Name, Pid, undefined).
-
--spec register(NameOrScope :: term(), PidOrName :: term(), MetaOrPid :: term()) -> ok | {error, Reason :: term()}.
-register(Name, Pid, Meta) when is_pid(Pid) ->
-    register(?DEFAULT_SCOPE, Name, Pid, Meta);
-
-register(Scope, Name, Pid) when is_pid(Pid) ->
-    register(Scope, Name, Pid, undefined).
 
 -spec register(Scope :: atom(), Name :: term(), Pid :: pid(), Meta :: term()) -> ok | {error, Reason :: term()}.
 register(Scope, Name, Pid, Meta) ->
@@ -108,10 +92,6 @@ register(Scope, Name, Pid, Meta) ->
         {Response, _} ->
             Response
     end.
-
--spec unregister(Name :: term()) -> ok | {error, Reason :: term()}.
-unregister(Name) ->
-    unregister(?DEFAULT_SCOPE, Name).
 
 -spec unregister(Scope :: atom(), Name :: term()) -> ok | {error, Reason :: term()}.
 unregister(Scope, Name) ->
@@ -142,10 +122,6 @@ unregister(Scope, Name) ->
             end
     end.
 
--spec count() -> non_neg_integer().
-count() ->
-    count(?DEFAULT_SCOPE).
-
 -spec count(Scope :: atom()) -> non_neg_integer().
 count(Scope) ->
     TableByName = syn_backbone:get_table_name(syn_registry_by_name, Scope),
@@ -167,14 +143,6 @@ count(Scope, Node) ->
                 [true]
             }])
     end.
-
--spec local_count() -> non_neg_integer().
-local_count() ->
-    count(?DEFAULT_SCOPE, node()).
-
--spec local_count(Scope :: atom()) -> non_neg_integer().
-local_count(Scope) ->
-    count(Scope, node()).
 
 %% ===================================================================
 %% Callbacks
@@ -283,9 +251,9 @@ handle_info({'3.0', sync_unregister, Name, Pid, Meta, Reason}, #state{
             %% callback
             syn_event_handler:call_event_handler(on_process_unregistered, [Scope, Name, Pid, Meta, Reason]);
 
-         _ ->
-             %% not in table, nothing to do
-             ok
+        _ ->
+            %% not in table, nothing to do
+            ok
     end,
     %% return
     {noreply, State};
@@ -395,7 +363,7 @@ do_rebuild_monitors([{Name, Pid, Meta, Time} | T], NewMonitorRefs, #state{
         }},
         #state{}
     }.
-do_register_on_node(Name, Pid, Meta,  MRef, Reason,RequesterNode, CallbackMethod, #state{
+do_register_on_node(Name, Pid, Meta, MRef, Reason, RequesterNode, CallbackMethod, #state{
     scope = Scope,
     table_by_name = TableByName,
     table_by_pid = TableByPid
