@@ -50,7 +50,7 @@ init([Scope]) ->
     %% set children
     Children = [
         scope_child_spec(syn_registry, Scope),
-        scope_child_spec(syn_groups, Scope)
+        scope_child_spec(syn_pg, Scope)
     ],
     {ok, {{one_for_one, 10, 10}, Children}}.
 

@@ -23,7 +23,7 @@
 %% OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 %% THE SOFTWARE.
 %% ==========================================================================================================
--module(syn_groups).
+-module(syn_pg).
 -behaviour(syn_gen_scope).
 
 %% API
@@ -75,7 +75,7 @@ members(Scope, GroupName) ->
 
 -spec is_member(Scope :: atom(), GroupName :: term(), Pid :: pid()) -> boolean().
 is_member(Scope, GroupName, Pid) ->
-    case syn_backbone:get_table_name(syn_groups_by_name, Scope) of
+    case syn_backbone:get_table_name(syn_pg_by_name, Scope) of
         undefined ->
             error({invalid_scope, Scope});
 
@@ -92,7 +92,7 @@ local_members(Scope, GroupName) ->
 
 -spec do_get_members(Scope :: atom(), GroupName :: term(), NodeParam :: atom()) -> [{Pid :: pid(), Meta :: term()}].
 do_get_members(Scope, GroupName, NodeParam) ->
-    case syn_backbone:get_table_name(syn_groups_by_name, Scope) of
+    case syn_backbone:get_table_name(syn_pg_by_name, Scope) of
         undefined ->
             error({invalid_scope, Scope});
 
@@ -106,7 +106,7 @@ do_get_members(Scope, GroupName, NodeParam) ->
 
 -spec is_local_member(Scope :: atom(), GroupName :: term(), Pid :: pid()) -> boolean().
 is_local_member(Scope, GroupName, Pid) ->
-    case syn_backbone:get_table_name(syn_groups_by_name, Scope) of
+    case syn_backbone:get_table_name(syn_pg_by_name, Scope) of
         undefined ->
             error({invalid_scope, Scope});
 
@@ -135,7 +135,7 @@ join(Scope, GroupName, Pid, Meta) ->
 
 -spec leave(Scope :: atom(), GroupName :: term(), Pid :: pid()) -> ok | {error, Reason :: term()}.
 leave(Scope, GroupName, Pid) ->
-    case syn_backbone:get_table_name(syn_groups_by_name, Scope) of
+    case syn_backbone:get_table_name(syn_pg_by_name, Scope) of
         undefined ->
             error({invalid_scope, Scope});
 
@@ -177,7 +177,7 @@ group_names(Scope, Node) ->
 
 -spec group_names_ordset(Scope :: atom(), Node :: node()) -> ordsets:ordset(GroupName :: term()).
 group_names_ordset(Scope, NodeParam) ->
-    case syn_backbone:get_table_name(syn_groups_by_name, Scope) of
+    case syn_backbone:get_table_name(syn_pg_by_name, Scope) of
         undefined ->
             error({invalid_scope, Scope});
 
@@ -395,7 +395,7 @@ rebuild_monitors(#state{
     GroupsTuples = get_groups_tuples_for_node(node(), TableByName),
     do_rebuild_monitors(GroupsTuples, #{}, State).
 
--spec do_rebuild_monitors([syn_groups_tuple()], #{pid() => reference()}, #state{}) -> ok.
+-spec do_rebuild_monitors([syn_pg_tuple()], #{pid() => reference()}, #state{}) -> ok.
 do_rebuild_monitors([], _, _) -> ok;
 do_rebuild_monitors([{GroupName, Pid, Meta, Time} | T], NewMRefs, #state{
     table_by_name = TableByName,
@@ -454,7 +454,7 @@ do_join_on_node(GroupName, Pid, Meta, MRef, Reason, RequesterNode, CallbackMetho
     %% return
     {reply, {ok, {CallbackMethod, Time, TableByName, TableByPid}}, State}.
 
--spec get_groups_tuples_for_node(Node :: node(), TableByName :: atom()) -> [syn_groups_tuple()].
+-spec get_groups_tuples_for_node(Node :: node(), TableByName :: atom()) -> [syn_pg_tuple()].
 get_groups_tuples_for_node(Node, TableByName) ->
     ets:select(TableByName, [{
         {{'$1', '$2'}, '$3', '$4', '_', Node},
@@ -476,14 +476,14 @@ find_monitor_for_pid(Pid, TableByPid) when is_pid(Pid) ->
     end.
 
 -spec find_groups_entry_by_name_and_pid(GroupName :: term(), Pid :: pid(), TableByName :: atom()) ->
-    Entry :: syn_groups_entry() | undefined.
+    Entry :: syn_pg_entry() | undefined.
 find_groups_entry_by_name_and_pid(GroupName, Pid, TableByName) ->
     case ets:lookup(TableByName, {GroupName, Pid}) of
         [] -> undefined;
         [Entry] -> Entry
     end.
 
--spec find_groups_entries_by_pid(Pid :: pid(), TableByPid :: atom()) -> GroupEntries :: [syn_groups_entry()].
+-spec find_groups_entries_by_pid(Pid :: pid(), TableByPid :: atom()) -> GroupEntries :: [syn_pg_entry()].
 find_groups_entries_by_pid(Pid, TableByPid) when is_pid(Pid) ->
     ets:select(TableByPid, [{
         {{Pid, '_'}, '_', '_', '_', '_'},

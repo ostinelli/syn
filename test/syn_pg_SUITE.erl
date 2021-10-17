@@ -23,7 +23,7 @@
 %% OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 %% THE SOFTWARE.
 %% ==========================================================================================================
--module(syn_groups_SUITE).
+-module(syn_pg_SUITE).
 
 %% callbacks
 -export([all/0]).
@@ -565,8 +565,8 @@ three_nodes_join_leave_and_monitor(Config) ->
     0 = rpc:call(SlaveNode2, syn, group_count, [scope_bc, SlaveNode2]),
 
     %% crash scope process to ensure that monitors get recreated
-    exit(whereis(syn_groups_scope_ab), kill),
-    syn_test_suite_helper:wait_process_name_ready(syn_groups_scope_ab),
+    exit(whereis(syn_pg_scope_ab), kill),
+    syn_test_suite_helper:wait_process_name_ready(syn_pg_scope_ab),
 
     %% kill process
     syn_test_suite_helper:kill_process(Pid),
@@ -727,7 +727,7 @@ three_nodes_cluster_changes(Config) ->
     syn_test_suite_helper:assert_cluster(node(), [SlaveNode1, SlaveNode2]),
     syn_test_suite_helper:assert_cluster(SlaveNode1, [node(), SlaveNode2]),
     syn_test_suite_helper:assert_cluster(SlaveNode2, [node(), SlaveNode1]),
-    syn_test_suite_helper:wait_process_name_ready(syn_groups_scope_all),
+    syn_test_suite_helper:wait_process_name_ready(syn_pg_scope_all),
 
     %% retrieve
     syn_test_suite_helper:assert_wait(
@@ -1186,7 +1186,7 @@ three_nodes_custom_event_handler_joined_left(Config) ->
 
     %% ---> don't call on monitor rebuild
     %% crash the scope process on local
-    syn_test_suite_helper:kill_process(syn_groups_scope_all),
+    syn_test_suite_helper:kill_process(syn_pg_scope_all),
 
     %% no messages
     syn_test_suite_helper:assert_wait(

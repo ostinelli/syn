@@ -50,7 +50,7 @@
     Meta :: any(),
     Time :: integer()
 }.
--type syn_groups_entry() :: {
+-type syn_pg_entry() :: {
     {
         GroupName :: any(),
         Pid :: pid()
@@ -60,7 +60,7 @@
     MRef :: undefined | reference(),
     Node :: node()
 }.
--type syn_groups_tuple() :: {
+-type syn_pg_tuple() :: {
     GroupName :: any(),
     Pid :: pid(),
     Meta :: any(),

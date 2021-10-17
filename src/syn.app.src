@@ -4,7 +4,7 @@
         {vsn, "3.0.0"},
         {registered, [
             syn_backbone,
-            syn_groups,
+            syn_pg,
             syn_registry,
             syn_sup
         ]},

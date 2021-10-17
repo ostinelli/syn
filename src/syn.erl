@@ -422,22 +422,22 @@ send({Scope, Name}, Message) ->
 %% '''
 -spec members(Scope :: atom(), GroupName :: term()) -> [{Pid :: pid(), Meta :: term()}].
 members(Scope, GroupName) ->
-    syn_groups:members(Scope, GroupName).
+    syn_pg:members(Scope, GroupName).
 
 %% @doc Returns whether a `pid()' is a member of GroupName in the specified `Scope'.
 -spec is_member(Scope :: atom(), GroupName :: any(), Pid :: pid()) -> boolean().
 is_member(Scope, GroupName, Pid) ->
-    syn_groups:is_member(Scope, GroupName, Pid).
+    syn_pg:is_member(Scope, GroupName, Pid).
 
 %% @doc Returns the list of all members for GroupName in the specified `Scope' running on the local node.
 -spec local_members(Scope :: atom(), GroupName :: term()) -> [{Pid :: pid(), Meta :: term()}].
 local_members(Scope, GroupName) ->
-    syn_groups:local_members(Scope, GroupName).
+    syn_pg:local_members(Scope, GroupName).
 
 %% @doc Returns whether a `pid()' is a member of GroupName in the specified `Scope' running on the local node.
 -spec is_local_member(Scope :: atom(), GroupName :: any(), Pid :: pid()) -> boolean().
 is_local_member(Scope, GroupName, Pid) ->
-    syn_groups:is_local_member(Scope, GroupName, Pid).
+    syn_pg:is_local_member(Scope, GroupName, Pid).
 
 %% @equiv join(Scope, GroupName, Pid, undefined)
 %% @end
@@ -469,7 +469,7 @@ join(Scope, GroupName, Pid) ->
 %% '''
 -spec join(Scope :: atom(), GroupName :: any(), Pid :: pid(), Meta :: any()) -> ok | {error, Reason :: any()}.
 join(Scope, GroupName, Pid, Meta) ->
-    syn_groups:join(Scope, GroupName, Pid, Meta).
+    syn_pg:join(Scope, GroupName, Pid, Meta).
 
 %% @doc Removes a `pid()' from GroupName in the specified `Scope'.
 %%
@@ -482,7 +482,7 @@ join(Scope, GroupName, Pid, Meta) ->
 %% automatically from their groups.
 -spec leave(Scope :: atom(), GroupName :: any(), Pid :: pid()) -> ok | {error, Reason :: any()}.
 leave(Scope, GroupName, Pid) ->
-    syn_groups:leave(Scope, GroupName, Pid).
+    syn_pg:leave(Scope, GroupName, Pid).
 
 %% @doc Returns the count of all the groups for the specified `Scope'.
 %%
@@ -499,12 +499,12 @@ leave(Scope, GroupName, Pid) ->
 %% '''
 -spec group_count(Scope :: atom()) -> non_neg_integer().
 group_count(Scope) ->
-    syn_groups:count(Scope).
+    syn_pg:count(Scope).
 
 %% @doc Returns the count of all the groups for the specified `Scope' which have at least 1 process running on `Node'.
 -spec group_count(Scope :: atom(), Node :: node()) -> non_neg_integer().
 group_count(Scope, Node) ->
-    syn_groups:count(Scope, Node).
+    syn_pg:count(Scope, Node).
 
 %% @equiv group_count(Scope, node())
 %% @end
@@ -529,14 +529,14 @@ local_group_count(Scope) ->
 %% '''
 -spec group_names(Scope :: atom()) -> [GroupName :: term()].
 group_names(Scope) ->
-    syn_groups:group_names(Scope).
+    syn_pg:group_names(Scope).
 
 %% @doc Returns the group names for the specified `Scope' which have at least 1 process running on `Node'.
 %%
 %% The order of the group names is not guaranteed to be the same on all calls.
 -spec group_names(Scope :: atom(), Node :: node()) -> [GroupName :: term()].
 group_names(Scope, Node) ->
-    syn_groups:group_names(Scope, Node).
+    syn_pg:group_names(Scope, Node).
 
 %% @equiv group_names(Scope, node())
 %% @end
@@ -571,14 +571,14 @@ local_group_names(Scope) ->
 %% '''
 -spec publish(Scope :: atom(), GroupName :: any(), Message :: any()) -> {ok, RecipientCount :: non_neg_integer()}.
 publish(Scope, GroupName, Message) ->
-    syn_groups:publish(Scope, GroupName, Message).
+    syn_pg:publish(Scope, GroupName, Message).
 
 %% @doc Publish a message to all group members running on the local node in the specified `Scope'.
 %%
 %% Works similarly to {@link publish/3} for local processes.
 -spec local_publish(Scope :: atom(), GroupName :: any(), Message :: any()) -> {ok, RecipientCount :: non_neg_integer()}.
 local_publish(Scope, GroupName, Message) ->
-    syn_groups:local_publish(Scope, GroupName, Message).
+    syn_pg:local_publish(Scope, GroupName, Message).
 
 %% @equiv multi_call(Scope, GroupName, Message, 5000)
 %% @end
@@ -607,11 +607,11 @@ multi_call(Scope, GroupName, Message) ->
         BadReplies :: [{pid(), Meta :: term()}]
     }.
 multi_call(Scope, GroupName, Message, Timeout) ->
-    syn_groups:multi_call(Scope, GroupName, Message, Timeout).
+    syn_pg:multi_call(Scope, GroupName, Message, Timeout).
 
 %% @doc Allows a group member to reply to a multi call.
 %%
 %% See {@link multi_call/4} for info.
 -spec multi_call_reply(Caller :: term(), Reply :: any()) -> {syn_multi_call_reply, pid(), Reply :: any()}.
 multi_call_reply(Caller, Reply) ->
-    syn_groups:multi_call_reply(Caller, Reply).
+    syn_pg:multi_call_reply(Caller, Reply).

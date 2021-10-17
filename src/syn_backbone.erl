@@ -101,8 +101,8 @@ handle_call({create_tables_for_scope, Scope}, _From, State) ->
     error_logger:info_msg("SYN[~s] Creating tables for scope '~s'", [?MODULE, Scope]),
     ensure_table_existence(set, syn_registry_by_name, Scope),
     ensure_table_existence(bag, syn_registry_by_pid, Scope),
-    ensure_table_existence(ordered_set, syn_groups_by_name, Scope),
-    ensure_table_existence(ordered_set, syn_groups_by_pid, Scope),
+    ensure_table_existence(ordered_set, syn_pg_by_name, Scope),
+    ensure_table_existence(ordered_set, syn_pg_by_pid, Scope),
     {reply, ok, State};
 
 handle_call(Request, From, State) ->

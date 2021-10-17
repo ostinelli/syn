@@ -190,7 +190,7 @@ assert_registry_scope_subcluster(Node, Scope, ExpectedNodes) ->
     do_assert_scope_subcluster(syn_registry, Node, Scope, ExpectedNodes).
 
 assert_groups_scope_subcluster(Node, Scope, ExpectedNodes) ->
-    do_assert_scope_subcluster(syn_groups, Node, Scope, ExpectedNodes).
+    do_assert_scope_subcluster(syn_pg, Node, Scope, ExpectedNodes).
 
 assert_received_messages(Messages) ->
     assert_received_messages(Messages, []).
