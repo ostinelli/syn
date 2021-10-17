@@ -221,7 +221,8 @@ multi_call(Scope, GroupName, Message, Timeout) ->
     end, Members),
     collect_replies(orddict:from_list(Members)).
 
--spec multi_call_reply({reference(), ClientPid :: pid()}, Reply :: term()) -> {syn_multi_call_reply, pid(), Reply :: term()}.
+-spec multi_call_reply({reference(), ClientPid :: pid()}, Reply :: term()) ->
+    {syn_multi_call_reply, reference(), Reply :: term()}.
 multi_call_reply({Ref, CallerPid}, Reply) ->
     CallerPid ! {syn_multi_call_reply, Ref, Reply}.
 

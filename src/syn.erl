@@ -177,7 +177,7 @@ stop() ->
 node_scopes() ->
     syn_sup:node_scopes().
 
-%% @doc Add the local node to the specified `Scope'.
+%% @doc Add the local node to the specified `Scopes'.
 %%
 %% There are 2 ways to add a node to Scopes. One is by using this method, the other is to set the environment variable `syn'
 %% with the key `scopes'. In this latter case, you're probably best off using an application configuration file:
@@ -268,11 +268,9 @@ set_event_handler(Module) ->
 lookup(Scope, Name) ->
     syn_registry:lookup(Scope, Name).
 
-%% @doc Registers a process with undefined metadata in the specified `Scope'.
-%%
 %% @equiv register(Scope, Name, Pid, undefined)
 %% @end
--spec register(Scope :: any(), Name :: any(), Pid :: any()) -> ok | {error, Reason :: any()}.
+-spec register(Scope :: atom(), Name :: any(), Pid :: any()) -> ok | {error, Reason :: any()}.
 register(Scope, Name, Pid) ->
     register(Scope, Name, Pid, undefined).
 
@@ -334,12 +332,12 @@ register(Scope, Name, Pid, Meta) ->
 %% Possible error reasons:
 %% <ul>
 %% <li>`undefined': name is not registered.</li>
-%% <li>`race_condition': the local `pid()' does not correspond to the cluster value. This is a rare occasion.</li>
+%% <li>`race_condition': the local `pid()' does not correspond to the cluster value, so Syn will not succeed
+%% unregistering the value and will wait for the cluster to synchronize. This is a rare occasion.</li>
 %% </ul>
 %%
 %% You don't need to unregister names of processes that are about to die, since they are monitored by Syn
-%% and they will be removed automatically. If you manually unregister a process before it dies, the Syn callbacks
-%% will not be called.
+%% and they will be removed automatically.
 -spec unregister(Scope :: atom(), Name :: any()) -> ok | {error, Reason :: any()}.
 unregister(Scope, Name) ->
     syn_registry:unregister(Scope, Name).
@@ -366,8 +364,6 @@ registry_count(Scope) ->
 registry_count(Scope, Node) ->
     syn_registry:count(Scope, Node).
 
-%% @doc Returns the count of all registered processes for the specified `Scope' running on the local node.
-%%
 %% @equiv registry_count(Scope, node())
 %% @end
 -spec local_registry_count(Scope :: atom()) -> non_neg_integer().
@@ -443,8 +439,6 @@ local_members(Scope, GroupName) ->
 is_local_member(Scope, GroupName, Pid) ->
     syn_groups:is_local_member(Scope, GroupName, Pid).
 
-%% @doc Adds a `pid()' with undefined metadata in the specified `Scope'.
-%%
 %% @equiv join(Scope, GroupName, Pid, undefined)
 %% @end
 -spec join(Scope :: any(), Name :: any(), Pid :: any()) -> ok | {error, Reason :: any()}.
@@ -512,8 +506,6 @@ group_count(Scope) ->
 group_count(Scope, Node) ->
     syn_groups:count(Scope, Node).
 
-%% @doc Returns the count of all the groups which have at least 1 process running on `Node' for the specified `Scope'.
-%%
 %% @equiv group_count(Scope, node())
 %% @end
 -spec local_group_count(Scope :: atom()) -> non_neg_integer().
@@ -546,8 +538,6 @@ group_names(Scope) ->
 group_names(Scope, Node) ->
     syn_groups:group_names(Scope, Node).
 
-%% @doc Returns the group names which have at least 1 process running on `Node' for the specified `Scope'.
-%%
 %% @equiv group_names(Scope, node())
 %% @end
 -spec local_group_names(Scope :: atom()) -> [GroupName :: term()].
@@ -585,13 +575,11 @@ publish(Scope, GroupName, Message) ->
 
 %% @doc Publish a message to all group members running on the local node in the specified `Scope'.
 %%
-%% `RecipientCount' is the count of the intended recipients.
+%% Works similarly to {@link publish/3} for local processes.
 -spec local_publish(Scope :: atom(), GroupName :: any(), Message :: any()) -> {ok, RecipientCount :: non_neg_integer()}.
 local_publish(Scope, GroupName, Message) ->
     syn_groups:local_publish(Scope, GroupName, Message).
 
-%% @doc Calls all group members in the specified `Scope' and collects their replies.
-%%
 %% @equiv multi_call(Scope, GroupName, Message, 5000)
 %% @end
 -spec multi_call(Scope :: atom(), GroupName :: any(), Message :: any()) ->
