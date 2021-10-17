@@ -28,7 +28,7 @@
 
 %% API
 -export([start_link/1]).
--export([get_subcluster_nodes/1]).
+-export([subcluster_nodes/1]).
 -export([join/4]).
 -export([leave/3]).
 -export([members/2]).
@@ -65,9 +65,9 @@
 start_link(Scope) when is_atom(Scope) ->
     syn_gen_scope:start_link(?MODULE, Scope).
 
--spec get_subcluster_nodes(Scope :: atom()) -> [node()].
-get_subcluster_nodes(Scope) ->
-    syn_gen_scope:get_subcluster_nodes(?MODULE, Scope).
+-spec subcluster_nodes(Scope :: atom()) -> [node()].
+subcluster_nodes(Scope) ->
+    syn_gen_scope:subcluster_nodes(?MODULE, Scope).
 
 -spec members(Scope :: atom(), GroupName :: term()) -> [{Pid :: pid(), Meta :: term()}].
 members(Scope, GroupName) ->
@@ -120,7 +120,7 @@ is_local_member(Scope, GroupName, Pid) ->
 -spec join(Scope :: atom(), GroupName :: term(), Pid :: pid(), Meta :: term()) -> ok.
 join(Scope, GroupName, Pid, Meta) ->
     Node = node(Pid),
-    case syn_gen_scope:call(?MODULE, Node, Scope, {join_on_node, node(), GroupName, Pid, Meta}) of
+    case syn_gen_scope:call(?MODULE, Node, Scope, {'3.0', join_on_node, node(), GroupName, Pid, Meta}) of
         {ok, {CallbackMethod, Time, TableByName, TableByPid}} when Node =/= node() ->
             %% update table on caller node immediately so that subsequent calls have an updated registry
             add_to_local_table(GroupName, Pid, Meta, Time, undefined, TableByName, TableByPid),
@@ -141,7 +141,7 @@ leave(Scope, GroupName, Pid) ->
 
         TableByName ->
             Node = node(Pid),
-            case syn_gen_scope:call(?MODULE, Node, Scope, {leave_on_node, node(), GroupName, Pid}) of
+            case syn_gen_scope:call(?MODULE, Node, Scope, {'3.0', leave_on_node, node(), GroupName, Pid}) of
                 {ok, {Meta, TableByPid}} when Node =/= node() ->
                     %% remove table on caller node immediately so that subsequent calls have an updated registry
                     remove_from_local_table(GroupName, Pid, TableByName, TableByPid),
@@ -251,7 +251,7 @@ init(State) ->
     {noreply, #state{}, timeout() | hibernate | {continue, term()}} |
     {stop, Reason :: term(), Reply :: term(), #state{}} |
     {stop, Reason :: term(), #state{}}.
-handle_call({join_on_node, RequesterNode, GroupName, Pid, Meta}, _From, #state{
+handle_call({'3.0', join_on_node, RequesterNode, GroupName, Pid, Meta}, _From, #state{
     table_by_name = TableByName,
     table_by_pid = TableByPid
 } = State) ->
@@ -278,7 +278,7 @@ handle_call({join_on_node, RequesterNode, GroupName, Pid, Meta}, _From, #state{
             {reply, {{error, not_alive}, undefined}, State}
     end;
 
-handle_call({leave_on_node, RequesterNode, GroupName, Pid}, _From, #state{
+handle_call({'3.0', leave_on_node, RequesterNode, GroupName, Pid}, _From, #state{
     scope = Scope,
     table_by_name = TableByName,
     table_by_pid = TableByPid

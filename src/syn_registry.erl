@@ -28,7 +28,7 @@
 
 %% API
 -export([start_link/1]).
--export([get_subcluster_nodes/1]).
+-export([subcluster_nodes/1]).
 -export([lookup/2]).
 -export([register/4]).
 -export([unregister/2]).
@@ -60,9 +60,9 @@
 start_link(Scope) when is_atom(Scope) ->
     syn_gen_scope:start_link(?MODULE, Scope).
 
--spec get_subcluster_nodes(Scope :: atom()) -> [node()].
-get_subcluster_nodes(Scope) ->
-    syn_gen_scope:get_subcluster_nodes(?MODULE, Scope).
+-spec subcluster_nodes(Scope :: atom()) -> [node()].
+subcluster_nodes(Scope) ->
+    syn_gen_scope:subcluster_nodes(?MODULE, Scope).
 
 -spec lookup(Scope :: atom(), Name :: term()) -> {pid(), Meta :: term()} | undefined.
 lookup(Scope, Name) ->
@@ -80,7 +80,7 @@ lookup(Scope, Name) ->
 -spec register(Scope :: atom(), Name :: term(), Pid :: pid(), Meta :: term()) -> ok | {error, Reason :: term()}.
 register(Scope, Name, Pid, Meta) ->
     Node = node(Pid),
-    case syn_gen_scope:call(?MODULE, Node, Scope, {register_on_node, node(), Name, Pid, Meta}) of
+    case syn_gen_scope:call(?MODULE, Node, Scope, {'3.0', register_on_node, node(), Name, Pid, Meta}) of
         {ok, {CallbackMethod, Time, TableByName, TableByPid}} when Node =/= node() ->
             %% update table on caller node immediately so that subsequent calls have an updated registry
             add_to_local_table(Name, Pid, Meta, Time, undefined, TableByName, TableByPid),
@@ -107,7 +107,7 @@ unregister(Scope, Name) ->
 
                 {Name, Pid, Meta, _, _, _} ->
                     Node = node(Pid),
-                    case syn_gen_scope:call(?MODULE, Node, Scope, {unregister_on_node, node(), Name, Pid}) of
+                    case syn_gen_scope:call(?MODULE, Node, Scope, {'3.0', unregister_on_node, node(), Name, Pid}) of
                         {ok, TableByPid} when Node =/= node() ->
                             %% remove table on caller node immediately so that subsequent calls have an updated registry
                             remove_from_local_table(Name, Pid, TableByName, TableByPid),
@@ -169,7 +169,7 @@ init(State) ->
     {noreply, #state{}, timeout() | hibernate | {continue, term()}} |
     {stop, Reason :: term(), Reply :: term(), #state{}} |
     {stop, Reason :: term(), #state{}}.
-handle_call({register_on_node, RequesterNode, Name, Pid, Meta}, _From, #state{
+handle_call({'3.0', register_on_node, RequesterNode, Name, Pid, Meta}, _From, #state{
     table_by_name = TableByName,
     table_by_pid = TableByPid
 } = State) ->
@@ -199,7 +199,7 @@ handle_call({register_on_node, RequesterNode, Name, Pid, Meta}, _From, #state{
             {reply, {{error, not_alive}, undefined}, State}
     end;
 
-handle_call({unregister_on_node, RequesterNode, Name, Pid}, _From, #state{
+handle_call({'3.0', unregister_on_node, RequesterNode, Name, Pid}, _From, #state{
     scope = Scope,
     table_by_name = TableByName,
     table_by_pid = TableByPid

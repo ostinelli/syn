@@ -1,5 +1,5 @@
 # Syn
-**Syn** (short for _synonym_) is a global Process Registry and Process Group manager for Erlang and Elixir.
+**Syn** (short for _synonym_) is a highly-scalable global Process Registry and Process Group manager for Erlang and Elixir.
 Syn automatically manages dynamic clusters (addition / removal of nodes), and is also able to recover from net splits.
 
 [Documentation](https://hexdocs.pm/telemetry/)
@@ -27,7 +27,7 @@ Syn is a Process Registry and Process Group manager that has the following featu
 * Global Process Group manager (i.e. a group is uniquely identified with a Name across all the nodes of a cluster).
 * Any term can be used as Key and Name.
 * PubSub mechanism: messages can be published to all members of a Process Group (_globally_ on all the cluster or _locally_ on a single node). 
-* Sub-clusters by using Scopes allows great scalability.
+* Subclusters by using Scopes allows great scalability.
 * Dynamically sized clusters (addition / removal of nodes is handled automatically).
 * Net Splits automatic resolution.
 * Fast writes.

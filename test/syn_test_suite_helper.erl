@@ -187,10 +187,10 @@ assert_cluster(Node, ExpectedNodes, StartAt) ->
     end.
 
 assert_registry_scope_subcluster(Node, Scope, ExpectedNodes) ->
-    do_assert_scope_subcluster(syn_registry, Node, Scope, ExpectedNodes).
+    do_assert_scope_subcluster(registry, Node, Scope, ExpectedNodes).
 
 assert_groups_scope_subcluster(Node, Scope, ExpectedNodes) ->
-    do_assert_scope_subcluster(syn_pg, Node, Scope, ExpectedNodes).
+    do_assert_scope_subcluster(pg, Node, Scope, ExpectedNodes).
 
 assert_received_messages(Messages) ->
     assert_received_messages(Messages, []).
@@ -266,12 +266,12 @@ process_main() ->
         _ -> process_main()
     end.
 
-do_assert_scope_subcluster(Module, Node, Scope, ExpectedNodes) ->
-    do_assert_scope_subcluster(Module, Node, Scope, ExpectedNodes, os:system_time(millisecond)).
-do_assert_scope_subcluster(Module, Node, Scope, ExpectedNodes, StartAt) ->
-    Nodes = rpc:call(Node, Module, get_subcluster_nodes, [Scope]),
+do_assert_scope_subcluster(Type, Node, Scope, ExpectedNodes) ->
+    do_assert_scope_subcluster(Type, Node, Scope, ExpectedNodes, os:system_time(millisecond)).
+do_assert_scope_subcluster(Type, Node, Scope, ExpectedNodes, StartAt) ->
+    Nodes = rpc:call(Node, syn, subcluster_nodes, [Type, Scope]),
     case do_assert_cluster(Nodes, ExpectedNodes, StartAt) of
-        continue -> do_assert_scope_subcluster(Module, Node, Scope, ExpectedNodes, StartAt);
+        continue -> do_assert_scope_subcluster(Type, Node, Scope, ExpectedNodes, StartAt);
         _ -> ok
     end.
 

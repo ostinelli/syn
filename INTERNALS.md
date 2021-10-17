@@ -10,12 +10,12 @@ them to the other nodes.
 
 This serializes per node operations and allows keeping per node consistency.
 
-## Scope Sub-clusters
+## Scope Subclusters
 Syn implement Scopes, which are a way to create namespaced, logical overlay networks running on top of the Erlang
-distribution cluster. Nodes that belong to the same Scope will form a "sub-cluster": they will synchronize data
+distribution cluster. Nodes that belong to the same Scope will form a "subcluster": they will synchronize data
 between themselves, and themselves only.
 
-Note that _all_ of the data related to a Scope will be replicated to every node of a sub-cluster, so that every
+Note that _all_ of the data related to a Scope will be replicated to every node of a subcluster, so that every
 node has a quick read access to it.
 
 ### Scope processes
@@ -32,10 +32,10 @@ the following happens:
     
     These tables are owned by the `syn_backbone` process, so that if the related scope processes were to crash, the data
     is not lost and the scope processes can easily recover.
-  * The 2 newly created scope processes each join a sub-cluster (one for registry, one for process groups)
+  * The 2 newly created scope processes each join a subcluster (one for registry, one for process groups)
   with the other processes in the Erlang distributed cluster that handle the same Scope (which have the same name).
 
-### Sub-cluster protocol
+### Subcluster protocol
 
 #### Joining
 
@@ -46,15 +46,15 @@ the following happens:
   * When a scope process receives the discovery message, it:
     * Replies with its local data with an ack message in format `{'3.0', ack_sync, self(), LocalData}`.
     * Starts monitoring the remote scope node process.
-    * Adds the remote node to the list of the sub-cluster nodes.
+    * Adds the remote node to the list of the subcluster nodes.
   * The scope process that receives the `ack_sync` message:
     * Stores the received data of the remote node.
     * If it's an unknown node, it:
       * Starts monitoring the remote scope node process.
       * Sends it its local data with another ack message.
-      * Adds the remote node to the list of the sub-cluster nodes.
+      * Adds the remote node to the list of the subcluster nodes.
   
 #### Leaving
 
   * When a scope process of a remote node dies, all the other scope processes are notified because they were monitoring it.
-  * The data related to the remote node that left the sub-cluster is removed locally on every node.
+  * The data related to the remote node that left the subcluster is removed locally on every node.

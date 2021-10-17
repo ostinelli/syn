@@ -31,7 +31,7 @@
 %% but that's where the analogy ends.
 %%
 %% A Scope is a way to create a namespaced, logical overlay network running on top of the Erlang distribution cluster.
-%% Nodes that belong to the same Scope will form a "sub-cluster": they will synchronize data between themselves,
+%% Nodes that belong to the same Scope will form a subcluster: they will synchronize data between themselves,
 %% and themselves only.
 %%
 %% For instance, you may have nodes in your Erlang cluster that need to handle connections to users, and other nodes
@@ -39,7 +39,7 @@
 %% where you can register your different types of connections.
 %%
 %% Scopes are therefore a way to properly namespace your logic, but they also allow to build considerably larger
-%% scalable architectures, as it is possible to divide an Erlang cluster into sub-clusters which hold specific portions
+%% scalable architectures, as it is possible to divide an Erlang cluster into subclusters which hold specific portions
 %% of data.
 %%
 %% Please note any of the methods documented here will raise:
@@ -130,6 +130,7 @@
 -export([start/0, stop/0]).
 %% scopes
 -export([node_scopes/0, add_node_to_scopes/1]).
+-export([subcluster_nodes/2]).
 -export([set_event_handler/1]).
 %% registry
 -export([lookup/2]).
@@ -211,6 +212,13 @@ add_node_to_scopes(Scopes) when is_list(Scopes) ->
     lists:foreach(fun(Scope) ->
         syn_sup:add_node_to_scope(Scope)
     end, Scopes).
+
+%% @doc Returns the nodes of the subcluster for the specified `Scope'.
+-spec subcluster_nodes(registry | pg, Scope :: atom()) -> [node()].
+subcluster_nodes(registry, Scope) ->
+    syn_registry:subcluster_nodes(Scope);
+subcluster_nodes(pg, Scope) ->
+    syn_pg:subcluster_nodes(Scope).
 
 %% @doc Sets the handler module.
 %%

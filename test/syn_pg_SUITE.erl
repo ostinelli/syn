@@ -197,8 +197,8 @@ three_nodes_discover(Config) ->
     ok = rpc:call(SlaveNode1, syn, add_node_to_scopes, [[scope_ab, scope_bc, scope_all]]),
     ok = rpc:call(SlaveNode2, syn, add_node_to_scopes, [[scope_bc, scope_c, scope_all]]),
 
-    %% get_subcluster_nodes should return invalid errors
-    {'EXIT', {{invalid_scope, custom_abcdef}, _}} = catch syn_registry:get_subcluster_nodes(custom_abcdef),
+    %% subcluster_nodes should return invalid errors
+    {'EXIT', {{invalid_scope, custom_abcdef}, _}} = catch syn_registry:subcluster_nodes(custom_abcdef),
 
     %% check
     syn_test_suite_helper:assert_groups_scope_subcluster(node(), scope_ab, [SlaveNode1]),

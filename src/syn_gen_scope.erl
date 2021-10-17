@@ -29,7 +29,7 @@
 %% API
 -export([
     start_link/2,
-    get_subcluster_nodes/2,
+    subcluster_nodes/2,
     call/3, call/4
 ]).
 -export([
@@ -89,11 +89,11 @@ start_link(Handler, Scope) when is_atom(Scope) ->
     %% create process
     gen_server:start_link({local, ProcessName}, ?MODULE, [Handler, Scope, ProcessName], []).
 
--spec get_subcluster_nodes(Handler :: module(), Scope :: atom()) -> [node()].
-get_subcluster_nodes(Handler, Scope) ->
+-spec subcluster_nodes(Handler :: module(), Scope :: atom()) -> [node()].
+subcluster_nodes(Handler, Scope) ->
     case get_process_name_for_scope(Handler, Scope) of
         undefined -> error({invalid_scope, Scope});
-        ProcessName -> gen_server:call(ProcessName, get_subcluster_nodes)
+        ProcessName -> gen_server:call(ProcessName, {'3.0', subcluster_nodes})
     end.
 
 -spec call(Handler :: module(), Scope :: atom(), Message :: term()) -> Response :: term().
@@ -173,7 +173,7 @@ init([Handler, Scope, ProcessName]) ->
     {noreply, #state{}, timeout() | hibernate | {continue, term()}} |
     {stop, Reason :: term(), Reply :: term(), #state{}} |
     {stop, Reason :: term(), #state{}}.
-handle_call(get_subcluster_nodes, _From, #state{
+handle_call({'3.0', subcluster_nodes}, _From, #state{
     nodes_map = NodesMap
 } = State) ->
     Nodes = maps:keys(NodesMap),
