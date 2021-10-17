@@ -612,6 +612,7 @@ multi_call(Scope, GroupName, Message, Timeout) ->
 %% @doc Allows a group member to reply to a multi call.
 %%
 %% See {@link multi_call/4} for info.
--spec multi_call_reply(Caller :: term(), Reply :: any()) -> {syn_multi_call_reply, pid(), Reply :: any()}.
+-spec multi_call_reply({reference(), ClientPid :: pid()}, Reply :: term()) ->
+    {syn_multi_call_reply, reference(), Reply :: term()}.
 multi_call_reply(Caller, Reply) ->
     syn_pg:multi_call_reply(Caller, Reply).

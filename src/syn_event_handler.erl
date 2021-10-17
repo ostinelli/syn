@@ -74,9 +74,9 @@
 %% Therefore, this method MUST be defined in the same way across all nodes of the cluster and have the same effect
 %% regardless of the node it is run on, or you will experience unexpected results.
 %%
-%% <h2>Examples</h2>
+%% <h3>Examples</h3>
 %% The following callback module implements the `on_process_unregistered/4' and the `on_process_left/4' callbacks.
-%% <h3>Elixir</h3>
+%% <h4>Elixir</h4>
 %% ```
 %% defmodule MyCustomEventHandler do
 %%   ‎@behaviour :syn_event_handler
@@ -84,27 +84,27 @@
 %%   ‎@impl true
 %%   ‎@spec on_process_unregistered(
 %%     scope :: atom(),
-%%     name :: any(),
+%%     name :: term(),
 %%     pid :: pid(),
-%%     meta :: any(),
+%%     meta :: term(),
 %%     reason :: atom()
-%%   ) :: any()
+%%   ) :: term()
 %%   def on_process_unregistered(scope, name, pid, meta, reason) do
 %%   end
 %%
 %%   ‎@impl true
 %%   ‎@spec on_process_left(
 %%     scope :: atom(),
-%%     group_name :: any(),
+%%     group_name :: term(),
 %%     pid :: pid(),
-%%     meta :: any(),
+%%     meta :: term(),
 %%     reason :: atom()
-%%   ) :: any()
+%%   ) :: term()
 %%   def on_process_left(scope, group_name, pid, meta, reason) do
 %%   end
 %% end
 %% '''
-%% <h3>Erlang</h3>
+%% <h4>Erlang</h4>
 %% ```
 %% -module(my_custom_event_handler).
 %% -behaviour(syn_event_handler).
@@ -113,21 +113,21 @@
 %%
 %% -spec on_process_unregistered(
 %%     Scope :: atom(),
-%%     Name :: any(),
+%%     Name :: term(),
 %%     Pid :: pid(),
-%%     Meta :: any(),
+%%     Meta :: term(),
 %%     Reason :: atom()
-%% ) -> any().
+%% ) -> term().
 %% on_process_unregistered(Scope, Name, Pid, Meta, Reason) ->
 %%     ok.
 %%
 %% -spec on_process_left(
 %%     Scope :: atom(),
-%%     GroupName :: any(),
+%%     GroupName :: term(),
 %%     Pid :: pid(),
-%%     Meta :: any(),
+%%     Meta :: term(),
 %%     Reason :: atom()
-%% ) -> any().
+%% ) -> term().
 %% on_process_left(Scope, GroupName, Pid, Meta, Reason) ->
 %%     ok.
 %% '''
@@ -143,57 +143,57 @@
 -export([do_resolve_registry_conflict/4]).
 
 -callback on_process_registered(
-    Scope :: any(),
-    Name :: any(),
+    Scope :: atom(),
+    Name :: term(),
     Pid :: pid(),
-    Meta :: any(),
+    Meta :: term(),
     Reason :: atom()
 ) -> any().
 
 -callback on_registry_process_updated(
-    Scope :: any(),
-    Name :: any(),
+    Scope :: atom(),
+    Name :: term(),
     Pid :: pid(),
-    Meta :: any(),
+    Meta :: term(),
     Reason :: atom()
 ) -> any().
 
 -callback on_process_unregistered(
-    Scope :: any(),
-    Name :: any(),
+    Scope :: atom(),
+    Name :: term(),
     Pid :: pid(),
-    Meta :: any(),
+    Meta :: term(),
     Reason :: atom()
 ) -> any().
 
 -callback on_process_joined(
-    Scope :: any(),
-    GroupName :: any(),
+    Scope :: atom(),
+    GroupName :: term(),
     Pid :: pid(),
-    Meta :: any(),
+    Meta :: term(),
     Reason :: atom()
 ) -> any().
 
 -callback on_group_process_updated(
-    Scope :: any(),
-    GroupName :: any(),
+    Scope :: atom(),
+    GroupName :: term(),
     Pid :: pid(),
-    Meta :: any(),
+    Meta :: term(),
     Reason :: atom()
 ) -> any().
 
 -callback on_process_left(
-    Scope :: any(),
-    GroupName :: any(),
+    Scope :: atom(),
+    GroupName :: term(),
     Pid :: pid(),
-    Meta :: any(),
+    Meta :: term(),
     Reason :: atom()
 ) -> any().
 
 -callback resolve_registry_conflict(
-    Name :: any(),
-    {Pid1 :: pid(), Meta1 :: any(), Time1 :: non_neg_integer()},
-    {Pid2 :: pid(), Meta2 :: any(), Time2 :: non_neg_integer()}
+    Name :: term(),
+    {Pid1 :: pid(), Meta1 :: term(), Time1 :: non_neg_integer()},
+    {Pid2 :: pid(), Meta2 :: term(), Time2 :: non_neg_integer()}
 ) -> PidToKeep :: pid().
 
 -optional_callbacks([on_process_registered/5, on_registry_process_updated/5, on_process_unregistered/5]).
@@ -212,7 +212,7 @@ ensure_event_handler_loaded() ->
 
 -spec call_event_handler(
     CallbackMethod :: atom(),
-    Args :: [any()]
+    Args :: [term()]
 ) -> any().
 call_event_handler(CallbackMethod, Args) ->
     CustomEventHandler = get_custom_event_handler(),
@@ -232,9 +232,9 @@ call_event_handler(CallbackMethod, Args) ->
 
 -spec do_resolve_registry_conflict(
     Scope :: atom(),
-    Name :: any(),
-    {Pid1 :: pid(), Meta1 :: any(), Time1 :: non_neg_integer()},
-    {Pid2 :: pid(), Meta2 :: any(), Time2 :: non_neg_integer()}
+    Name :: term(),
+    {Pid1 :: pid(), Meta1 :: term(), Time1 :: non_neg_integer()},
+    {Pid2 :: pid(), Meta2 :: term(), Time2 :: non_neg_integer()}
 ) -> {PidToKeep :: pid() | undefined, KillOtherPid :: boolean()}.
 do_resolve_registry_conflict(Scope, Name, {Pid1, Meta1, Time1}, {Pid2, Meta2, Time2}) ->
     CustomEventHandler = get_custom_event_handler(),
