@@ -33,8 +33,8 @@
     call/3, call/4
 ]).
 -export([
-    broadcast/2, broadcast/3,
-    broadcast_all_cluster/2,
+    broadcast/2,
+    broadcast/3,
     send_to_node/3
 ]).
 
@@ -120,10 +120,6 @@ broadcast(Message, State) ->
 -spec broadcast(Message :: term(), ExcludedNodes :: [node()], #state{}) -> any().
 broadcast(Message, ExcludedNodes, #state{multicast_pid = MulticastPid} = State) ->
     MulticastPid ! {broadcast, Message, ExcludedNodes, State}.
-
--spec broadcast_all_cluster(Message :: term(), #state{}) -> any().
-broadcast_all_cluster(Message, #state{multicast_pid = MulticastPid} = State) ->
-    MulticastPid ! {broadcast_all_cluster, Message, State}.
 
 -spec send_to_node(RemoteNode :: node(), Message :: term(), #state{}) -> any().
 send_to_node(RemoteNode, Message, #state{process_name = ProcessName}) ->
@@ -296,10 +292,14 @@ handle_info(Info, #state{handler = Handler} = State) ->
     {stop, Reason :: term(), #state{}}.
 handle_continue(after_init, #state{
     handler = Handler,
-    scope = Scope
+    scope = Scope,
+    process_name = ProcessName
 } = State) ->
     error_logger:info_msg("SYN[~s<~s>] Discovering the cluster", [Handler, Scope]),
-    broadcast_all_cluster({'3.0', discover, self()}, State),
+    %% broadcasting is done in the scope process to avoid issues with ordering guarantees
+    lists:foreach(fun(RemoteNode) ->
+        {ProcessName, RemoteNode} ! {'3.0', discover, self()}
+    end, nodes()),
     {noreply, State}.
 
 %% ----------------------------------------------------------------------------------------------------------
@@ -331,12 +331,6 @@ multicast_loop() ->
             lists:foreach(fun(RemoteNode) ->
                 {ProcessName, RemoteNode} ! Message
             end, maps:keys(NodesMap) -- ExcludedNodes),
-            multicast_loop();
-
-        {broadcast_all_cluster, Message, #state{process_name = ProcessName}} ->
-            lists:foreach(fun(RemoteNode) ->
-                {ProcessName, RemoteNode} ! Message
-            end, nodes()),
             multicast_loop();
 
         terminate ->
