@@ -35,6 +35,7 @@
 -export([
     three_nodes_discover/1,
     three_nodes_join_leave_and_monitor/1,
+    three_nodes_join_filter_unknown_node/1,
     three_nodes_cluster_changes/1,
     three_nodes_custom_event_handler_joined_left/1,
     three_nodes_publish/1,
@@ -85,6 +86,7 @@ groups() ->
         {three_nodes_groups, [shuffle], [
             three_nodes_discover,
             three_nodes_join_leave_and_monitor,
+            three_nodes_join_filter_unknown_node,
             three_nodes_cluster_changes,
             three_nodes_custom_event_handler_joined_left,
             three_nodes_publish,
@@ -688,6 +690,26 @@ three_nodes_join_leave_and_monitor(Config) ->
 
     %% errors
     {error, not_in_group} = syn:leave(scope_ab, {group, "one"}, PidWithMeta).
+
+three_nodes_join_filter_unknown_node(Config) ->
+    %% get slaves
+    SlaveNode1 = proplists:get_value(slave_node_1, Config),
+    SlaveNode2 = proplists:get_value(slave_node_2, Config),
+
+    %% start syn on 1 and 2
+    ok = rpc:call(SlaveNode1, syn, start, []),
+    ok = rpc:call(SlaveNode2, syn, start, []),
+
+    %% add scopes
+    ok = rpc:call(SlaveNode1, syn, add_node_to_scopes, [[scope_bc]]),
+    ok = rpc:call(SlaveNode2, syn, add_node_to_scopes, [[scope_bc]]),
+
+    %% send sync message from out of scope node
+    InvalidPid = syn_test_suite_helper:start_process(),
+    {syn_pg_scope_bc, SlaveNode1} ! {'3.0', sync_join, <<"group-name">>, InvalidPid, undefined, os:system_time(millisecond), normal},
+
+    %% check
+    false = rpc:call(SlaveNode1, syn, is_member, [scope_bc, <<"group-name">>, InvalidPid]).
 
 three_nodes_cluster_changes(Config) ->
     %% get slaves

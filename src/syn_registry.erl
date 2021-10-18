@@ -236,8 +236,15 @@ handle_call(Request, From, #state{scope = Scope} = State) ->
     {noreply, #state{}} |
     {noreply, #state{}, timeout() | hibernate | {continue, term()}} |
     {stop, Reason :: term(), #state{}}.
-handle_info({'3.0', sync_register, Name, Pid, Meta, Time, Reason}, State) ->
-    handle_registry_sync(Name, Pid, Meta, Time, Reason, State),
+handle_info({'3.0', sync_register, Name, Pid, Meta, Time, Reason}, #state{nodes_map = NodesMap} = State) ->
+    case maps:is_key(node(Pid), NodesMap) of
+        true ->
+            handle_registry_sync(Name, Pid, Meta, Time, Reason, State);
+
+        false ->
+            %% ignore, race condition
+            ok
+    end,
     {noreply, State};
 
 handle_info({'3.0', sync_unregister, Name, Pid, Meta, Reason}, #state{

@@ -38,6 +38,7 @@
 -export([
     three_nodes_discover/1,
     three_nodes_register_unregister_and_monitor/1,
+    three_nodes_register_filter_unknown_node/1,
     three_nodes_cluster_changes/1,
     three_nodes_cluster_conflicts/1,
     three_nodes_custom_event_handler_reg_unreg/1,
@@ -85,6 +86,7 @@ groups() ->
         {three_nodes_process_registration, [shuffle], [
             three_nodes_discover,
             three_nodes_register_unregister_and_monitor,
+            three_nodes_register_filter_unknown_node,
             three_nodes_cluster_changes,
             three_nodes_cluster_conflicts,
             three_nodes_custom_event_handler_reg_unreg,
@@ -509,6 +511,26 @@ three_nodes_register_unregister_and_monitor(Config) ->
     remove_from_local_table(scope_ab, <<"my proc">>, Pid1),
     add_to_local_table(scope_ab, <<"my proc">>, Pid2, undefined, 0, undefined),
     {error, race_condition} = rpc:call(SlaveNode1, syn, unregister, [scope_ab, <<"my proc">>]).
+
+three_nodes_register_filter_unknown_node(Config) ->
+    %% get slaves
+    SlaveNode1 = proplists:get_value(slave_node_1, Config),
+    SlaveNode2 = proplists:get_value(slave_node_2, Config),
+
+    %% start syn on 1 and 2
+    ok = rpc:call(SlaveNode1, syn, start, []),
+    ok = rpc:call(SlaveNode2, syn, start, []),
+
+    %% add scopes
+    ok = rpc:call(SlaveNode1, syn, add_node_to_scopes, [[scope_bc]]),
+    ok = rpc:call(SlaveNode2, syn, add_node_to_scopes, [[scope_bc]]),
+
+    %% send sync message from out of scope node
+    InvalidPid = syn_test_suite_helper:start_process(),
+    {syn_registry_scope_bc, SlaveNode1} ! {'3.0', sync_register, <<"proc-name">>, InvalidPid, undefined, os:system_time(millisecond), normal},
+
+    %% check
+    undefined = rpc:call(SlaveNode1, syn, lookup, [scope_bc, <<"proc-name">>]).
 
 three_nodes_cluster_changes(Config) ->
     %% get slaves
