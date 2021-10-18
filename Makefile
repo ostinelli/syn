@@ -45,8 +45,3 @@ bench: compile_test
 	-noshell \
 	+P 5000000 \
 	-eval 'syn_benchmark:start().'
-
-travis:
-	@$(PROJECT_DIR)/rebar3 as test compile
-	ct_run -dir $(PROJECT_DIR)/test -logdir $(PROJECT_DIR)/test/results \
-	-pa `$(PROJECT_DIR)/rebar3 as test path`

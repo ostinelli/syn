@@ -52,12 +52,17 @@
 %% API
 %% ===================================================================
 start_slave(NodeShortName) ->
+    %% start slave
     {ok, Node} = ct_slave:start(NodeShortName, [
         {boot_timeout, 10},
         {erl_flags, "-connect_all false -kernel dist_auto_connect never"}
     ]),
-    CodePath = code:get_path(),
+    %% add syn code path to slaves
+    CodePath = lists:filter(fun(Path) ->
+        nomatch =/= string:find(Path, "/syn/")
+    end, code:get_path()),
     true = rpc:call(Node, code, set_path, [CodePath]),
+    %% return
     {ok, Node}.
 
 stop_slave(NodeShortName) ->
