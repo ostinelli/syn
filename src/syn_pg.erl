@@ -234,11 +234,16 @@ multi_call_reply({Ref, CallerPid}, Reply) ->
 %% Init
 %% ----------------------------------------------------------------------------------------------------------
 -spec init(#state{}) -> {ok, HandlerState :: term()}.
-init(State) ->
-    HandlerState = #{},
-    %% rebuild
-    rebuild_monitors(State),
+init(#state{
+    scope = Scope,
+    table_by_name = TableByName,
+    table_by_pid = TableByPid
+}) ->
+    %% purge remote & rebuild
+    purge_groups_for_remote_nodes(Scope, TableByName, TableByPid),
+    rebuild_monitors(TableByName, TableByPid),
     %% init
+    HandlerState = #{},
     {ok, HandlerState}.
 
 %% ----------------------------------------------------------------------------------------------------------
@@ -395,19 +400,19 @@ purge_local_data_for_node(Node, #state{
 %% ===================================================================
 %% Internal
 %% ===================================================================
--spec rebuild_monitors(#state{}) -> ok.
-rebuild_monitors(#state{
-    table_by_name = TableByName
-} = State) ->
+-spec rebuild_monitors(TableByName :: atom(), TableByPid :: atom()) -> ok.
+rebuild_monitors(TableByName, TableByPid) ->
     GroupsTuples = get_groups_tuples_for_node(node(), TableByName),
-    do_rebuild_monitors(GroupsTuples, #{}, State).
+    do_rebuild_monitors(GroupsTuples, #{}, TableByName, TableByPid).
 
--spec do_rebuild_monitors([syn_pg_tuple()], #{pid() => reference()}, #state{}) -> ok.
-do_rebuild_monitors([], _, _) -> ok;
-do_rebuild_monitors([{GroupName, Pid, Meta, Time} | T], NewMRefs, #state{
-    table_by_name = TableByName,
-    table_by_pid = TableByPid
-} = State) ->
+-spec do_rebuild_monitors(
+    [syn_pg_tuple()],
+    #{pid() => reference()},
+    TableByName :: atom(),
+    TableByPid :: atom()
+) -> ok.
+do_rebuild_monitors([], _, _, _) -> ok;
+do_rebuild_monitors([{GroupName, Pid, Meta, Time} | T], NewMRefs, TableByName, TableByPid) ->
     remove_from_local_table(GroupName, Pid, TableByName, TableByPid),
     case is_process_alive(Pid) of
         true ->
@@ -415,15 +420,15 @@ do_rebuild_monitors([{GroupName, Pid, Meta, Time} | T], NewMRefs, #state{
                 error ->
                     MRef = erlang:monitor(process, Pid),
                     add_to_local_table(GroupName, Pid, Meta, Time, MRef, TableByName, TableByPid),
-                    do_rebuild_monitors(T, maps:put(Pid, MRef, NewMRefs), State);
+                    do_rebuild_monitors(T, maps:put(Pid, MRef, NewMRefs), TableByName, TableByPid);
 
                 {ok, MRef} ->
                     add_to_local_table(GroupName, Pid, Meta, Time, MRef, TableByName, TableByPid),
-                    do_rebuild_monitors(T, NewMRefs, State)
+                    do_rebuild_monitors(T, NewMRefs, TableByName, TableByPid)
             end;
 
         _ ->
-            do_rebuild_monitors(T, NewMRefs, State)
+            do_rebuild_monitors(T, NewMRefs, TableByName, TableByPid)
     end.
 
 -spec do_join_on_node(
@@ -540,6 +545,19 @@ add_to_local_table(GroupName, Pid, Meta, Time, MRef, TableByName, TableByPid) ->
 remove_from_local_table(GroupName, Pid, TableByName, TableByPid) ->
     true = ets:delete(TableByName, {GroupName, Pid}),
     true = ets:delete(TableByPid, {Pid, GroupName}).
+
+-spec purge_groups_for_remote_nodes(Scope :: atom(), TableByName :: atom(), TableByPid :: atom()) -> any().
+purge_groups_for_remote_nodes(Scope, TableByName, TableByPid) ->
+    LocalNode = node(),
+    RemoteNodesWithDoubles = ets:select(TableByName, [{
+        {{'_', '_'}, '_', '_', '_', '$6'},
+        [{'=/=', '$6', LocalNode}],
+        ['$6']
+    }]),
+    RemoteNodes = ordsets:from_list(RemoteNodesWithDoubles),
+    ordsets:fold(fun(RemoteNode, _) ->
+        purge_groups_for_remote_node(Scope, RemoteNode, TableByName, TableByPid)
+    end, undefined, RemoteNodes).
 
 -spec purge_groups_for_remote_node(Scope :: atom(), Node :: atom(), TableByName :: atom(), TableByPid :: atom()) -> true.
 purge_groups_for_remote_node(Scope, Node, TableByName, TableByPid) when Node =/= node() ->

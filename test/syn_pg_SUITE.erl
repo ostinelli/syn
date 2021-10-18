@@ -566,9 +566,20 @@ three_nodes_join_leave_and_monitor(Config) ->
     1 = rpc:call(SlaveNode2, syn, group_count, [scope_bc, SlaveNode1]),
     0 = rpc:call(SlaveNode2, syn, group_count, [scope_bc, SlaveNode2]),
 
+    syn:join(scope_ab, {group, "two"}, PidRemoteOn1),
+    syn_test_suite_helper:assert_wait(
+        lists:sort([{Pid, undefined}, {PidWithMeta, "with-meta-2"}, {PidRemoteOn1, undefined}]),
+        fun() -> lists:sort(syn:members(scope_ab, {group, "two"})) end
+    ),
+
     %% crash scope process to ensure that monitors get recreated
     exit(whereis(syn_pg_scope_ab), kill),
     syn_test_suite_helper:wait_process_name_ready(syn_pg_scope_ab),
+
+    syn_test_suite_helper:assert_wait(
+        lists:sort([{Pid, undefined}, {PidWithMeta, "with-meta-2"}, {PidRemoteOn1, undefined}]),
+        fun() -> lists:sort(syn:members(scope_ab, {group, "two"})) end
+    ),
 
     %% kill process
     syn_test_suite_helper:kill_process(Pid),

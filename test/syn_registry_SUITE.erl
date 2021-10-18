@@ -432,9 +432,22 @@ three_nodes_register_unregister_and_monitor(Config) ->
     ),
     {badrpc, {'EXIT', {{invalid_scope, scope_ab}, _}}} = catch rpc:call(SlaveNode2, syn, lookup, [scope_ab, "scope_a_alias"]),
 
-    %% crash scope process to ensure that monitors get recreated
+    %% register remote
+    syn:register(scope_ab, "ab_on_1", PidRemoteWithMetaOn1, <<"ab-on-1">>),
+    syn_test_suite_helper:assert_wait(
+        {PidRemoteWithMetaOn1, <<"ab-on-1">>},
+        fun() -> syn:lookup(scope_ab, "ab_on_1") end
+    ),
+
+    %% crash scope process to ensure that monitors get recreated & data received from other nodes
     syn_test_suite_helper:kill_process(syn_registry_scope_ab),
     syn_test_suite_helper:wait_process_name_ready(syn_registry_scope_ab),
+
+    %% check remote has been sync'ed back
+    syn_test_suite_helper:assert_wait(
+        {PidRemoteWithMetaOn1, <<"ab-on-1">>},
+        fun() -> syn:lookup(scope_ab, "ab_on_1") end
+    ),
 
     %% kill process
     syn_test_suite_helper:kill_process(Pid),
@@ -472,17 +485,17 @@ three_nodes_register_unregister_and_monitor(Config) ->
         undefined,
         fun() -> rpc:call(SlaveNode2, syn, lookup, [scope_bc, {remote_scoped_bc}]) end
     ),
-    0 = syn:registry_count(scope_ab),
+    1 = syn:registry_count(scope_ab),
     0 = syn:registry_count(scope_ab, node()),
-    0 = syn:registry_count(scope_ab, SlaveNode1),
+    1 = syn:registry_count(scope_ab, SlaveNode1),
     0 = syn:registry_count(scope_ab, SlaveNode2),
     {'EXIT', {{invalid_scope, scope_bc}, _}} = catch syn:registry_count(scope_bc),
     {'EXIT', {{invalid_scope, scope_bc}, _}} = catch syn:registry_count(scope_bc, node()),
     {'EXIT', {{invalid_scope, scope_bc}, _}} = catch syn:registry_count(scope_bc, SlaveNode1),
     {'EXIT', {{invalid_scope, scope_bc}, _}} = catch syn:registry_count(scope_bc, SlaveNode2),
-    0 = rpc:call(SlaveNode1, syn, registry_count, [scope_ab]),
+    1 = rpc:call(SlaveNode1, syn, registry_count, [scope_ab]),
     0 = rpc:call(SlaveNode1, syn, registry_count, [scope_ab, node()]),
-    0 = rpc:call(SlaveNode1, syn, registry_count, [scope_ab, SlaveNode1]),
+    1 = rpc:call(SlaveNode1, syn, registry_count, [scope_ab, SlaveNode1]),
     0 = rpc:call(SlaveNode1, syn, registry_count, [scope_ab, SlaveNode2]),
     0 = rpc:call(SlaveNode1, syn, registry_count, [scope_bc]),
     0 = rpc:call(SlaveNode1, syn, registry_count, [scope_bc, node()]),
