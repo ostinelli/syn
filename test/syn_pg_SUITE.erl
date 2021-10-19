@@ -360,7 +360,7 @@ three_nodes_join_leave_and_monitor(Config) ->
     %% errors
     {error, not_alive} = syn:join(scope_ab, {"pid not alive"}, list_to_pid("<0.9999.0>")),
     {error, not_in_group} = syn:leave(scope_ab, {group, "three"}, Pid),
-    {'EXIT', {{invalid_remote_scope, scope_ab}, _}} = catch syn:join(scope_ab, {group, "one"}, PidRemoteOn2),
+    {'EXIT', {{invalid_remote_scope, scope_ab, SlaveNode2}, _}} = catch syn:join(scope_ab, {group, "one"}, PidRemoteOn2),
 
     %% retrieve
     syn_test_suite_helper:assert_wait(

@@ -45,8 +45,8 @@
 %% Please note any of the methods documented here will raise:
 %% <ul>
 %% <li>An `error({invalid_scope, Scope})' if the local node has not been added to the specified Scope.</li>
-%% <li>An `error({invalid_remote_scope, Scope})' if the Pid passed in as variable is running on a node that has not
-%% been added to the specified Scope.</li>
+%% <li>An `error({invalid_remote_scope, Scope, RemoteNode})' if the Pid passed in as variable is running on a
+%% node that has not been added to the specified Scope, or if the remote scope process is temporarily down.</li>
 %% </ul>
 %%
 %% <h2>Quickstart</h2>

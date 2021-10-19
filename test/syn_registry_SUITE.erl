@@ -365,7 +365,8 @@ three_nodes_register_unregister_and_monitor(Config) ->
     {error, not_alive} = syn:register(scope_ab, {"pid not alive"}, list_to_pid("<0.9999.0>")),
     {'EXIT', {{invalid_scope, scope_bc}, _}} = catch syn:register(scope_bc, "scope_a_noscope", Pid),
     {'EXIT', {{invalid_scope, scope_bc}, _}} = catch syn:unregister(scope_bc, "scope_a_noscope"),
-    {badrpc, {'EXIT', {{invalid_remote_scope, scope_bc}, _}}} = catch rpc:call(SlaveNode1, syn, register, [scope_bc, "pid-outside", Pid]),
+    LocalNode = node(),
+    {badrpc, {'EXIT', {{invalid_remote_scope, scope_bc, LocalNode}, _}}} = catch rpc:call(SlaveNode1, syn, register, [scope_bc, "pid-outside", Pid]),
 
     %% retrieve
     syn_test_suite_helper:assert_wait(
