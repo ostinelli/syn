@@ -47,6 +47,8 @@
 %%      when the callbacks are called due to nodes disconnecting.</li>
 %% <li> `syn_conflict_resolution' for `on_process_registered/5' and `on_process_unregistered/5'
 %%      during registry conflict resolution.</li>
+%% <li> `undefined' for `on_process_unregistered/5' and `on_process_left/5' when the processes died while the
+%%      scope process had crashed.</li>
 %% </ul>
 %% While all callbacks do not have a direct effect on Syn (their return value is ignored), a special case is the callback
 %% `resolve_registry_conflict/3'. If specified, this is the method that will be used to resolve registry conflicts when detected.

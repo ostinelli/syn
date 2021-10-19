@@ -1093,7 +1093,7 @@ three_nodes_custom_event_handler_joined_left(Config) ->
 
     %% init
     TestPid = self(),
-    CurrentNode = node(),
+    LocalNode = node(),
 
     %% start process
     Pid = syn_test_suite_helper:start_process(),
@@ -1104,7 +1104,7 @@ three_nodes_custom_event_handler_joined_left(Config) ->
 
     %% check callbacks called
     syn_test_suite_helper:assert_received_messages([
-        {on_process_joined, CurrentNode, scope_all, "my-group", Pid, <<"meta">>, normal},
+        {on_process_joined, LocalNode, scope_all, "my-group", Pid, <<"meta">>, normal},
         {on_process_joined, SlaveNode1, scope_all, "my-group", Pid, <<"meta">>, normal},
         {on_process_joined, SlaveNode2, scope_all, "my-group", Pid, <<"meta">>, normal}
     ]),
@@ -1115,7 +1115,7 @@ three_nodes_custom_event_handler_joined_left(Config) ->
 
     %% check callbacks called
     syn_test_suite_helper:assert_received_messages([
-        {on_process_joined, CurrentNode, scope_all, "my-group", Pid2, <<"meta-for-2">>, normal},
+        {on_process_joined, LocalNode, scope_all, "my-group", Pid2, <<"meta-for-2">>, normal},
         {on_process_joined, SlaveNode1, scope_all, "my-group", Pid2, <<"meta-for-2">>, normal},
         {on_process_joined, SlaveNode2, scope_all, "my-group", Pid2, <<"meta-for-2">>, normal}
     ]),
@@ -1126,7 +1126,7 @@ three_nodes_custom_event_handler_joined_left(Config) ->
 
     %% check callbacks called
     syn_test_suite_helper:assert_received_messages([
-        {on_group_process_updated, CurrentNode, scope_all, "my-group", Pid, <<"new-meta-0">>, normal},
+        {on_group_process_updated, LocalNode, scope_all, "my-group", Pid, <<"new-meta-0">>, normal},
         {on_group_process_updated, SlaveNode1, scope_all, "my-group", Pid, <<"new-meta-0">>, normal},
         {on_group_process_updated, SlaveNode2, scope_all, "my-group", Pid, <<"new-meta-0">>, normal}
     ]),
@@ -1137,7 +1137,7 @@ three_nodes_custom_event_handler_joined_left(Config) ->
 
     %% check callbacks called
     syn_test_suite_helper:assert_received_messages([
-        {on_group_process_updated, CurrentNode, scope_all, "my-group", Pid, <<"new-meta">>, normal},
+        {on_group_process_updated, LocalNode, scope_all, "my-group", Pid, <<"new-meta">>, normal},
         {on_group_process_updated, SlaveNode1, scope_all, "my-group", Pid, <<"new-meta">>, normal},
         {on_group_process_updated, SlaveNode2, scope_all, "my-group", Pid, <<"new-meta">>, normal}
     ]),
@@ -1148,7 +1148,7 @@ three_nodes_custom_event_handler_joined_left(Config) ->
 
     %% check callbacks called
     syn_test_suite_helper:assert_received_messages([
-        {on_process_left, CurrentNode, scope_all, "my-group", Pid, <<"new-meta">>, normal},
+        {on_process_left, LocalNode, scope_all, "my-group", Pid, <<"new-meta">>, normal},
         {on_process_left, SlaveNode1, scope_all, "my-group", Pid, <<"new-meta">>, normal},
         {on_process_left, SlaveNode2, scope_all, "my-group", Pid, <<"new-meta">>, normal}
     ]),
@@ -1159,7 +1159,7 @@ three_nodes_custom_event_handler_joined_left(Config) ->
 
     %% check callbacks called
     syn_test_suite_helper:assert_received_messages([
-        {on_process_left, CurrentNode, scope_all, "my-group", Pid2, <<"meta-for-2">>, normal},
+        {on_process_left, LocalNode, scope_all, "my-group", Pid2, <<"meta-for-2">>, normal},
         {on_process_left, SlaveNode1, scope_all, "my-group", Pid2, <<"meta-for-2">>, normal},
         {on_process_left, SlaveNode2, scope_all, "my-group", Pid2, <<"meta-for-2">>, normal}
     ]),
@@ -1175,7 +1175,7 @@ three_nodes_custom_event_handler_joined_left(Config) ->
 
     %% check callbacks called
     syn_test_suite_helper:assert_received_messages([
-        {on_process_joined, CurrentNode, scope_all, remote_on_1, PidRemoteOn1, <<"netsplit">>, normal},
+        {on_process_joined, LocalNode, scope_all, remote_on_1, PidRemoteOn1, <<"netsplit">>, normal},
         {on_process_joined, SlaveNode1, scope_all, remote_on_1, PidRemoteOn1, <<"netsplit">>, normal},
         {on_process_joined, SlaveNode2, scope_all, remote_on_1, PidRemoteOn1, <<"netsplit">>, normal}
     ]),
@@ -1211,7 +1211,7 @@ three_nodes_custom_event_handler_joined_left(Config) ->
 
     %% check callbacks called
     syn_test_suite_helper:assert_received_messages([
-        {on_process_left, CurrentNode, scope_all, remote_on_1, PidRemoteOn1, <<"netsplit">>, killed},
+        {on_process_left, LocalNode, scope_all, remote_on_1, PidRemoteOn1, <<"netsplit">>, killed},
         {on_process_left, SlaveNode1, scope_all, remote_on_1, PidRemoteOn1, <<"netsplit">>, killed},
         {on_process_left, SlaveNode2, scope_all, remote_on_1, PidRemoteOn1, <<"netsplit">>, killed}
     ]),
@@ -1220,12 +1220,37 @@ three_nodes_custom_event_handler_joined_left(Config) ->
     %% ---> don't call on monitor rebuild
     %% crash the scope process on local
     syn_test_suite_helper:kill_process(syn_pg_scope_all),
+    syn_test_suite_helper:wait_process_name_ready(syn_pg_scope_all),
 
     %% no messages
     syn_test_suite_helper:assert_wait(
         ok,
         fun() -> syn_test_suite_helper:assert_empty_queue(self()) end
-    ).
+    ),
+
+    %% ---> call if process died during the scope process crash
+    TransientPid = syn_test_suite_helper:start_process(),
+    syn:join(scope_all, "transient-group", TransientPid, {recipient, self(), "transient-meta"}),
+
+    %% check callbacks called
+    syn_test_suite_helper:assert_received_messages([
+        {on_process_joined, LocalNode, scope_all, "transient-group", TransientPid, "transient-meta", normal},
+        {on_process_joined, SlaveNode1, scope_all, "transient-group", TransientPid, "transient-meta", normal},
+        {on_process_joined, SlaveNode2, scope_all, "transient-group", TransientPid, "transient-meta", normal}
+    ]),
+    syn_test_suite_helper:assert_empty_queue(self()),
+
+    %% crash the scope process & transient process on local
+    syn_test_suite_helper:kill_process(syn_pg_scope_all),
+    syn_test_suite_helper:kill_process(TransientPid),
+
+    %% check callbacks called
+    syn_test_suite_helper:assert_received_messages([
+        {on_process_left, LocalNode, scope_all, "transient-group", TransientPid, "transient-meta", undefined},
+        {on_process_left, SlaveNode1, scope_all, "transient-group", TransientPid, "transient-meta", {syn_remote_scope_node_down, scope_all, LocalNode}},
+        {on_process_left, SlaveNode2, scope_all, "transient-group", TransientPid, "transient-meta", {syn_remote_scope_node_down, scope_all, LocalNode}}
+    ]),
+    syn_test_suite_helper:assert_empty_queue(self()).
 
 three_nodes_publish(Config) ->
     %% get slaves

@@ -241,7 +241,7 @@ init(#state{
 }) ->
     %% purge remote & rebuild
     purge_groups_for_remote_nodes(Scope, TableByName, TableByPid),
-    rebuild_monitors(TableByName, TableByPid),
+    rebuild_monitors(Scope, TableByName, TableByPid),
     %% init
     HandlerState = #{},
     {ok, HandlerState}.
@@ -400,19 +400,20 @@ purge_local_data_for_node(Node, #state{
 %% ===================================================================
 %% Internal
 %% ===================================================================
--spec rebuild_monitors(TableByName :: atom(), TableByPid :: atom()) -> ok.
-rebuild_monitors(TableByName, TableByPid) ->
+-spec rebuild_monitors(Scope :: atom(), TableByName :: atom(), TableByPid :: atom()) -> ok.
+rebuild_monitors(Scope, TableByName, TableByPid) ->
     GroupsTuples = get_groups_tuples_for_node(node(), TableByName),
-    do_rebuild_monitors(GroupsTuples, #{}, TableByName, TableByPid).
+    do_rebuild_monitors(GroupsTuples, #{}, Scope, TableByName, TableByPid).
 
 -spec do_rebuild_monitors(
     [syn_pg_tuple()],
     #{pid() => reference()},
+    Scope :: atom(),
     TableByName :: atom(),
     TableByPid :: atom()
 ) -> ok.
-do_rebuild_monitors([], _, _, _) -> ok;
-do_rebuild_monitors([{GroupName, Pid, Meta, Time} | T], NewMRefs, TableByName, TableByPid) ->
+do_rebuild_monitors([], _, _, _, _) -> ok;
+do_rebuild_monitors([{GroupName, Pid, Meta, Time} | T], NewMRefs, Scope, TableByName, TableByPid) ->
     remove_from_local_table(GroupName, Pid, TableByName, TableByPid),
     case is_process_alive(Pid) of
         true ->
@@ -420,15 +421,19 @@ do_rebuild_monitors([{GroupName, Pid, Meta, Time} | T], NewMRefs, TableByName, T
                 error ->
                     MRef = erlang:monitor(process, Pid),
                     add_to_local_table(GroupName, Pid, Meta, Time, MRef, TableByName, TableByPid),
-                    do_rebuild_monitors(T, maps:put(Pid, MRef, NewMRefs), TableByName, TableByPid);
+                    do_rebuild_monitors(T, maps:put(Pid, MRef, NewMRefs), Scope, TableByName, TableByPid);
 
                 {ok, MRef} ->
                     add_to_local_table(GroupName, Pid, Meta, Time, MRef, TableByName, TableByPid),
-                    do_rebuild_monitors(T, NewMRefs, TableByName, TableByPid)
+                    do_rebuild_monitors(T, NewMRefs, Scope, TableByName, TableByPid)
             end;
 
         _ ->
-            do_rebuild_monitors(T, NewMRefs, TableByName, TableByPid)
+            %% process died meanwhile, callback
+            %% the remote callbacks will have been called when the scope process crash triggered them
+            syn_event_handler:call_event_handler(on_process_left, [Scope, GroupName, Pid, Meta, undefined]),
+            %% loop
+            do_rebuild_monitors(T, NewMRefs, Scope, TableByName, TableByPid)
     end.
 
 -spec do_join_on_node(

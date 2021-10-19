@@ -24,14 +24,15 @@ the following happens:
 
   * 2 new `gen_server` processes get created (aka "scope processes"), in the given example named `syn_registry_users` (for registry)
   and `syn_pg_users` (for process groups).
-  * 4 new ETS tables get created:
-    * `syn_registry_by_name_users` (of type `set`).
-    * `syn_registry_by_pid_users` (of type `bag`).
-    * `syn_pg_by_name_users` (of type `ordered_set`).
-    * `syn_pg_by_pid_users` (of type `ordered_set`).
+    * 4 new ETS tables get created:
+      * `syn_registry_by_name_users` (of type `set`).
+      * `syn_registry_by_pid_users` (of type `bag`).
+      * `syn_pg_by_name_users` (of type `ordered_set`).
+      * `syn_pg_by_pid_users` (of type `ordered_set`).
     
-    These tables are owned by the `syn_backbone` process, so that if the related scope processes were to crash, the data
-    is not lost and the scope processes can easily recover.
+      These tables are owned by the `syn_backbone` process, so that if the related scope processes were to crash the data is not lost.
+      In such case, upon respawn the scope process purges the data of all remote nodes, then rebuilds the monitors
+      for the local processes that are still alive and removes from the tables the ones that meanwhile died.
   * The 2 newly created scope processes each join a subcluster (one for registry, one for process groups)
   with the other processes in the Erlang distributed cluster that handle the same Scope (which have the same name).
 
