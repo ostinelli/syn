@@ -35,7 +35,7 @@
 -export([wait_process_name_ready/1, wait_process_name_ready/2]).
 -export([wait_message_queue_empty/0]).
 -export([assert_cluster/2]).
--export([assert_registry_scope_subcluster/3, assert_groups_scope_subcluster/3]).
+-export([assert_registry_scope_subcluster/3, assert_pg_scope_subcluster/3]).
 -export([assert_received_messages/1]).
 -export([assert_empty_queue/1]).
 -export([assert_same_array_with_same_members/2]).
@@ -194,7 +194,7 @@ assert_cluster(Node, ExpectedNodes, StartAt) ->
 assert_registry_scope_subcluster(Node, Scope, ExpectedNodes) ->
     do_assert_scope_subcluster(registry, Node, Scope, ExpectedNodes).
 
-assert_groups_scope_subcluster(Node, Scope, ExpectedNodes) ->
+assert_pg_scope_subcluster(Node, Scope, ExpectedNodes) ->
     do_assert_scope_subcluster(pg, Node, Scope, ExpectedNodes).
 
 assert_received_messages(Messages) ->
