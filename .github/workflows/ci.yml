@@ -12,13 +12,13 @@ jobs:
     name: Tests on ${{matrix.otp}}
     strategy:
       matrix:
-        otp: ['24.1', '23.3', '22.3', '21.3', '20.3']
+        otp: ['24.1.2', '23.3.4.7', '22.3.4.22', '21.3.8.24']
     steps:
       - uses: actions/checkout@v2
       - uses: erlef/setup-beam@v1
         with:
           otp-version: ${{matrix.otp}}
-          rebar3-version: 3.17.0
+          rebar3-version: 3.15.1
       - name: Common Test tests
         run: rebar3 ct --sname ct
       - name: Dialyzer
