@@ -223,7 +223,7 @@ multi_call(Scope, GroupName, Message, Timeout) ->
 
 -spec multi_call_reply({reference(), ClientPid :: pid()}, Reply :: term()) ->
     {syn_multi_call_reply, reference(), Reply :: term()}.
-multi_call_reply({Ref, CallerPid}, Reply) ->
+multi_call_reply({CallerPid, Ref}, Reply) ->
     CallerPid ! {syn_multi_call_reply, Ref, Reply}.
 
 %% ===================================================================
@@ -625,17 +625,19 @@ multi_call_and_receive(CollectorPid, Pid, Meta, Message, Timeout) ->
     MRef = monitor(process, Pid),
     %% send
     Ref = make_ref(),
-    From = {Ref, self()},
+    From = {self(), Ref},
     Pid ! {syn_multi_call, Message, From, Meta},
     %% wait for reply
     receive
         {syn_multi_call_reply, Ref, Reply} ->
+            erlang:demonitor(MRef, [flush]),
             CollectorPid ! {syn_reply, Pid, Reply};
 
         {'DOWN', MRef, _, _, _} ->
             CollectorPid ! {syn_bad_reply, Pid}
 
     after Timeout ->
+        erlang:demonitor(MRef, [flush]),
         CollectorPid ! {syn_bad_reply, Pid}
     end.
 
