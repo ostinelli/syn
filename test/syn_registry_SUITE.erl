@@ -65,9 +65,9 @@
 %% -------------------------------------------------------------------
 all() ->
     [
-        {group, one_node_process_registration},
-        {group, three_nodes_process_registration},
-        {group, four_nodes_process_registration}
+        {group, one_node_registry},
+        {group, three_nodes_registry},
+        {group, four_nodes_registry}
     ].
 
 %% -------------------------------------------------------------------
@@ -84,10 +84,10 @@ all() ->
 %% -------------------------------------------------------------------
 groups() ->
     [
-        {one_node_process_registration, [shuffle], [
+        {one_node_registry, [shuffle], [
             one_node_via_register_unregister
         ]},
-        {three_nodes_process_registration, [shuffle], [
+        {three_nodes_registry, [shuffle], [
             three_nodes_discover,
             three_nodes_register_unregister_and_monitor,
             three_nodes_register_filter_unknown_node,
@@ -96,7 +96,7 @@ groups() ->
             three_nodes_custom_event_handler_reg_unreg,
             three_nodes_custom_event_handler_conflict_resolution
         ]},
-        {four_nodes_process_registration, [shuffle], [
+        {four_nodes_registry, [shuffle], [
             four_nodes_concurrency
         ]}
     ].
@@ -125,20 +125,20 @@ end_per_suite(_Config) ->
 %% Config0 = Config1 = [tuple()]
 %% Reason = any()
 %% -------------------------------------------------------------------
-init_per_group(three_nodes_process_registration, Config) ->
+init_per_group(three_nodes_registry, Config) ->
     case syn_test_suite_helper:init_cluster(3) of
         {error_initializing_cluster, Other} ->
-            end_per_group(three_nodes_process_registration, Config),
+            end_per_group(three_nodes_registry, Config),
             {skip, Other};
 
         NodesConfig ->
             NodesConfig ++ Config
     end;
 
-init_per_group(four_nodes_process_registration, Config) ->
+init_per_group(four_nodes_registry, Config) ->
     case syn_test_suite_helper:init_cluster(4) of
         {error_initializing_cluster, Other} ->
-            end_per_group(four_nodes_process_registration, Config),
+            end_per_group(four_nodes_registry, Config),
             {skip, Other};
 
         NodesConfig ->
@@ -154,9 +154,9 @@ init_per_group(_GroupName, Config) ->
 %% GroupName = atom()
 %% Config0 = Config1 = [tuple()]
 %% -------------------------------------------------------------------
-end_per_group(three_nodes_process_registration, Config) ->
+end_per_group(three_nodes_registry, Config) ->
     syn_test_suite_helper:end_cluster(3, Config);
-end_per_group(four_nodes_process_registration, Config) ->
+end_per_group(four_nodes_registry, Config) ->
     syn_test_suite_helper:end_cluster(4, Config);
 end_per_group(_GroupName, _Config) ->
     syn_test_suite_helper:clean_after_test().
@@ -1472,8 +1472,9 @@ four_nodes_concurrency(Config) ->
         lists:foreach(fun(_) ->
             %% start pid
             Pid = syn_test_suite_helper:start_process(),
+            RandomMeta = rand:uniform(99999),
             %% loop
-            case syn:register(scope_all, <<"concurrent">>, Pid) of
+            case syn:register(scope_all, <<"concurrent">>, Pid, RandomMeta) of
                 ok ->
                     ok;
 
@@ -1484,7 +1485,7 @@ four_nodes_concurrency(Config) ->
                         {error, race_condition} ->
                             ok;
                         ok ->
-                            syn:register(scope_all, <<"concurrent">>, Pid)
+                            syn:register(scope_all, <<"concurrent">>, Pid, RandomMeta)
                     end
             end,
             RndTime = rand:uniform(30),
@@ -1500,7 +1501,7 @@ four_nodes_concurrency(Config) ->
     spawn(SlaveNode2, WorkerFun),
     spawn(SlaveNode3, WorkerFun),
 
-    %% check results are same across network
+    %% wait for workers done
     syn_test_suite_helper:assert_received_messages([
         {done, LocalNode},
         {done, SlaveNode1},
@@ -1508,6 +1509,7 @@ four_nodes_concurrency(Config) ->
         {done, SlaveNode3}
     ]),
 
+    %% check results are same across network
     syn_test_suite_helper:assert_wait(
         1,
         fun() ->
@@ -1515,8 +1517,10 @@ four_nodes_concurrency(Config) ->
             ResultPidOn1 = rpc:call(SlaveNode1, syn, lookup, [scope_all, <<"concurrent">>]),
             ResultPidOn2 = rpc:call(SlaveNode2, syn, lookup, [scope_all, <<"concurrent">>]),
             ResultPidOn3 = rpc:call(SlaveNode3, syn, lookup, [scope_all, <<"concurrent">>]),
-            O = ordsets:from_list([ResultPidLocal, ResultPidOn1, ResultPidOn2, ResultPidOn3]),
-            ordsets:size(O)
+
+            %% if unique set is of 1 element then they all contain the same result
+            Ordset = ordsets:from_list([ResultPidLocal, ResultPidOn1, ResultPidOn2, ResultPidOn3]),
+            ordsets:size(Ordset)
         end
     ).
 
