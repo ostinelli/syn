@@ -122,7 +122,7 @@ join(Scope, GroupName, Pid, Meta) ->
     Node = node(Pid),
     case syn_gen_scope:call(?MODULE, Node, Scope, {'3.0', join_on_node, node(), GroupName, Pid, Meta}) of
         {ok, {CallbackMethod, Time, TableByName, TableByPid}} when Node =/= node() ->
-            %% update table on caller node immediately so that subsequent calls have an updated registry
+            %% update table on caller node immediately so that subsequent calls have an updated pg
             add_to_local_table(GroupName, Pid, Meta, Time, undefined, TableByName, TableByPid),
             %% callback
             syn_event_handler:call_event_handler(CallbackMethod, [Scope, GroupName, Pid, Meta, normal]),
@@ -568,13 +568,11 @@ purge_pg_for_remote_nodes(Scope, TableByName, TableByPid) ->
 purge_pg_for_remote_node(Scope, Node, TableByName, TableByPid) when Node =/= node() ->
     %% loop elements for callback in a separate process to free scope process
     PgTuples = get_pg_tuples_for_node(Node, TableByName),
-    spawn(fun() ->
-        lists:foreach(fun({GroupName, Pid, Meta, _Time}) ->
-            syn_event_handler:call_event_handler(on_process_left,
-                [Scope, GroupName, Pid, Meta, {syn_remote_scope_node_down, Scope, Node}]
-            )
-        end, PgTuples)
-    end),
+    lists:foreach(fun({GroupName, Pid, Meta, _Time}) ->
+        syn_event_handler:call_event_handler(on_process_left,
+            [Scope, GroupName, Pid, Meta, {syn_remote_scope_node_down, Scope, Node}]
+        )
+    end, PgTuples),
     ets:match_delete(TableByName, {{'_', '_'}, '_', '_', '_', Node}),
     ets:match_delete(TableByPid, {{'_', '_'}, '_', '_', '_', Node}).
 
