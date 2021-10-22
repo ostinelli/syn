@@ -44,6 +44,9 @@
     three_nodes_custom_event_handler_reg_unreg/1,
     three_nodes_custom_event_handler_conflict_resolution/1
 ]).
+-export([
+    four_nodes_concurrency/1
+]).
 
 %% include
 -include_lib("common_test/include/ct.hrl").
@@ -63,7 +66,8 @@
 all() ->
     [
         {group, one_node_process_registration},
-        {group, three_nodes_process_registration}
+        {group, three_nodes_process_registration},
+        {group, four_nodes_process_registration}
     ].
 
 %% -------------------------------------------------------------------
@@ -91,6 +95,9 @@ groups() ->
             three_nodes_cluster_conflicts,
             three_nodes_custom_event_handler_reg_unreg,
             three_nodes_custom_event_handler_conflict_resolution
+        ]},
+        {four_nodes_process_registration, [shuffle], [
+            four_nodes_concurrency
         ]}
     ].
 %% -------------------------------------------------------------------
@@ -119,22 +126,23 @@ end_per_suite(_Config) ->
 %% Reason = any()
 %% -------------------------------------------------------------------
 init_per_group(three_nodes_process_registration, Config) ->
-    %% start slave
-    {ok, SlaveNode1} = syn_test_suite_helper:start_slave(syn_slave_1),
-    {ok, SlaveNode2} = syn_test_suite_helper:start_slave(syn_slave_2),
-    syn_test_suite_helper:connect_node(SlaveNode1),
-    syn_test_suite_helper:connect_node(SlaveNode2),
-    rpc:call(SlaveNode1, syn_test_suite_helper, connect_node, [SlaveNode2]),
-    %% wait full cluster
-    case syn_test_suite_helper:wait_cluster_mesh_connected([node(), SlaveNode1, SlaveNode2]) of
-        ok ->
-            %% config
-            [{slave_node_1, SlaveNode1}, {slave_node_2, SlaveNode2} | Config];
-
-        Other ->
-            ct:pal("*********** Could not get full cluster, skipping"),
+    case syn_test_suite_helper:init_cluster(3) of
+        {error_initializing_cluster, Other} ->
             end_per_group(three_nodes_process_registration, Config),
-            {skip, Other}
+            {skip, Other};
+
+        NodesConfig ->
+            NodesConfig ++ Config
+    end;
+
+init_per_group(four_nodes_process_registration, Config) ->
+    case syn_test_suite_helper:init_cluster(4) of
+        {error_initializing_cluster, Other} ->
+            end_per_group(four_nodes_process_registration, Config),
+            {skip, Other};
+
+        NodesConfig ->
+            NodesConfig ++ Config
     end;
 
 init_per_group(_GroupName, Config) ->
@@ -147,14 +155,9 @@ init_per_group(_GroupName, Config) ->
 %% Config0 = Config1 = [tuple()]
 %% -------------------------------------------------------------------
 end_per_group(three_nodes_process_registration, Config) ->
-    SlaveNode1 = proplists:get_value(slave_node_1, Config),
-    syn_test_suite_helper:connect_node(SlaveNode1),
-    SlaveNode2 = proplists:get_value(slave_node_2, Config),
-    syn_test_suite_helper:connect_node(SlaveNode2),
-    syn_test_suite_helper:clean_after_test(),
-    syn_test_suite_helper:stop_slave(syn_slave_1),
-    syn_test_suite_helper:stop_slave(syn_slave_2),
-    timer:sleep(1000);
+    syn_test_suite_helper:end_cluster(3, Config);
+end_per_group(four_nodes_process_registration, Config) ->
+    syn_test_suite_helper:end_cluster(4, Config);
 end_per_group(_GroupName, _Config) ->
     syn_test_suite_helper:clean_after_test().
 
@@ -214,8 +217,8 @@ one_node_via_register_unregister(_Config) ->
 
 three_nodes_discover(Config) ->
     %% get slaves
-    SlaveNode1 = proplists:get_value(slave_node_1, Config),
-    SlaveNode2 = proplists:get_value(slave_node_2, Config),
+    SlaveNode1 = proplists:get_value(syn_slave_1, Config),
+    SlaveNode2 = proplists:get_value(syn_slave_2, Config),
 
     %% start syn on nodes
     ok = syn:start(),
@@ -300,8 +303,8 @@ three_nodes_discover(Config) ->
 
 three_nodes_register_unregister_and_monitor(Config) ->
     %% get slaves
-    SlaveNode1 = proplists:get_value(slave_node_1, Config),
-    SlaveNode2 = proplists:get_value(slave_node_2, Config),
+    SlaveNode1 = proplists:get_value(syn_slave_1, Config),
+    SlaveNode2 = proplists:get_value(syn_slave_2, Config),
 
     %% start syn on nodes
     ok = syn:start(),
@@ -528,8 +531,8 @@ three_nodes_register_unregister_and_monitor(Config) ->
 
 three_nodes_register_filter_unknown_node(Config) ->
     %% get slaves
-    SlaveNode1 = proplists:get_value(slave_node_1, Config),
-    SlaveNode2 = proplists:get_value(slave_node_2, Config),
+    SlaveNode1 = proplists:get_value(syn_slave_1, Config),
+    SlaveNode2 = proplists:get_value(syn_slave_2, Config),
 
     %% start syn on 1 and 2
     ok = rpc:call(SlaveNode1, syn, start, []),
@@ -548,8 +551,8 @@ three_nodes_register_filter_unknown_node(Config) ->
 
 three_nodes_cluster_changes(Config) ->
     %% get slaves
-    SlaveNode1 = proplists:get_value(slave_node_1, Config),
-    SlaveNode2 = proplists:get_value(slave_node_2, Config),
+    SlaveNode1 = proplists:get_value(syn_slave_1, Config),
+    SlaveNode2 = proplists:get_value(syn_slave_2, Config),
 
     %% disconnect 1 from 2
     rpc:call(SlaveNode1, syn_test_suite_helper, disconnect_node, [SlaveNode2]),
@@ -799,8 +802,8 @@ three_nodes_cluster_changes(Config) ->
 
 three_nodes_cluster_conflicts(Config) ->
     %% get slaves
-    SlaveNode1 = proplists:get_value(slave_node_1, Config),
-    SlaveNode2 = proplists:get_value(slave_node_2, Config),
+    SlaveNode1 = proplists:get_value(syn_slave_1, Config),
+    SlaveNode2 = proplists:get_value(syn_slave_2, Config),
 
     %% start syn on nodes
     ok = syn:start(),
@@ -912,8 +915,8 @@ three_nodes_cluster_conflicts(Config) ->
 
 three_nodes_custom_event_handler_reg_unreg(Config) ->
     %% get slaves
-    SlaveNode1 = proplists:get_value(slave_node_1, Config),
-    SlaveNode2 = proplists:get_value(slave_node_2, Config),
+    SlaveNode1 = proplists:get_value(syn_slave_1, Config),
+    SlaveNode2 = proplists:get_value(syn_slave_2, Config),
 
     %% add custom handler for callbacks
     syn:set_event_handler(syn_test_event_handler_callbacks),
@@ -1141,8 +1144,8 @@ three_nodes_custom_event_handler_reg_unreg(Config) ->
 
 three_nodes_custom_event_handler_conflict_resolution(Config) ->
     %% get slaves
-    SlaveNode1 = proplists:get_value(slave_node_1, Config),
-    SlaveNode2 = proplists:get_value(slave_node_2, Config),
+    SlaveNode1 = proplists:get_value(syn_slave_1, Config),
+    SlaveNode2 = proplists:get_value(syn_slave_2, Config),
 
     %% add custom handler for resolution
     syn:set_event_handler(syn_test_event_handler_resolution),
@@ -1440,6 +1443,81 @@ three_nodes_custom_event_handler_conflict_resolution(Config) ->
     syn_test_suite_helper:assert_wait(
         true,
         fun() -> rpc:call(SlaveNode2, erlang, is_process_alive, [PidOn2]) end
+    ).
+
+four_nodes_concurrency(Config) ->
+    %% get slaves
+    SlaveNode1 = proplists:get_value(syn_slave_1, Config),
+    SlaveNode2 = proplists:get_value(syn_slave_2, Config),
+    SlaveNode3 = proplists:get_value(syn_slave_3, Config),
+
+    %% start syn on nodes
+    ok = syn:start(),
+    ok = rpc:call(SlaveNode1, syn, start, []),
+    ok = rpc:call(SlaveNode2, syn, start, []),
+    ok = rpc:call(SlaveNode3, syn, start, []),
+
+    %% add scopes
+    ok = syn:add_node_to_scopes([scope_all]),
+    ok = rpc:call(SlaveNode1, syn, add_node_to_scopes, [[scope_all]]),
+    ok = rpc:call(SlaveNode2, syn, add_node_to_scopes, [[scope_all]]),
+    ok = rpc:call(SlaveNode3, syn, add_node_to_scopes, [[scope_all]]),
+
+    %% ref
+    TestPid = self(),
+    Iterations = 250,
+
+    %% concurrent test
+    WorkerFun = fun() ->
+        lists:foreach(fun(_) ->
+            %% start pid
+            Pid = syn_test_suite_helper:start_process(),
+            %% loop
+            case syn:register(scope_all, <<"concurrent">>, Pid) of
+                ok ->
+                    ok;
+
+                {error, taken} ->
+                    case syn:unregister(scope_all, <<"concurrent">>) of
+                        {error, undefined} ->
+                            ok;
+                        {error, race_condition} ->
+                            ok;
+                        ok ->
+                            syn:register(scope_all, <<"concurrent">>, Pid)
+                    end
+            end,
+            RndTime = rand:uniform(30),
+            timer:sleep(RndTime)
+        end, lists:seq(1, Iterations)),
+        TestPid ! {done, node()}
+    end,
+
+    %% spawn concurrent
+    LocalNode = node(),
+    spawn(LocalNode, WorkerFun),
+    spawn(SlaveNode1, WorkerFun),
+    spawn(SlaveNode2, WorkerFun),
+    spawn(SlaveNode3, WorkerFun),
+
+    %% check results are same across network
+    syn_test_suite_helper:assert_received_messages([
+        {done, LocalNode},
+        {done, SlaveNode1},
+        {done, SlaveNode2},
+        {done, SlaveNode3}
+    ]),
+
+    syn_test_suite_helper:assert_wait(
+        1,
+        fun() ->
+            ResultPidLocal = syn:lookup(scope_all, <<"concurrent">>),
+            ResultPidOn1 = rpc:call(SlaveNode1, syn, lookup, [scope_all, <<"concurrent">>]),
+            ResultPidOn2 = rpc:call(SlaveNode2, syn, lookup, [scope_all, <<"concurrent">>]),
+            ResultPidOn3 = rpc:call(SlaveNode3, syn, lookup, [scope_all, <<"concurrent">>]),
+            O = ordsets:from_list([ResultPidLocal, ResultPidOn1, ResultPidOn2, ResultPidOn3]),
+            ordsets:size(O)
+        end
     ).
 
 %% ===================================================================

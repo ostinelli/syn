@@ -120,22 +120,13 @@ end_per_suite(_Config) ->
 %% Reason = any()
 %% -------------------------------------------------------------------
 init_per_group(three_nodes_pg, Config) ->
-    %% start slave
-    {ok, SlaveNode1} = syn_test_suite_helper:start_slave(syn_slave_1),
-    {ok, SlaveNode2} = syn_test_suite_helper:start_slave(syn_slave_2),
-    syn_test_suite_helper:connect_node(SlaveNode1),
-    syn_test_suite_helper:connect_node(SlaveNode2),
-    rpc:call(SlaveNode1, syn_test_suite_helper, connect_node, [SlaveNode2]),
-    %% wait full cluster
-    case syn_test_suite_helper:wait_cluster_mesh_connected([node(), SlaveNode1, SlaveNode2]) of
-        ok ->
-            %% config
-            [{slave_node_1, SlaveNode1}, {slave_node_2, SlaveNode2} | Config];
-
-        Other ->
-            ct:pal("*********** Could not get full cluster, skipping"),
+    case syn_test_suite_helper:init_cluster(3) of
+        {error_initializing_cluster, Other} ->
             end_per_group(three_nodes_pg, Config),
-            {skip, Other}
+            {skip, Other};
+
+        NodesConfig ->
+            NodesConfig ++ Config
     end;
 
 init_per_group(_GroupName, Config) ->
@@ -148,14 +139,7 @@ init_per_group(_GroupName, Config) ->
 %% Config0 = Config1 = [tuple()]
 %% -------------------------------------------------------------------
 end_per_group(three_nodes_pg, Config) ->
-    SlaveNode1 = proplists:get_value(slave_node_1, Config),
-    syn_test_suite_helper:connect_node(SlaveNode1),
-    SlaveNode2 = proplists:get_value(slave_node_2, Config),
-    syn_test_suite_helper:connect_node(SlaveNode2),
-    syn_test_suite_helper:clean_after_test(),
-    syn_test_suite_helper:stop_slave(syn_slave_1),
-    syn_test_suite_helper:stop_slave(syn_slave_2),
-    timer:sleep(1000);
+    syn_test_suite_helper:end_cluster(3, Config);
 end_per_group(_GroupName, _Config) ->
     syn_test_suite_helper:clean_after_test().
 
@@ -185,8 +169,8 @@ end_per_testcase(_, _Config) ->
 %% ===================================================================
 three_nodes_discover(Config) ->
     %% get slaves
-    SlaveNode1 = proplists:get_value(slave_node_1, Config),
-    SlaveNode2 = proplists:get_value(slave_node_2, Config),
+    SlaveNode1 = proplists:get_value(syn_slave_1, Config),
+    SlaveNode2 = proplists:get_value(syn_slave_2, Config),
 
     %% start syn on nodes
     ok = syn:start(),
@@ -270,8 +254,8 @@ three_nodes_discover(Config) ->
 
 three_nodes_join_leave_and_monitor(Config) ->
     %% get slaves
-    SlaveNode1 = proplists:get_value(slave_node_1, Config),
-    SlaveNode2 = proplists:get_value(slave_node_2, Config),
+    SlaveNode1 = proplists:get_value(syn_slave_1, Config),
+    SlaveNode2 = proplists:get_value(syn_slave_2, Config),
 
     %% start syn on nodes
     ok = syn:start(),
@@ -704,8 +688,8 @@ three_nodes_join_leave_and_monitor(Config) ->
 
 three_nodes_join_filter_unknown_node(Config) ->
     %% get slaves
-    SlaveNode1 = proplists:get_value(slave_node_1, Config),
-    SlaveNode2 = proplists:get_value(slave_node_2, Config),
+    SlaveNode1 = proplists:get_value(syn_slave_1, Config),
+    SlaveNode2 = proplists:get_value(syn_slave_2, Config),
 
     %% start syn on 1 and 2
     ok = rpc:call(SlaveNode1, syn, start, []),
@@ -724,8 +708,8 @@ three_nodes_join_filter_unknown_node(Config) ->
 
 three_nodes_cluster_changes(Config) ->
     %% get slaves
-    SlaveNode1 = proplists:get_value(slave_node_1, Config),
-    SlaveNode2 = proplists:get_value(slave_node_2, Config),
+    SlaveNode1 = proplists:get_value(syn_slave_1, Config),
+    SlaveNode2 = proplists:get_value(syn_slave_2, Config),
 
     %% disconnect 1 from 2
     rpc:call(SlaveNode1, syn_test_suite_helper, disconnect_node, [SlaveNode2]),
@@ -1073,8 +1057,8 @@ three_nodes_cluster_changes(Config) ->
 
 three_nodes_custom_event_handler_joined_left(Config) ->
     %% get slaves
-    SlaveNode1 = proplists:get_value(slave_node_1, Config),
-    SlaveNode2 = proplists:get_value(slave_node_2, Config),
+    SlaveNode1 = proplists:get_value(syn_slave_1, Config),
+    SlaveNode2 = proplists:get_value(syn_slave_2, Config),
 
     %% add custom handler for callbacks
     syn:set_event_handler(syn_test_event_handler_callbacks),
@@ -1254,8 +1238,8 @@ three_nodes_custom_event_handler_joined_left(Config) ->
 
 three_nodes_publish(Config) ->
     %% get slaves
-    SlaveNode1 = proplists:get_value(slave_node_1, Config),
-    SlaveNode2 = proplists:get_value(slave_node_2, Config),
+    SlaveNode1 = proplists:get_value(syn_slave_1, Config),
+    SlaveNode2 = proplists:get_value(syn_slave_2, Config),
 
     %% start syn on nodes
     ok = syn:start(),
@@ -1323,8 +1307,8 @@ three_nodes_publish(Config) ->
 
 three_nodes_multi_call(Config) ->
     %% get slaves
-    SlaveNode1 = proplists:get_value(slave_node_1, Config),
-    SlaveNode2 = proplists:get_value(slave_node_2, Config),
+    SlaveNode1 = proplists:get_value(syn_slave_1, Config),
+    SlaveNode2 = proplists:get_value(syn_slave_2, Config),
 
     %% start syn on nodes
     ok = syn:start(),
@@ -1376,8 +1360,8 @@ three_nodes_multi_call(Config) ->
 
 three_nodes_group_names(Config) ->
     %% get slaves
-    SlaveNode1 = proplists:get_value(slave_node_1, Config),
-    SlaveNode2 = proplists:get_value(slave_node_2, Config),
+    SlaveNode1 = proplists:get_value(syn_slave_1, Config),
+    SlaveNode2 = proplists:get_value(syn_slave_2, Config),
 
     %% start syn on nodes
     ok = syn:start(),

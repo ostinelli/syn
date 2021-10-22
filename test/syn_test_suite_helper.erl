@@ -26,6 +26,7 @@
 -module(syn_test_suite_helper).
 
 %% API
+-export([init_cluster/1, end_cluster/2]).
 -export([start_slave/1, stop_slave/1]).
 -export([connect_node/1, disconnect_node/1]).
 -export([clean_after_test/0]).
@@ -51,6 +52,48 @@
 %% ===================================================================
 %% API
 %% ===================================================================
+init_cluster(NodesCount) ->
+    SlavesCount = NodesCount - 1,
+    {Nodes, NodesConfig} = lists:foldl(fun(I, {AccNodes, AccNodesConfig}) ->
+        IBin = integer_to_binary(I),
+        NodeShortName = binary_to_atom(<<"syn_slave_", IBin/binary>>),
+        {ok, SlaveNode} = start_slave(NodeShortName),
+        %% connect
+        lists:foreach(fun(N) ->
+            rpc:call(SlaveNode, syn_test_suite_helper, connect_node, [N])
+        end, AccNodes),
+        %% config
+        {
+            [SlaveNode | AccNodes],
+            [{NodeShortName, SlaveNode} | AccNodesConfig]
+        }
+    end, {[], []}, lists:seq(1, SlavesCount)),
+    %% wait full cluster
+    case syn_test_suite_helper:wait_cluster_mesh_connected([node()] ++ Nodes) of
+        ok ->
+            %% config
+            NodesConfig;
+
+        Other ->
+            ct:pal("*********** Could not get full cluster of ~p nodes, skipping", [NodesCount]),
+            {error_initializing_cluster, Other}
+    end.
+
+end_cluster(NodesCount, Config) ->
+    SlavesCount = NodesCount - 1,
+    %% shutdown
+    lists:foreach(fun(I) ->
+        IBin = integer_to_binary(I),
+        NodeShortName = binary_to_atom(<<"syn_slave_", IBin/binary>>),
+        SlaveNode = proplists:get_value(NodeShortName, Config),
+        connect_node(SlaveNode),
+        stop_slave(NodeShortName)
+    end, lists:seq(1, SlavesCount)),
+    %% clean
+    clean_after_test(),
+    %% wait
+    timer:sleep(1000).
+
 start_slave(NodeShortName) ->
     %% start slave
     {ok, Node} = ct_slave:start(NodeShortName, [
