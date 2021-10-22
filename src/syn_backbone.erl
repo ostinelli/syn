@@ -41,7 +41,7 @@
 %% ===================================================================
 %% API
 %% ===================================================================
--spec start_link() -> {ok, pid()} | {error, any()}.
+-spec start_link() -> {ok, pid()} | {error, term()}.
 start_link() ->
     Options = [],
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], Options).
@@ -50,11 +50,11 @@ start_link() ->
 create_tables_for_scope(Scope) ->
     gen_server:call(?MODULE, {create_tables_for_scope, Scope}).
 
--spec save_process_name(Key :: any(), ProcessName :: atom()) -> true.
+-spec save_process_name(Key :: term(), ProcessName :: atom()) -> true.
 save_process_name(Key, ProcessName) ->
     true = ets:insert(syn_process_names, {Key, ProcessName}).
 
--spec get_process_name(Key :: any()) -> ProcessName :: atom().
+-spec get_process_name(Key :: term()) -> ProcessName :: atom().
 get_process_name(Key) ->
     case ets:lookup(syn_process_names, Key) of
         [{_, ProcessName}] -> ProcessName;
@@ -79,7 +79,7 @@ get_table_name(TableId, Scope) ->
     {ok, State :: map()} |
     {ok, State :: map(), Timeout :: non_neg_integer()} |
     ignore |
-    {stop, Reason :: any()}.
+    {stop, Reason :: term()}.
 init([]) ->
     %% create table names table
     ets:new(syn_table_names, [set, public, named_table, {read_concurrency, true}, {decentralized_counters, true}]),
@@ -90,13 +90,13 @@ init([]) ->
 %% ----------------------------------------------------------------------------------------------------------
 %% Call messages
 %% ----------------------------------------------------------------------------------------------------------
--spec handle_call(Request :: any(), From :: any(), State :: map()) ->
-    {reply, Reply :: any(), State :: map()} |
-    {reply, Reply :: any(), State :: map(), Timeout :: non_neg_integer()} |
+-spec handle_call(Request :: term(), From :: term(), State :: map()) ->
+    {reply, Reply :: term(), State :: map()} |
+    {reply, Reply :: term(), State :: map(), Timeout :: non_neg_integer()} |
     {noreply, State :: map()} |
     {noreply, State :: map(), Timeout :: non_neg_integer()} |
-    {stop, Reason :: any(), Reply :: any(), State :: map()} |
-    {stop, Reason :: any(), State :: map()}.
+    {stop, Reason :: term(), Reply :: term(), State :: map()} |
+    {stop, Reason :: term(), State :: map()}.
 handle_call({create_tables_for_scope, Scope}, _From, State) ->
     error_logger:info_msg("SYN[~s] Creating tables for scope '~s'", [?MODULE, Scope]),
     ensure_table_existence(set, syn_registry_by_name, Scope),
@@ -112,10 +112,10 @@ handle_call(Request, From, State) ->
 %% ----------------------------------------------------------------------------------------------------------
 %% Cast messages
 %% ----------------------------------------------------------------------------------------------------------
--spec handle_cast(Msg :: any(), State :: map()) ->
+-spec handle_cast(Msg :: term(), State :: map()) ->
     {noreply, State :: map()} |
     {noreply, State :: map(), Timeout :: non_neg_integer()} |
-    {stop, Reason :: any(), State :: map()}.
+    {stop, Reason :: term(), State :: map()}.
 handle_cast(Msg, State) ->
     error_logger:warning_msg("SYN[~s] Received an unknown cast message: ~p", [?MODULE, Msg]),
     {noreply, State}.
@@ -123,10 +123,10 @@ handle_cast(Msg, State) ->
 %% ----------------------------------------------------------------------------------------------------------
 %% All non Call / Cast messages
 %% ----------------------------------------------------------------------------------------------------------
--spec handle_info(Info :: any(), State :: map()) ->
+-spec handle_info(Info :: term(), State :: map()) ->
     {noreply, State :: map()} |
     {noreply, State :: map(), Timeout :: non_neg_integer()} |
-    {stop, Reason :: any(), State :: map()}.
+    {stop, Reason :: term(), State :: map()}.
 handle_info(Info, State) ->
     error_logger:warning_msg("SYN[~s] Received an unknown info message: ~p", [?MODULE, Info]),
     {noreply, State}.
@@ -134,7 +134,7 @@ handle_info(Info, State) ->
 %% ----------------------------------------------------------------------------------------------------------
 %% Terminate
 %% ----------------------------------------------------------------------------------------------------------
--spec terminate(Reason :: any(), State :: map()) -> terminated.
+-spec terminate(Reason :: term(), State :: map()) -> terminated.
 terminate(Reason, _State) ->
     error_logger:info_msg("SYN[~s] Terminating with reason: ~p", [?MODULE, Reason]),
     %% return
@@ -143,7 +143,7 @@ terminate(Reason, _State) ->
 %% ----------------------------------------------------------------------------------------------------------
 %% Convert process state when code is changed.
 %% ----------------------------------------------------------------------------------------------------------
--spec code_change(OldVsn :: any(), State :: map(), Extra :: any()) -> {ok, State :: map()}.
+-spec code_change(OldVsn :: term(), State :: map(), Extra :: term()) -> {ok, State :: map()}.
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 

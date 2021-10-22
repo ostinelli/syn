@@ -29,48 +29,48 @@
     Version :: atom()
 }.
 -type syn_registry_entry() :: {
-    Name :: any(),
+    Name :: term(),
     Pid :: pid(),
-    Meta :: any(),
+    Meta :: term(),
     Time :: integer(),
     MRef :: undefined | reference(),
     Node :: node()
 }.
 -type syn_registry_entry_by_pid() :: {
     Pid :: pid(),
-    Name :: any(),
-    Meta :: any(),
+    Name :: term(),
+    Meta :: term(),
     Time :: integer(),
     MRef :: undefined | reference(),
     Node :: node()
 }.
 -type syn_registry_tuple() :: {
-    Name :: any(),
+    Name :: term(),
     Pid :: pid(),
-    Meta :: any(),
+    Meta :: term(),
     Time :: integer()
 }.
 -type syn_pg_entry() :: {
     {
-        GroupName :: any(),
+        GroupName :: term(),
         Pid :: pid()
     },
-    Meta :: any(),
+    Meta :: term(),
     Time :: integer(),
     MRef :: undefined | reference(),
     Node :: node()
 }.
 -type syn_pg_tuple() :: {
-    GroupName :: any(),
+    GroupName :: term(),
     Pid :: pid(),
-    Meta :: any(),
+    Meta :: term(),
     Time :: non_neg_integer()
 }.
 
 %% records
 -record(state, {
     handler = undefined :: undefined | module(),
-    handler_state = undefined :: any(),
+    handler_state = undefined :: term(),
     scope = undefined :: atom(),
     process_name :: atom(),
     nodes_map = #{} :: #{node() => pid()},

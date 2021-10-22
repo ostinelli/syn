@@ -34,14 +34,14 @@
 %% ===================================================================
 -spec start(
     StartType :: normal | {takeover, node()} | {failover, node()},
-    StartArgs :: any()
-) -> {ok, pid()} | {ok, pid(), State :: any()} | {error, any()}.
+    StartArgs :: term()
+) -> {ok, pid()} | {ok, pid(), State :: term()} | {error, term()}.
 start(_StartType, _StartArgs) ->
     %% ensure event handler is loaded
     syn_event_handler:ensure_event_handler_loaded(),
     %% start main sup
     syn_sup:start_link().
 
--spec stop(State :: any()) -> ok.
+-spec stop(State :: term()) -> ok.
 stop(_State) ->
     ok.

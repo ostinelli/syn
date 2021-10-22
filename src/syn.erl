@@ -168,7 +168,7 @@ start() ->
     ok.
 
 %% @doc Stops Syn manually.
--spec stop() -> ok | {error, Reason :: any()}.
+-spec stop() -> ok | {error, Reason :: term()}.
 stop() ->
     application:stop(syn).
 
@@ -272,13 +272,13 @@ set_event_handler(Module) ->
 %% 2> syn:lookup(devices, "SN-123-456789").
 %% {<0.79.0>, undefined}
 %% '''
--spec lookup(Scope :: atom(), Name :: any()) -> {pid(), Meta :: any()} | undefined.
+-spec lookup(Scope :: atom(), Name :: term()) -> {pid(), Meta :: term()} | undefined.
 lookup(Scope, Name) ->
     syn_registry:lookup(Scope, Name).
 
 %% @equiv register(Scope, Name, Pid, undefined)
 %% @end
--spec register(Scope :: atom(), Name :: any(), Pid :: any()) -> ok | {error, Reason :: any()}.
+-spec register(Scope :: atom(), Name :: term(), Pid :: term()) -> ok | {error, Reason :: term()}.
 register(Scope, Name, Pid) ->
     register(Scope, Name, Pid, undefined).
 
@@ -338,7 +338,7 @@ register(Scope, Name, Pid) ->
 %% 3> gen_server:call(Tuple, your_message).
 %% your_message
 %% '''
--spec register(Scope :: atom(), Name :: any(), Pid :: pid(), Meta :: any()) -> ok | {error, Reason :: any()}.
+-spec register(Scope :: atom(), Name :: term(), Pid :: pid(), Meta :: term()) -> ok | {error, Reason :: term()}.
 register(Scope, Name, Pid, Meta) ->
     syn_registry:register(Scope, Name, Pid, Meta).
 
@@ -353,7 +353,7 @@ register(Scope, Name, Pid, Meta) ->
 %%
 %% You don't need to unregister names of processes that are about to die, since they are monitored by Syn
 %% and they will be removed automatically.
--spec unregister(Scope :: atom(), Name :: any()) -> ok | {error, Reason :: any()}.
+-spec unregister(Scope :: atom(), Name :: term()) -> ok | {error, Reason :: term()}.
 unregister(Scope, Name) ->
     syn_registry:unregister(Scope, Name).
 
@@ -386,28 +386,28 @@ local_registry_count(Scope) ->
     registry_count(Scope, node()).
 
 %% ----- \/ gen_server via module interface --------------------------
--spec register_name(Name :: any(), Pid :: pid()) -> yes | no.
+-spec register_name(Name :: term(), Pid :: pid()) -> yes | no.
 register_name({Scope, Name}, Pid) ->
     case register(Scope, Name, Pid) of
         ok -> yes;
         _ -> no
     end.
 
--spec unregister_name(Name :: any()) -> any().
+-spec unregister_name(Name :: term()) -> term().
 unregister_name({Scope, Name}) ->
     case unregister(Scope, Name) of
         ok -> Name;
         _ -> nil
     end.
 
--spec whereis_name(Name :: any()) -> pid() | undefined.
+-spec whereis_name(Name :: term()) -> pid() | undefined.
 whereis_name({Scope, Name}) ->
     case lookup(Scope, Name) of
         {Pid, _Meta} -> Pid;
         undefined -> undefined
     end.
 
--spec send(Name :: any(), Message :: any()) -> pid().
+-spec send(Name :: term(), Message :: term()) -> pid().
 send({Scope, Name}, Message) ->
     case whereis_name({Scope, Name}) of
         undefined ->
@@ -440,7 +440,7 @@ members(Scope, GroupName) ->
     syn_pg:members(Scope, GroupName).
 
 %% @doc Returns whether a `pid()' is a member of GroupName in the specified `Scope'.
--spec is_member(Scope :: atom(), GroupName :: any(), Pid :: pid()) -> boolean().
+-spec is_member(Scope :: atom(), GroupName :: term(), Pid :: pid()) -> boolean().
 is_member(Scope, GroupName, Pid) ->
     syn_pg:is_member(Scope, GroupName, Pid).
 
@@ -450,13 +450,13 @@ local_members(Scope, GroupName) ->
     syn_pg:local_members(Scope, GroupName).
 
 %% @doc Returns whether a `pid()' is a member of GroupName in the specified `Scope' running on the local node.
--spec is_local_member(Scope :: atom(), GroupName :: any(), Pid :: pid()) -> boolean().
+-spec is_local_member(Scope :: atom(), GroupName :: term(), Pid :: pid()) -> boolean().
 is_local_member(Scope, GroupName, Pid) ->
     syn_pg:is_local_member(Scope, GroupName, Pid).
 
 %% @equiv join(Scope, GroupName, Pid, undefined)
 %% @end
--spec join(Scope :: any(), Name :: any(), Pid :: any()) -> ok | {error, Reason :: any()}.
+-spec join(Scope :: term(), Name :: term(), Pid :: term()) -> ok | {error, Reason :: term()}.
 join(Scope, GroupName, Pid) ->
     join(Scope, GroupName, Pid, undefined).
 
@@ -482,7 +482,7 @@ join(Scope, GroupName, Pid) ->
 %% 1> syn:join(devices, "area-1", self(), [{meta, one}]).
 %% ok
 %% '''
--spec join(Scope :: atom(), GroupName :: any(), Pid :: pid(), Meta :: any()) -> ok | {error, Reason :: any()}.
+-spec join(Scope :: atom(), GroupName :: term(), Pid :: pid(), Meta :: term()) -> ok | {error, Reason :: term()}.
 join(Scope, GroupName, Pid, Meta) ->
     syn_pg:join(Scope, GroupName, Pid, Meta).
 
@@ -495,7 +495,7 @@ join(Scope, GroupName, Pid, Meta) ->
 %%
 %% You don't need to remove processes that are about to die, since they are monitored by Syn and they will be removed
 %% automatically from their groups.
--spec leave(Scope :: atom(), GroupName :: any(), Pid :: pid()) -> ok | {error, Reason :: any()}.
+-spec leave(Scope :: atom(), GroupName :: term(), Pid :: pid()) -> ok | {error, Reason :: term()}.
 leave(Scope, GroupName, Pid) ->
     syn_pg:leave(Scope, GroupName, Pid).
 
@@ -584,20 +584,20 @@ local_group_names(Scope) ->
 %% Shell got my_message
 %% ok
 %% '''
--spec publish(Scope :: atom(), GroupName :: any(), Message :: any()) -> {ok, RecipientCount :: non_neg_integer()}.
+-spec publish(Scope :: atom(), GroupName :: term(), Message :: term()) -> {ok, RecipientCount :: non_neg_integer()}.
 publish(Scope, GroupName, Message) ->
     syn_pg:publish(Scope, GroupName, Message).
 
 %% @doc Publish a message to all group members running on the local node in the specified `Scope'.
 %%
 %% Works similarly to {@link publish/3} for local processes.
--spec local_publish(Scope :: atom(), GroupName :: any(), Message :: any()) -> {ok, RecipientCount :: non_neg_integer()}.
+-spec local_publish(Scope :: atom(), GroupName :: term(), Message :: term()) -> {ok, RecipientCount :: non_neg_integer()}.
 local_publish(Scope, GroupName, Message) ->
     syn_pg:local_publish(Scope, GroupName, Message).
 
 %% @equiv multi_call(Scope, GroupName, Message, 5000)
 %% @end
--spec multi_call(Scope :: atom(), GroupName :: any(), Message :: any()) ->
+-spec multi_call(Scope :: atom(), GroupName :: term(), Message :: term()) ->
     {
         Replies :: [{{pid(), Meta :: term()}, Reply :: term()}],
         BadReplies :: [{pid(), Meta :: term()}]
@@ -616,7 +616,7 @@ multi_call(Scope, GroupName, Message) ->
 %% Syn will wait up to the value specified in `Timeout' to receive all replies from the members.
 %% The responses will be added to the `Replies' list, while the members that do not reply in time or that crash
 %% before sending a reply will be added to the `BadReplies' list.
--spec multi_call(Scope :: atom(), GroupName :: any(), Message :: any(), Timeout :: non_neg_integer()) ->
+-spec multi_call(Scope :: atom(), GroupName :: term(), Message :: term(), Timeout :: non_neg_integer()) ->
     {
         Replies :: [{{pid(), Meta :: term()}, Reply :: term()}],
         BadReplies :: [{pid(), Meta :: term()}]
