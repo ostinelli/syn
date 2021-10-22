@@ -213,7 +213,7 @@ one_node_via_register_unregister(_Config) ->
         fun() -> syn:lookup(scope, <<"my proc">>) end
     ),
     %% send via syn
-    {badarg, {GenServerNameCustom, anything}} = catch syn:send(GenServerNameCustom, anything).
+    {badarg, {GenServerNameCustom, anything}} = (catch syn:send(GenServerNameCustom, anything)).
 
 three_nodes_discover(Config) ->
     %% get slaves
@@ -232,7 +232,7 @@ three_nodes_discover(Config) ->
     ok = rpc:call(SlaveNode2, syn, add_node_to_scopes, [[scope_bc, scope_c, scope_all]]),
 
     %% subcluster_nodes should return invalid errors
-    {'EXIT', {{invalid_scope, custom_abcdef}, _}} = catch syn_registry:subcluster_nodes(custom_abcdef),
+    {'EXIT', {{invalid_scope, custom_abcdef}, _}} = (catch syn_registry:subcluster_nodes(custom_abcdef)),
 
     %% check
     syn_test_suite_helper:assert_registry_scope_subcluster(node(), scope_ab, [SlaveNode1]),
@@ -324,21 +324,21 @@ three_nodes_register_unregister_and_monitor(Config) ->
     %% retrieve
     undefined = syn:lookup(scope_ab, "scope_a"),
     undefined = rpc:call(SlaveNode1, syn, lookup, [scope_ab, "scope_a"]),
-    {badrpc, {'EXIT', {{invalid_scope, scope_ab}, _}}} = catch rpc:call(SlaveNode2, syn, lookup, [scope_ab, "scope_a"]),
+    {badrpc, {'EXIT', {{invalid_scope, scope_ab}, _}}} = (catch rpc:call(SlaveNode2, syn, lookup, [scope_ab, "scope_a"])),
     undefined = syn:lookup(scope_ab, "scope_a_alias"),
     undefined = rpc:call(SlaveNode1, syn, lookup, [scope_ab, "scope_a_alias"]),
-    {badrpc, {'EXIT', {{invalid_scope, scope_ab}, _}}} = catch rpc:call(SlaveNode2, syn, lookup, [scope_ab, "scope_a_alias"]),
-    {'EXIT', {{invalid_scope, scope_bc}, _}} = catch syn:lookup(scope_bc, {remote_scoped_bc}),
+    {badrpc, {'EXIT', {{invalid_scope, scope_ab}, _}}} = (catch rpc:call(SlaveNode2, syn, lookup, [scope_ab, "scope_a_alias"])),
+    {'EXIT', {{invalid_scope, scope_bc}, _}} = (catch syn:lookup(scope_bc, {remote_scoped_bc})),
     undefined = rpc:call(SlaveNode1, syn, lookup, [scope_bc, {remote_scoped_bc}]),
     undefined = rpc:call(SlaveNode2, syn, lookup, [scope_bc, {remote_scoped_bc}]),
     0 = syn:registry_count(scope_ab),
     0 = syn:registry_count(scope_ab, node()),
     0 = syn:registry_count(scope_ab, SlaveNode1),
     0 = syn:registry_count(scope_ab, SlaveNode2),
-    {'EXIT', {{invalid_scope, scope_bc}, _}} = catch syn:registry_count(scope_bc),
-    {'EXIT', {{invalid_scope, scope_bc}, _}} = catch syn:registry_count(scope_bc, node()),
-    {'EXIT', {{invalid_scope, scope_bc}, _}} = catch syn:registry_count(scope_bc, SlaveNode1),
-    {'EXIT', {{invalid_scope, scope_bc}, _}} = catch syn:registry_count(scope_bc, SlaveNode2),
+    {'EXIT', {{invalid_scope, scope_bc}, _}} = (catch syn:registry_count(scope_bc)),
+    {'EXIT', {{invalid_scope, scope_bc}, _}} = (catch syn:registry_count(scope_bc, node())),
+    {'EXIT', {{invalid_scope, scope_bc}, _}} = (catch syn:registry_count(scope_bc, SlaveNode1)),
+    {'EXIT', {{invalid_scope, scope_bc}, _}} = (catch syn:registry_count(scope_bc, SlaveNode2)),
     0 = rpc:call(SlaveNode1, syn, registry_count, [scope_ab]),
     0 = rpc:call(SlaveNode1, syn, registry_count, [scope_ab, node()]),
     0 = rpc:call(SlaveNode1, syn, registry_count, [scope_ab, SlaveNode1]),
@@ -347,10 +347,10 @@ three_nodes_register_unregister_and_monitor(Config) ->
     0 = rpc:call(SlaveNode1, syn, registry_count, [scope_bc, node()]),
     0 = rpc:call(SlaveNode1, syn, registry_count, [scope_bc, SlaveNode1]),
     0 = rpc:call(SlaveNode1, syn, registry_count, [scope_bc, SlaveNode2]),
-    {badrpc, {'EXIT', {{invalid_scope, scope_ab}, _}}} = catch rpc:call(SlaveNode2, syn, registry_count, [scope_ab]),
-    {badrpc, {'EXIT', {{invalid_scope, scope_ab}, _}}} = catch rpc:call(SlaveNode2, syn, registry_count, [scope_ab, node()]),
-    {badrpc, {'EXIT', {{invalid_scope, scope_ab}, _}}} = catch rpc:call(SlaveNode2, syn, registry_count, [scope_ab, SlaveNode1]),
-    {badrpc, {'EXIT', {{invalid_scope, scope_ab}, _}}} = catch rpc:call(SlaveNode2, syn, registry_count, [scope_ab, SlaveNode2]),
+    {badrpc, {'EXIT', {{invalid_scope, scope_ab}, _}}} = (catch rpc:call(SlaveNode2, syn, registry_count, [scope_ab])),
+    {badrpc, {'EXIT', {{invalid_scope, scope_ab}, _}}} = (catch rpc:call(SlaveNode2, syn, registry_count, [scope_ab, node()])),
+    {badrpc, {'EXIT', {{invalid_scope, scope_ab}, _}}} = (catch rpc:call(SlaveNode2, syn, registry_count, [scope_ab, SlaveNode1])),
+    {badrpc, {'EXIT', {{invalid_scope, scope_ab}, _}}} = (catch rpc:call(SlaveNode2, syn, registry_count, [scope_ab, SlaveNode2])),
     0 = rpc:call(SlaveNode2, syn, registry_count, [scope_bc]),
     0 = rpc:call(SlaveNode2, syn, registry_count, [scope_bc, node()]),
     0 = rpc:call(SlaveNode2, syn, registry_count, [scope_bc, SlaveNode1]),
@@ -359,17 +359,17 @@ three_nodes_register_unregister_and_monitor(Config) ->
     %% register
     ok = syn:register(scope_ab, "scope_a", Pid),
     ok = syn:register(scope_ab, "scope_a_alias", PidWithMeta, <<"with_meta">>),
-    {'EXIT', {{invalid_scope, scope_bc}, _}} = catch syn:register(scope_bc, "scope_a", Pid),
-    {'EXIT', {{invalid_scope, non_existent_scope}, _}} = catch syn:register(non_existent_scope, "scope_a", Pid),
+    {'EXIT', {{invalid_scope, scope_bc}, _}} = (catch syn:register(scope_bc, "scope_a", Pid)),
+    {'EXIT', {{invalid_scope, non_existent_scope}, _}} = (catch syn:register(non_existent_scope, "scope_a", Pid)),
     ok = rpc:call(SlaveNode2, syn, register, [scope_bc, {remote_scoped_bc}, PidRemoteWithMetaOn1, <<"with_meta 1">>]),
 
     %% errors
     {error, taken} = syn:register(scope_ab, "scope_a", PidWithMeta),
     {error, not_alive} = syn:register(scope_ab, {"pid not alive"}, list_to_pid("<0.9999.0>")),
-    {'EXIT', {{invalid_scope, scope_bc}, _}} = catch syn:register(scope_bc, "scope_a_noscope", Pid),
-    {'EXIT', {{invalid_scope, scope_bc}, _}} = catch syn:unregister(scope_bc, "scope_a_noscope"),
+    {'EXIT', {{invalid_scope, scope_bc}, _}} = (catch syn:register(scope_bc, "scope_a_noscope", Pid)),
+    {'EXIT', {{invalid_scope, scope_bc}, _}} = (catch syn:unregister(scope_bc, "scope_a_noscope")),
     LocalNode = node(),
-    {badrpc, {'EXIT', {{invalid_remote_scope, scope_bc, LocalNode}, _}}} = catch rpc:call(SlaveNode1, syn, register, [scope_bc, "pid-outside", Pid]),
+    {badrpc, {'EXIT', {{invalid_remote_scope, scope_bc, LocalNode}, _}}} = (catch rpc:call(SlaveNode1, syn, register, [scope_bc, "pid-outside", Pid])),
 
     %% retrieve
     syn_test_suite_helper:assert_wait(
@@ -380,7 +380,7 @@ three_nodes_register_unregister_and_monitor(Config) ->
         {Pid, undefined},
         fun() -> rpc:call(SlaveNode1, syn, lookup, [scope_ab, "scope_a"]) end
     ),
-    {badrpc, {'EXIT', {{invalid_scope, scope_ab}, _}}} = catch rpc:call(SlaveNode2, syn, lookup, [scope_ab, "scope_a"]),
+    {badrpc, {'EXIT', {{invalid_scope, scope_ab}, _}}} = (catch rpc:call(SlaveNode2, syn, lookup, [scope_ab, "scope_a"])),
     syn_test_suite_helper:assert_wait(
         {PidWithMeta, <<"with_meta">>},
         fun() -> syn:lookup(scope_ab, "scope_a_alias") end
@@ -389,8 +389,8 @@ three_nodes_register_unregister_and_monitor(Config) ->
         {PidWithMeta, <<"with_meta">>},
         fun() -> rpc:call(SlaveNode1, syn, lookup, [scope_ab, "scope_a_alias"]) end
     ),
-    {badrpc, {'EXIT', {{invalid_scope, scope_ab}, _}}} = catch rpc:call(SlaveNode2, syn, lookup, [scope_ab, "scope_a_alias"]),
-    {'EXIT', {{invalid_scope, scope_bc}, _}} = catch syn:lookup(scope_bc, {remote_scoped_bc}),
+    {badrpc, {'EXIT', {{invalid_scope, scope_ab}, _}}} = (catch rpc:call(SlaveNode2, syn, lookup, [scope_ab, "scope_a_alias"])),
+    {'EXIT', {{invalid_scope, scope_bc}, _}} = (catch syn:lookup(scope_bc, {remote_scoped_bc})),
     syn_test_suite_helper:assert_wait(
         {PidRemoteWithMetaOn1, <<"with_meta 1">>},
         fun() -> rpc:call(SlaveNode1, syn, lookup, [scope_bc, {remote_scoped_bc}]) end
@@ -403,10 +403,10 @@ three_nodes_register_unregister_and_monitor(Config) ->
     2 = syn:registry_count(scope_ab, node()),
     0 = syn:registry_count(scope_ab, SlaveNode1),
     0 = syn:registry_count(scope_ab, SlaveNode2),
-    {'EXIT', {{invalid_scope, scope_bc}, _}} = catch syn:registry_count(scope_bc),
-    {'EXIT', {{invalid_scope, scope_bc}, _}} = catch syn:registry_count(scope_bc, node()),
-    {'EXIT', {{invalid_scope, scope_bc}, _}} = catch syn:registry_count(scope_bc, SlaveNode1),
-    {'EXIT', {{invalid_scope, scope_bc}, _}} = catch syn:registry_count(scope_bc, SlaveNode2),
+    {'EXIT', {{invalid_scope, scope_bc}, _}} = (catch syn:registry_count(scope_bc)),
+    {'EXIT', {{invalid_scope, scope_bc}, _}} = (catch syn:registry_count(scope_bc, node())),
+    {'EXIT', {{invalid_scope, scope_bc}, _}} = (catch syn:registry_count(scope_bc, SlaveNode1)),
+    {'EXIT', {{invalid_scope, scope_bc}, _}} = (catch syn:registry_count(scope_bc, SlaveNode2)),
     2 = rpc:call(SlaveNode1, syn, registry_count, [scope_ab]),
     2 = rpc:call(SlaveNode1, syn, registry_count, [scope_ab, node()]),
     0 = rpc:call(SlaveNode1, syn, registry_count, [scope_ab, SlaveNode1]),
@@ -415,10 +415,10 @@ three_nodes_register_unregister_and_monitor(Config) ->
     0 = rpc:call(SlaveNode1, syn, registry_count, [scope_bc, node()]),
     1 = rpc:call(SlaveNode1, syn, registry_count, [scope_bc, SlaveNode1]),
     0 = rpc:call(SlaveNode1, syn, registry_count, [scope_bc, SlaveNode2]),
-    {badrpc, {'EXIT', {{invalid_scope, scope_ab}, _}}} = catch rpc:call(SlaveNode2, syn, registry_count, [scope_ab]),
-    {badrpc, {'EXIT', {{invalid_scope, scope_ab}, _}}} = catch rpc:call(SlaveNode2, syn, registry_count, [scope_ab, node()]),
-    {badrpc, {'EXIT', {{invalid_scope, scope_ab}, _}}} = catch rpc:call(SlaveNode2, syn, registry_count, [scope_ab, SlaveNode1]),
-    {badrpc, {'EXIT', {{invalid_scope, scope_ab}, _}}} = catch rpc:call(SlaveNode2, syn, registry_count, [scope_ab, SlaveNode2]),
+    {badrpc, {'EXIT', {{invalid_scope, scope_ab}, _}}} = (catch rpc:call(SlaveNode2, syn, registry_count, [scope_ab])),
+    {badrpc, {'EXIT', {{invalid_scope, scope_ab}, _}}} = (catch rpc:call(SlaveNode2, syn, registry_count, [scope_ab, node()])),
+    {badrpc, {'EXIT', {{invalid_scope, scope_ab}, _}}} = (catch rpc:call(SlaveNode2, syn, registry_count, [scope_ab, SlaveNode1])),
+    {badrpc, {'EXIT', {{invalid_scope, scope_ab}, _}}} = (catch rpc:call(SlaveNode2, syn, registry_count, [scope_ab, SlaveNode2])),
     1 = rpc:call(SlaveNode2, syn, registry_count, [scope_bc]),
     0 = rpc:call(SlaveNode2, syn, registry_count, [scope_bc, node()]),
     1 = rpc:call(SlaveNode2, syn, registry_count, [scope_bc, SlaveNode1]),
@@ -434,7 +434,7 @@ three_nodes_register_unregister_and_monitor(Config) ->
         {PidWithMeta, <<"with_meta_updated">>},
         fun() -> rpc:call(SlaveNode1, syn, lookup, [scope_ab, "scope_a_alias"]) end
     ),
-    {badrpc, {'EXIT', {{invalid_scope, scope_ab}, _}}} = catch rpc:call(SlaveNode2, syn, lookup, [scope_ab, "scope_a_alias"]),
+    {badrpc, {'EXIT', {{invalid_scope, scope_ab}, _}}} = (catch rpc:call(SlaveNode2, syn, lookup, [scope_ab, "scope_a_alias"])),
 
     %% register remote
     syn:register(scope_ab, "ab_on_1", PidRemoteWithMetaOn1, <<"ab-on-1">>),
@@ -457,8 +457,8 @@ three_nodes_register_unregister_and_monitor(Config) ->
     syn_test_suite_helper:kill_process(Pid),
     syn_test_suite_helper:kill_process(PidWithMeta),
     %% unregister processes
-    {error, undefined} = catch syn:unregister(scope_ab, <<"my proc with meta">>),
-    {'EXIT', {{invalid_scope, scope_bc}, _}} = catch syn:unregister(scope_bc, <<"my proc with meta">>),
+    {error, undefined} = (catch syn:unregister(scope_ab, <<"my proc with meta">>)),
+    {'EXIT', {{invalid_scope, scope_bc}, _}} = (catch syn:unregister(scope_bc, <<"my proc with meta">>)),
     ok = rpc:call(SlaveNode1, syn, unregister, [scope_bc, {remote_scoped_bc}]),
 
     %% retrieve
@@ -470,7 +470,7 @@ three_nodes_register_unregister_and_monitor(Config) ->
         undefined,
         fun() -> rpc:call(SlaveNode1, syn, lookup, [scope_ab, "scope_a"]) end
     ),
-    {badrpc, {'EXIT', {{invalid_scope, scope_ab}, _}}} = catch rpc:call(SlaveNode2, syn, lookup, [scope_ab, "scope_a"]),
+    {badrpc, {'EXIT', {{invalid_scope, scope_ab}, _}}} = (catch rpc:call(SlaveNode2, syn, lookup, [scope_ab, "scope_a"])),
     syn_test_suite_helper:assert_wait(
         undefined,
         fun() -> syn:lookup(scope_ab, "scope_a_alias") end
@@ -479,8 +479,8 @@ three_nodes_register_unregister_and_monitor(Config) ->
         undefined,
         fun() -> rpc:call(SlaveNode1, syn, lookup, [scope_ab, "scope_a_alias"]) end
     ),
-    {badrpc, {'EXIT', {{invalid_scope, scope_ab}, _}}} = catch rpc:call(SlaveNode2, syn, lookup, [scope_ab, "scope_a_alias"]),
-    {'EXIT', {{invalid_scope, scope_bc}, _}} = catch syn:lookup(scope_bc, {remote_scoped_bc}),
+    {badrpc, {'EXIT', {{invalid_scope, scope_ab}, _}}} = (catch rpc:call(SlaveNode2, syn, lookup, [scope_ab, "scope_a_alias"])),
+    {'EXIT', {{invalid_scope, scope_bc}, _}} = (catch syn:lookup(scope_bc, {remote_scoped_bc})),
     syn_test_suite_helper:assert_wait(
         undefined,
         fun() -> rpc:call(SlaveNode1, syn, lookup, [scope_bc, {remote_scoped_bc}]) end
@@ -493,10 +493,10 @@ three_nodes_register_unregister_and_monitor(Config) ->
     0 = syn:registry_count(scope_ab, node()),
     1 = syn:registry_count(scope_ab, SlaveNode1),
     0 = syn:registry_count(scope_ab, SlaveNode2),
-    {'EXIT', {{invalid_scope, scope_bc}, _}} = catch syn:registry_count(scope_bc),
-    {'EXIT', {{invalid_scope, scope_bc}, _}} = catch syn:registry_count(scope_bc, node()),
-    {'EXIT', {{invalid_scope, scope_bc}, _}} = catch syn:registry_count(scope_bc, SlaveNode1),
-    {'EXIT', {{invalid_scope, scope_bc}, _}} = catch syn:registry_count(scope_bc, SlaveNode2),
+    {'EXIT', {{invalid_scope, scope_bc}, _}} = (catch syn:registry_count(scope_bc)),
+    {'EXIT', {{invalid_scope, scope_bc}, _}} = (catch syn:registry_count(scope_bc, node())),
+    {'EXIT', {{invalid_scope, scope_bc}, _}} = (catch syn:registry_count(scope_bc, SlaveNode1)),
+    {'EXIT', {{invalid_scope, scope_bc}, _}} = (catch syn:registry_count(scope_bc, SlaveNode2)),
     1 = rpc:call(SlaveNode1, syn, registry_count, [scope_ab]),
     0 = rpc:call(SlaveNode1, syn, registry_count, [scope_ab, node()]),
     1 = rpc:call(SlaveNode1, syn, registry_count, [scope_ab, SlaveNode1]),
@@ -505,10 +505,10 @@ three_nodes_register_unregister_and_monitor(Config) ->
     0 = rpc:call(SlaveNode1, syn, registry_count, [scope_bc, node()]),
     0 = rpc:call(SlaveNode1, syn, registry_count, [scope_bc, SlaveNode1]),
     0 = rpc:call(SlaveNode1, syn, registry_count, [scope_bc, SlaveNode2]),
-    {badrpc, {'EXIT', {{invalid_scope, scope_ab}, _}}} = catch rpc:call(SlaveNode2, syn, registry_count, [scope_ab]),
-    {badrpc, {'EXIT', {{invalid_scope, scope_ab}, _}}} = catch rpc:call(SlaveNode2, syn, registry_count, [scope_ab, node()]),
-    {badrpc, {'EXIT', {{invalid_scope, scope_ab}, _}}} = catch rpc:call(SlaveNode2, syn, registry_count, [scope_ab, SlaveNode1]),
-    {badrpc, {'EXIT', {{invalid_scope, scope_ab}, _}}} = catch rpc:call(SlaveNode2, syn, registry_count, [scope_ab, SlaveNode2]),
+    {badrpc, {'EXIT', {{invalid_scope, scope_ab}, _}}} = (catch rpc:call(SlaveNode2, syn, registry_count, [scope_ab])),
+    {badrpc, {'EXIT', {{invalid_scope, scope_ab}, _}}} = (catch rpc:call(SlaveNode2, syn, registry_count, [scope_ab, node()])),
+    {badrpc, {'EXIT', {{invalid_scope, scope_ab}, _}}} = (catch rpc:call(SlaveNode2, syn, registry_count, [scope_ab, SlaveNode1])),
+    {badrpc, {'EXIT', {{invalid_scope, scope_ab}, _}}} = (catch rpc:call(SlaveNode2, syn, registry_count, [scope_ab, SlaveNode2])),
     0 = rpc:call(SlaveNode2, syn, registry_count, [scope_bc]),
     0 = rpc:call(SlaveNode2, syn, registry_count, [scope_bc, node()]),
     0 = rpc:call(SlaveNode2, syn, registry_count, [scope_bc, SlaveNode1]),
@@ -625,7 +625,7 @@ three_nodes_cluster_changes(Config) ->
     1 = rpc:call(SlaveNode2, syn, registry_count, [scope_all, SlaveNode1]),
     1 = rpc:call(SlaveNode2, syn, registry_count, [scope_all, SlaveNode2]),
 
-    {'EXIT', {{invalid_scope, scope_bc}, _}} = catch syn:lookup(scope_bc, "BC-proc-1"),
+    {'EXIT', {{invalid_scope, scope_bc}, _}} = (catch syn:lookup(scope_bc, "BC-proc-1")),
     syn_test_suite_helper:assert_wait(
         {PidRemoteOn1, "meta-1"},
         fun() -> rpc:call(SlaveNode1, syn, lookup, [scope_bc, "BC-proc-1"]) end
@@ -634,7 +634,7 @@ three_nodes_cluster_changes(Config) ->
         {PidRemoteOn1, "meta-1"},
         fun() -> rpc:call(SlaveNode2, syn, lookup, [scope_bc, "BC-proc-1"]) end
     ),
-    {'EXIT', {{invalid_scope, scope_bc}, _}} = catch syn:lookup(scope_bc, "BC-proc-1 alias"),
+    {'EXIT', {{invalid_scope, scope_bc}, _}} = (catch syn:lookup(scope_bc, "BC-proc-1 alias")),
     syn_test_suite_helper:assert_wait(
         {PidRemoteOn1, "meta-1 alias"},
         fun() -> rpc:call(SlaveNode1, syn, lookup, [scope_bc, "BC-proc-1 alias"]) end
@@ -643,10 +643,10 @@ three_nodes_cluster_changes(Config) ->
         {PidRemoteOn1, "meta-1 alias"},
         fun() -> rpc:call(SlaveNode2, syn, lookup, [scope_bc, "BC-proc-1 alias"]) end
     ),
-    {'EXIT', {{invalid_scope, scope_bc}, _}} = catch syn:registry_count(scope_bc),
-    {'EXIT', {{invalid_scope, scope_bc}, _}} = catch syn:registry_count(scope_bc, node()),
-    {'EXIT', {{invalid_scope, scope_bc}, _}} = catch syn:registry_count(scope_bc, SlaveNode1),
-    {'EXIT', {{invalid_scope, scope_bc}, _}} = catch syn:registry_count(scope_bc, SlaveNode2),
+    {'EXIT', {{invalid_scope, scope_bc}, _}} = (catch syn:registry_count(scope_bc)),
+    {'EXIT', {{invalid_scope, scope_bc}, _}} = (catch syn:registry_count(scope_bc, node())),
+    {'EXIT', {{invalid_scope, scope_bc}, _}} = (catch syn:registry_count(scope_bc, SlaveNode1)),
+    {'EXIT', {{invalid_scope, scope_bc}, _}} = (catch syn:registry_count(scope_bc, SlaveNode2)),
     2 = rpc:call(SlaveNode1, syn, registry_count, [scope_bc]),
     0 = rpc:call(SlaveNode1, syn, registry_count, [scope_bc, node()]),
     2 = rpc:call(SlaveNode1, syn, registry_count, [scope_bc, SlaveNode1]),
@@ -700,7 +700,7 @@ three_nodes_cluster_changes(Config) ->
     0 = rpc:call(SlaveNode2, syn, registry_count, [scope_all, SlaveNode1]),
     1 = rpc:call(SlaveNode2, syn, registry_count, [scope_all, SlaveNode2]),
 
-    {'EXIT', {{invalid_scope, scope_bc}, _}} = catch syn:lookup(scope_bc, "BC-proc-1"),
+    {'EXIT', {{invalid_scope, scope_bc}, _}} = (catch syn:lookup(scope_bc, "BC-proc-1")),
     syn_test_suite_helper:assert_wait(
         {PidRemoteOn1, "meta-1"},
         fun() -> rpc:call(SlaveNode1, syn, lookup, [scope_bc, "BC-proc-1"]) end
@@ -709,7 +709,7 @@ three_nodes_cluster_changes(Config) ->
         undefined,
         fun() -> rpc:call(SlaveNode2, syn, lookup, [scope_bc, "BC-proc-1"]) end
     ),
-    {'EXIT', {{invalid_scope, scope_bc}, _}} = catch syn:lookup(scope_bc, "BC-proc-1 alias"),
+    {'EXIT', {{invalid_scope, scope_bc}, _}} = (catch syn:lookup(scope_bc, "BC-proc-1 alias")),
     syn_test_suite_helper:assert_wait(
         {PidRemoteOn1, "meta-1 alias"},
         fun() -> rpc:call(SlaveNode1, syn, lookup, [scope_bc, "BC-proc-1 alias"]) end
@@ -718,7 +718,7 @@ three_nodes_cluster_changes(Config) ->
         undefined,
         fun() -> rpc:call(SlaveNode2, syn, lookup, [scope_bc, "BC-proc-1 alias"]) end
     ),
-    {'EXIT', {{invalid_scope, scope_bc}, _}} = catch syn:registry_count(scope_bc),
+    {'EXIT', {{invalid_scope, scope_bc}, _}} = (catch syn:registry_count(scope_bc)),
     2 = rpc:call(SlaveNode1, syn, registry_count, [scope_bc]),
     0 = rpc:call(SlaveNode1, syn, registry_count, [scope_bc, node()]),
     2 = rpc:call(SlaveNode1, syn, registry_count, [scope_bc, SlaveNode1]),
@@ -772,7 +772,7 @@ three_nodes_cluster_changes(Config) ->
     1 = rpc:call(SlaveNode2, syn, registry_count, [scope_all, SlaveNode1]),
     1 = rpc:call(SlaveNode2, syn, registry_count, [scope_all, SlaveNode2]),
 
-    {'EXIT', {{invalid_scope, scope_bc}, _}} = catch syn:lookup(scope_bc, "BC-proc-1"),
+    {'EXIT', {{invalid_scope, scope_bc}, _}} = (catch syn:lookup(scope_bc, "BC-proc-1")),
     syn_test_suite_helper:assert_wait(
         {PidRemoteOn1, "meta-1"},
         fun() -> rpc:call(SlaveNode1, syn, lookup, [scope_bc, "BC-proc-1"]) end
@@ -781,7 +781,7 @@ three_nodes_cluster_changes(Config) ->
         {PidRemoteOn1, "meta-1"},
         fun() -> rpc:call(SlaveNode2, syn, lookup, [scope_bc, "BC-proc-1"]) end
     ),
-    {'EXIT', {{invalid_scope, scope_bc}, _}} = catch syn:lookup(scope_bc, "BC-proc-1 alias"),
+    {'EXIT', {{invalid_scope, scope_bc}, _}} = (catch syn:lookup(scope_bc, "BC-proc-1 alias")),
     syn_test_suite_helper:assert_wait(
         {PidRemoteOn1, "meta-1 alias"},
         fun() -> rpc:call(SlaveNode1, syn, lookup, [scope_bc, "BC-proc-1 alias"]) end
@@ -790,7 +790,7 @@ three_nodes_cluster_changes(Config) ->
         {PidRemoteOn1, "meta-1 alias"},
         fun() -> rpc:call(SlaveNode2, syn, lookup, [scope_bc, "BC-proc-1 alias"]) end
     ),
-    {'EXIT', {{invalid_scope, scope_bc}, _}} = catch syn:registry_count(scope_bc),
+    {'EXIT', {{invalid_scope, scope_bc}, _}} = (catch syn:registry_count(scope_bc)),
     2 = rpc:call(SlaveNode1, syn, registry_count, [scope_bc]),
     0 = rpc:call(SlaveNode1, syn, registry_count, [scope_bc, node()]),
     2 = rpc:call(SlaveNode1, syn, registry_count, [scope_bc, SlaveNode1]),
