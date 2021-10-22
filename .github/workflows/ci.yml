@@ -1,10 +1,10 @@
 on:
   pull_request:
     branches:
-      - "main"
+      - "master"
   push:
     branches:
-      - "main"
+      - "master"
 
 jobs:
   test:
@@ -12,7 +12,7 @@ jobs:
     name: Tests on ${{matrix.otp}}
     strategy:
       matrix:
-        otp: ['24.1']
+        otp: ['24.1', '23.3', '22.3', '21.3', '20.3']
     steps:
       - uses: actions/checkout@v2
       - uses: erlef/setup-beam@v1
