@@ -1,4 +1,4 @@
-![example workflow](https://github.com/ostinelli/syn/actions/workflows/ci/badge.svg)
+![CI](https://github.com/ostinelli/syn/actions/workflows/ci.yml/badge.svg)
 
 # Syn
 **Syn** (short for _synonym_) is a scalable global Process Registry and Process Group manager for Erlang and Elixir.
