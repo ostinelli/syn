@@ -81,9 +81,9 @@
     {ok, Pid :: pid()} | {error, {already_started, Pid :: pid()}} | {error, Reason :: term()}.
 start_link(Handler, Scope) when is_atom(Scope) ->
     %% build name
-    HandlerBin = atom_to_binary(Handler),
-    ScopeBin = atom_to_binary(Scope),
-    ProcessName = binary_to_atom(<<HandlerBin/binary, "_", ScopeBin/binary>>),
+    HandlerBin = list_to_binary(atom_to_list(Handler)),
+    ScopeBin = list_to_binary(atom_to_list(Scope)),
+    ProcessName = list_to_atom(binary_to_list(<<HandlerBin/binary, "_", ScopeBin/binary>>)),
     %% save to lookup table
     syn_backbone:save_process_name({Handler, Scope}, ProcessName),
     %% create process
@@ -143,9 +143,9 @@ init([Handler, Scope, ProcessName]) ->
     %% start multicast process
     MulticastPid = spawn_link(?MODULE, multicast_loop, []),
     %% table names
-    HandlerBin = atom_to_binary(Handler),
-    TableByName = syn_backbone:get_table_name(binary_to_atom(<<HandlerBin/binary, "_by_name">>), Scope),
-    TableByPid = syn_backbone:get_table_name(binary_to_atom(<<HandlerBin/binary, "_by_pid">>), Scope),
+    HandlerBin = list_to_binary(atom_to_list(Handler)),
+    TableByName = syn_backbone:get_table_name(list_to_atom(binary_to_list(<<HandlerBin/binary, "_by_name">>)), Scope),
+    TableByPid = syn_backbone:get_table_name(list_to_atom(binary_to_list(<<HandlerBin/binary, "_by_pid">>)), Scope),
     %% build state
     State = #state{
         handler = Handler,

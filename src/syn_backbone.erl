@@ -35,6 +35,12 @@
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
+- if (?OTP_RELEASE >= 23).
+-define(ETS_OPTIMIZATIONS, [{decentralized_counters, true}]).
+-else.
+-define(ETS_OPTIMIZATIONS, []).
+-endif.
+
 %% includes
 -include("syn.hrl").
 
@@ -82,8 +88,8 @@ get_table_name(TableId, Scope) ->
     {stop, Reason :: term()}.
 init([]) ->
     %% create table names table
-    ets:new(syn_table_names, [set, public, named_table, {read_concurrency, true}, {decentralized_counters, true}]),
-    ets:new(syn_process_names, [set, public, named_table, {read_concurrency, true}, {decentralized_counters, true}]),
+    ets:new(syn_table_names, [set, public, named_table, {read_concurrency, true}] ++ ?ETS_OPTIMIZATIONS),
+    ets:new(syn_process_names, [set, public, named_table, {read_concurrency, true}] ++ ?ETS_OPTIMIZATIONS),
     %% init
     {ok, #{}}.
 
@@ -150,23 +156,19 @@ code_change(_OldVsn, State, _Extra) ->
 %% ===================================================================
 %% Internal
 %% ===================================================================
--spec ensure_table_existence(Type :: ets:type(), TableId :: atom(), Scope :: atom()) -> ok.
+-spec ensure_table_existence(Type :: ets:type(), TableId :: atom(), Scope :: atom()) -> any().
 ensure_table_existence(Type, TableId, Scope) ->
     %% build name
-    TableIdBin = atom_to_binary(TableId),
-    ScopeBin = atom_to_binary(Scope),
-    TableName = binary_to_atom(<<TableIdBin/binary, "_", ScopeBin/binary>>),
+    TableIdBin = list_to_binary(atom_to_list(TableId)),
+    ScopeBin = list_to_binary(atom_to_list(Scope)),
+    TableName = list_to_atom(binary_to_list(<<TableIdBin/binary, "_", ScopeBin/binary>>)),
     %% save to loopkup table
     true = ets:insert(syn_table_names, {{TableId, Scope}, TableName}),
     %% check or create
     case ets:whereis(TableName) of
         undefined ->
             %% regarding decentralized_counters: <https://blog.erlang.org/scalable-ets-counters/>
-            ets:new(TableName, [
-                Type, public, named_table,
-                {read_concurrency, true}, {decentralized_counters, true}
-            ]),
-            ok;
+            ets:new(TableName, [Type, public, named_table, {read_concurrency, true}] ++ ?ETS_OPTIMIZATIONS);
 
         _ ->
             ok

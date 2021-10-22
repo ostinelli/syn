@@ -72,7 +72,7 @@ start() ->
     NodesInfo = lists:foldl(fun(I, Acc) ->
         %% start slave
         CountBin = integer_to_binary(I),
-        NodeShortName = binary_to_atom(<<"slave_", CountBin/binary>>),
+        NodeShortName = list_to_atom(binary_to_list(<<"slave_", CountBin/binary>>)),
         {ok, Node} = ct_slave:start(NodeShortName, [
             {boot_timeout, 10},
             {monitor_master, true}

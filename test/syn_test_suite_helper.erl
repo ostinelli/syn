@@ -55,7 +55,7 @@ init_cluster(NodesCount) ->
     SlavesCount = NodesCount - 1,
     {Nodes, NodesConfig} = lists:foldl(fun(I, {AccNodes, AccNodesConfig}) ->
         IBin = integer_to_binary(I),
-        NodeShortName = binary_to_atom(<<"syn_slave_", IBin/binary>>),
+        NodeShortName = list_to_atom(binary_to_list(<<"syn_slave_", IBin/binary>>)),
         {ok, SlaveNode} = start_slave(NodeShortName),
         %% connect
         lists:foreach(fun(N) ->
@@ -83,7 +83,7 @@ end_cluster(NodesCount, Config) ->
     %% shutdown
     lists:foreach(fun(I) ->
         IBin = integer_to_binary(I),
-        NodeShortName = binary_to_atom(<<"syn_slave_", IBin/binary>>),
+        NodeShortName = list_to_atom(binary_to_list(<<"syn_slave_", IBin/binary>>)),
         SlaveNode = proplists:get_value(NodeShortName, Config),
         connect_node(SlaveNode),
         stop_slave(NodeShortName)
