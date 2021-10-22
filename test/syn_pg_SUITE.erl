@@ -1673,10 +1673,12 @@ four_nodes_concurrency(Config) ->
             %% loop
             RandomMeta = rand:uniform(99999),
             ok = syn:join(scope_all, <<"concurrent-scope">>, Pid, RandomMeta),
+            %% random leave
             case rand:uniform(5) of
                 1 -> syn:leave(scope_all, <<"concurrent-scope">>, Pid);
                 _ -> ok
             end,
+            %% random sleep
             RndTime = rand:uniform(30),
             timer:sleep(RndTime)
         end, lists:seq(1, Iterations)),

@@ -1488,6 +1488,12 @@ four_nodes_concurrency(Config) ->
                             syn:register(scope_all, <<"concurrent">>, Pid, RandomMeta)
                     end
             end,
+            %% random kill
+            case rand:uniform(10) of
+                1 -> exit(Pid, kill);
+                _ -> ok
+            end,
+            %% random sleep
             RndTime = rand:uniform(30),
             timer:sleep(RndTime)
         end, lists:seq(1, Iterations)),
