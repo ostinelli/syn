@@ -54,6 +54,11 @@
 %% internal
 -export([multi_call_and_receive/5]).
 
+%% tests
+-ifdef(TEST).
+-export([add_to_local_table/7]).
+-endif.
+
 %% includes
 -include("syn.hrl").
 

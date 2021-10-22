@@ -38,7 +38,7 @@
 -export([assert_cluster/2]).
 -export([assert_registry_scope_subcluster/3, assert_pg_scope_subcluster/3]).
 -export([assert_received_messages/1]).
--export([assert_empty_queue/1]).
+-export([assert_empty_queue/0]).
 -export([assert_wait/2]).
 -export([send_error_logger_to_disk/0]).
 
@@ -46,7 +46,8 @@
 -export([process_main/0]).
 
 %% macro
--define(TIMEOUT, 5000).
+-define(DEFAULT_WAIT_TIMEOUT, 5000).
+-define(UNEXPECTED_MESSAGES_WAIT_TIMEOUT, 1000).
 
 %% ===================================================================
 %% API
@@ -123,7 +124,9 @@ clean_after_test() ->
         %% close syn
         rpc:call(Node, application, stop, [syn]),
         %% clean env
-        rpc:call(Node, application, unset_env, [syn, event_handler])
+        rpc:call(Node, application, unset_env, [syn, event_handler]),
+        %% messages
+        flush_inbox()
     end, Nodes).
 
 start_process() ->
@@ -151,7 +154,7 @@ kill_process(Pid) when is_pid(Pid) ->
             exit(Pid, kill),
             receive
                 {'DOWN', MRef, process, Pid, _Reason} -> ok
-            after ?TIMEOUT ->
+            after ?DEFAULT_WAIT_TIMEOUT ->
                 ct:fail("~n\tCould not kill process ~p~n", [Pid])
             end;
 
@@ -173,7 +176,7 @@ wait_cluster_mesh_connected(Nodes, StartAt) ->
             ok;
 
         false ->
-            case os:system_time(millisecond) - StartAt > ?TIMEOUT of
+            case os:system_time(millisecond) - StartAt > ?DEFAULT_WAIT_TIMEOUT of
                 true ->
                     {error, {could_not_init_cluster, Nodes}};
 
@@ -189,7 +192,7 @@ wait_process_name_ready(Name, StartAt) ->
     timer:sleep(50),
     case whereis(Name) of
         undefined ->
-            case os:system_time(millisecond) - StartAt > ?TIMEOUT of
+            case os:system_time(millisecond) - StartAt > ?DEFAULT_WAIT_TIMEOUT of
                 true ->
                     ct:fail("~n\tProcess with name ~p didn't come alive~n", [Name]);
 
@@ -204,7 +207,7 @@ wait_process_name_ready(Name, StartAt) ->
                     ok;
 
                 Other ->
-                    case os:system_time(millisecond) - StartAt > ?TIMEOUT of
+                    case os:system_time(millisecond) - StartAt > ?DEFAULT_WAIT_TIMEOUT of
                         true ->
                             ct:fail("~n\tProcess with name ~p didn't come ready~n\tStatus: ~p~n", [Name, Other]);
 
@@ -242,7 +245,7 @@ assert_pg_scope_subcluster(Node, Scope, ExpectedNodes) ->
 assert_received_messages(Messages) ->
     assert_received_messages(Messages, []).
 assert_received_messages([], UnexpectedMessages) ->
-    do_assert_received_messages([], UnexpectedMessages);
+    assert_received_messages_wait([], UnexpectedMessages);
 assert_received_messages(Messages, UnexpectedMessages) ->
     receive
         Message ->
@@ -254,18 +257,36 @@ assert_received_messages(Messages, UnexpectedMessages) ->
                 false ->
                     assert_received_messages(Messages, [Message | UnexpectedMessages])
             end
-    after ?TIMEOUT ->
-        do_assert_received_messages(Messages, UnexpectedMessages)
+    after ?DEFAULT_WAIT_TIMEOUT ->
+        assert_received_messages_evaluate(Messages, UnexpectedMessages)
     end.
 
-assert_empty_queue(Pid) when is_pid(Pid) ->
-    case process_info(Pid, message_queue_len) of
-        {message_queue_len, 0} ->
-            ok;
+assert_received_messages_wait(MissingMessages, UnexpectedMessages) ->
+    receive
+        Message ->
+            assert_received_messages_wait(MissingMessages, [Message | UnexpectedMessages])
+    after ?UNEXPECTED_MESSAGES_WAIT_TIMEOUT ->
+        assert_received_messages_evaluate(MissingMessages, UnexpectedMessages)
+    end.
 
-        _ ->
-            {messages, Messages} = process_info(Pid, messages),
-            ct:fail("~n\tMessage queue was not empty, got:~n\t~p~n", [Messages])
+assert_received_messages_evaluate([], []) ->
+    ok;
+assert_received_messages_evaluate(MissingMessages, UnexpectedMessages) ->
+    ct:fail("~n\tReceive messages error (line ~p)~n\tMissing: ~p~n\tUnexpected: ~p~n",
+        [get_line_from_stacktrace(), lists:reverse(MissingMessages), lists:reverse(UnexpectedMessages)]
+    ).
+
+assert_empty_queue() ->
+    assert_empty_queue([]).
+assert_empty_queue(UnexpectedMessages) ->
+    receive
+        Message ->
+            assert_empty_queue([Message | UnexpectedMessages])
+    after ?UNEXPECTED_MESSAGES_WAIT_TIMEOUT ->
+        case UnexpectedMessages of
+            [] -> ok;
+            _ -> ct:fail("~n\tMessage queue was not empty, got:~n\t~p~n", [UnexpectedMessages])
+        end
     end.
 
 assert_wait(ExpectedResult, Fun) ->
@@ -276,7 +297,7 @@ assert_wait(ExpectedResult, Fun, StartAt) ->
             ok;
 
         Result ->
-            case os:system_time(millisecond) - StartAt > ?TIMEOUT of
+            case os:system_time(millisecond) - StartAt > ?DEFAULT_WAIT_TIMEOUT of
                 true ->
                     ct:fail("~n\tExpected: ~p~n\tActual: ~p~n", [ExpectedResult, Result]);
 
@@ -318,7 +339,7 @@ do_assert_cluster(Nodes, ExpectedNodes, StartAt) ->
                     ok;
 
                 _ ->
-                    case os:system_time(millisecond) - StartAt > ?TIMEOUT of
+                    case os:system_time(millisecond) - StartAt > ?DEFAULT_WAIT_TIMEOUT of
                         true ->
                             ct:fail("~n\tInvalid subcluster~n\tExpected: ~p~n\tActual: ~p~n\tLine: ~p~n",
                                 [ExpectedNodes, Nodes, get_line_from_stacktrace()]
@@ -331,7 +352,7 @@ do_assert_cluster(Nodes, ExpectedNodes, StartAt) ->
             end;
 
         _ ->
-            case os:system_time(millisecond) - StartAt > ?TIMEOUT of
+            case os:system_time(millisecond) - StartAt > ?DEFAULT_WAIT_TIMEOUT of
                 true ->
                     ct:fail("~n\tInvalid subcluster~n\tExpected: ~p~n\tActual: ~p~n\tLine: ~p~n",
                         [ExpectedNodes, Nodes, get_line_from_stacktrace()]
@@ -342,13 +363,6 @@ do_assert_cluster(Nodes, ExpectedNodes, StartAt) ->
                     continue
             end
     end.
-
-do_assert_received_messages([], []) ->
-    ok;
-do_assert_received_messages(MissingMessages, UnexpectedMessages) ->
-    ct:fail("~n\tReceive messages error~n\tMissing: ~p~n\tUnexpected: ~p~n",
-        [lists:reverse(MissingMessages), lists:reverse(UnexpectedMessages)]
-    ).
 
 flush_inbox() ->
     receive

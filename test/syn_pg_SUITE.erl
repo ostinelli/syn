@@ -1110,7 +1110,6 @@ three_nodes_custom_event_handler_joined_left(Config) ->
         {on_process_joined, SlaveNode1, scope_all, "my-group", Pid, <<"meta">>, normal},
         {on_process_joined, SlaveNode2, scope_all, "my-group", Pid, <<"meta">>, normal}
     ]),
-    syn_test_suite_helper:assert_empty_queue(self()),
 
     %% join from another node
     ok = rpc:call(SlaveNode1, syn, join, [scope_all, "my-group", Pid2, {recipient, self(), <<"meta-for-2">>}]),
@@ -1121,7 +1120,6 @@ three_nodes_custom_event_handler_joined_left(Config) ->
         {on_process_joined, SlaveNode1, scope_all, "my-group", Pid2, <<"meta-for-2">>, normal},
         {on_process_joined, SlaveNode2, scope_all, "my-group", Pid2, <<"meta-for-2">>, normal}
     ]),
-    syn_test_suite_helper:assert_empty_queue(self()),
 
     %% ---> on meta update
     ok = syn:join(scope_all, "my-group", Pid, {recipient, self(), <<"new-meta-0">>}),
@@ -1132,7 +1130,6 @@ three_nodes_custom_event_handler_joined_left(Config) ->
         {on_group_process_updated, SlaveNode1, scope_all, "my-group", Pid, <<"new-meta-0">>, normal},
         {on_group_process_updated, SlaveNode2, scope_all, "my-group", Pid, <<"new-meta-0">>, normal}
     ]),
-    syn_test_suite_helper:assert_empty_queue(self()),
 
     %% update meta from another node
     ok = rpc:call(SlaveNode1, syn, join, [scope_all, "my-group", Pid, {recipient, self(), <<"new-meta">>}]),
@@ -1143,7 +1140,6 @@ three_nodes_custom_event_handler_joined_left(Config) ->
         {on_group_process_updated, SlaveNode1, scope_all, "my-group", Pid, <<"new-meta">>, normal},
         {on_group_process_updated, SlaveNode2, scope_all, "my-group", Pid, <<"new-meta">>, normal}
     ]),
-    syn_test_suite_helper:assert_empty_queue(self()),
 
     %% ---> on left
     ok = syn:leave(scope_all, "my-group", Pid),
@@ -1154,7 +1150,6 @@ three_nodes_custom_event_handler_joined_left(Config) ->
         {on_process_left, SlaveNode1, scope_all, "my-group", Pid, <<"new-meta">>, normal},
         {on_process_left, SlaveNode2, scope_all, "my-group", Pid, <<"new-meta">>, normal}
     ]),
-    syn_test_suite_helper:assert_empty_queue(self()),
 
     %% leave from another node
     ok = rpc:call(SlaveNode1, syn, leave, [scope_all, "my-group", Pid2]),
@@ -1165,11 +1160,10 @@ three_nodes_custom_event_handler_joined_left(Config) ->
         {on_process_left, SlaveNode1, scope_all, "my-group", Pid2, <<"meta-for-2">>, normal},
         {on_process_left, SlaveNode2, scope_all, "my-group", Pid2, <<"meta-for-2">>, normal}
     ]),
-    syn_test_suite_helper:assert_empty_queue(self()),
 
     %% clean & check (no callbacks since process has left)
     syn_test_suite_helper:kill_process(Pid),
-    syn_test_suite_helper:assert_empty_queue(self()),
+    syn_test_suite_helper:assert_empty_queue(),
 
     %% ---> after a netsplit
     PidRemoteOn1 = syn_test_suite_helper:start_process(SlaveNode1),
@@ -1181,7 +1175,6 @@ three_nodes_custom_event_handler_joined_left(Config) ->
         {on_process_joined, SlaveNode1, scope_all, remote_on_1, PidRemoteOn1, <<"netsplit">>, normal},
         {on_process_joined, SlaveNode2, scope_all, remote_on_1, PidRemoteOn1, <<"netsplit">>, normal}
     ]),
-    syn_test_suite_helper:assert_empty_queue(self()),
 
     %% partial netsplit (1 cannot see 2)
     rpc:call(SlaveNode1, syn_test_suite_helper, disconnect_node, [SlaveNode2]),
@@ -1193,7 +1186,6 @@ three_nodes_custom_event_handler_joined_left(Config) ->
     syn_test_suite_helper:assert_received_messages([
         {on_process_left, SlaveNode2, scope_all, remote_on_1, PidRemoteOn1, <<"netsplit">>, {syn_remote_scope_node_down, scope_all, SlaveNode1}}
     ]),
-    syn_test_suite_helper:assert_empty_queue(self()),
 
     %% ---> after a re-join
     %% re-join
@@ -1206,7 +1198,6 @@ three_nodes_custom_event_handler_joined_left(Config) ->
     syn_test_suite_helper:assert_received_messages([
         {on_process_joined, SlaveNode2, scope_all, remote_on_1, PidRemoteOn1, <<"netsplit">>, {syn_remote_scope_node_up, scope_all, SlaveNode1}}
     ]),
-    syn_test_suite_helper:assert_empty_queue(self()),
 
     %% clean
     syn_test_suite_helper:kill_process(PidRemoteOn1),
@@ -1217,7 +1208,6 @@ three_nodes_custom_event_handler_joined_left(Config) ->
         {on_process_left, SlaveNode1, scope_all, remote_on_1, PidRemoteOn1, <<"netsplit">>, killed},
         {on_process_left, SlaveNode2, scope_all, remote_on_1, PidRemoteOn1, <<"netsplit">>, killed}
     ]),
-    syn_test_suite_helper:assert_empty_queue(self()),
 
     %% ---> don't call on monitor rebuild
     %% crash the scope process on local
@@ -1225,10 +1215,7 @@ three_nodes_custom_event_handler_joined_left(Config) ->
     syn_test_suite_helper:wait_process_name_ready(syn_pg_scope_all),
 
     %% no messages
-    syn_test_suite_helper:assert_wait(
-        ok,
-        fun() -> syn_test_suite_helper:assert_empty_queue(self()) end
-    ),
+    syn_test_suite_helper:assert_empty_queue(),
 
     %% ---> call if process died during the scope process crash
     TransientPid = syn_test_suite_helper:start_process(),
@@ -1240,19 +1227,20 @@ three_nodes_custom_event_handler_joined_left(Config) ->
         {on_process_joined, SlaveNode1, scope_all, "transient-group", TransientPid, "transient-meta", normal},
         {on_process_joined, SlaveNode2, scope_all, "transient-group", TransientPid, "transient-meta", normal}
     ]),
-    syn_test_suite_helper:assert_empty_queue(self()),
 
-    %% crash the scope process & transient process on local
+    %% crash the scope process & fake a died process on local
+    InvalidPid = list_to_pid("<0.9999.0>"),
+    add_to_local_table(scope_all, "invalid-group", InvalidPid, {recipient, self(), "invalid-meta"}, 0, undefined),
     syn_test_suite_helper:kill_process(syn_pg_scope_all),
-    syn_test_suite_helper:kill_process(TransientPid),
 
     %% check callbacks called
     syn_test_suite_helper:assert_received_messages([
-        {on_process_left, LocalNode, scope_all, "transient-group", TransientPid, "transient-meta", undefined},
+        {on_process_left, LocalNode, scope_all, "invalid-group", InvalidPid, "invalid-meta", undefined},
         {on_process_left, SlaveNode1, scope_all, "transient-group", TransientPid, "transient-meta", {syn_remote_scope_node_down, scope_all, LocalNode}},
-        {on_process_left, SlaveNode2, scope_all, "transient-group", TransientPid, "transient-meta", {syn_remote_scope_node_down, scope_all, LocalNode}}
-    ]),
-    syn_test_suite_helper:assert_empty_queue(self()).
+        {on_process_left, SlaveNode2, scope_all, "transient-group", TransientPid, "transient-meta", {syn_remote_scope_node_down, scope_all, LocalNode}},
+        {on_process_joined, SlaveNode1, scope_all, "transient-group", TransientPid, "transient-meta", {syn_remote_scope_node_up, scope_all, LocalNode}},
+        {on_process_joined, SlaveNode2, scope_all, "transient-group", TransientPid, "transient-meta", {syn_remote_scope_node_up, scope_all, LocalNode}}
+    ]).
 
 three_nodes_publish(Config) ->
     %% get slaves
@@ -1293,7 +1281,6 @@ three_nodes_publish(Config) ->
         {done, Pid},
         {done, PidRemoteOn1}
     ]),
-    syn_test_suite_helper:assert_empty_queue(self()),
 
     %% errors
     {'EXIT', {{invalid_scope, scope_bc}, _}} = (catch syn:publish(scope_bc, <<"subscribers">>, TestMessage)),
@@ -1305,11 +1292,11 @@ three_nodes_publish(Config) ->
         {done, PidRemoteOn1},
         {done, PidRemoteOn2}
     ]),
-    syn_test_suite_helper:assert_empty_queue(self()),
 
     %% non-existant
     {ok, 0} = syn:publish(scope_ab, <<"non-existant">>, TestMessage),
-    syn_test_suite_helper:assert_empty_queue(self()),
+    %% no messages
+    syn_test_suite_helper:assert_empty_queue(),
 
     %% ---> publish local
     {ok, 1} = syn:local_publish(scope_ab, <<"subscribers">>, test_message),
@@ -1317,11 +1304,11 @@ three_nodes_publish(Config) ->
     syn_test_suite_helper:assert_received_messages([
         {done, Pid}
     ]),
-    syn_test_suite_helper:assert_empty_queue(self()),
 
     %% non-existant
     {ok, 0} = syn:local_publish(scope_ab, <<"non-existant">>, TestMessage),
-    syn_test_suite_helper:assert_empty_queue(self()).
+    %% no messages
+    syn_test_suite_helper:assert_empty_queue().
 
 three_nodes_multi_call(Config) ->
     %% get slaves
@@ -1717,6 +1704,11 @@ four_nodes_concurrency(Config) ->
 %% ===================================================================
 %% Internal
 %% ===================================================================
+add_to_local_table(Scope, GroupName, Pid, Meta, Time, MRef) ->
+    TableByName = syn_backbone:get_table_name(syn_pg_by_name, Scope),
+    TableByPid = syn_backbone:get_table_name(syn_pg_by_pid, Scope),
+    syn_pg:add_to_local_table(GroupName, Pid, Meta, Time, MRef, TableByName, TableByPid).
+
 subscriber_loop(TestPid, TestMessage) ->
     receive
         TestMessage ->
