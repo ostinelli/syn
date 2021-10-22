@@ -31,8 +31,9 @@ the following happens:
       * `syn_pg_by_pid_users` (of type `ordered_set`).
     
       These tables are owned by the `syn_backbone` process, so that if the related scope processes were to crash the data is not lost.
-      In such case, upon respawn the scope process purges the data of all remote nodes, then rebuilds the monitors
-      for the local processes that are still alive and removes from the tables the ones that meanwhile died.
+      In such case, upon respawn the scope process purges the data of all remote nodes, rebuilds the monitors
+      for the local processes that are still alive and removes from the tables the ones that died meanwhile.
+      The remote data will then get synchronized again.
   * The 2 newly created scope processes each join a subcluster (one for registry, one for process groups)
   with the other processes in the Erlang distributed cluster that handle the same Scope (which have the same name).
 
