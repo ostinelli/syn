@@ -55,7 +55,7 @@
 %% ```
 %% iex> :syn.add_node_to_scopes([:users])
 %% :ok
-%% iex> pid = self().
+%% iex> pid = self()
 %% #PID<0.105.0>
 %% iex> :syn.register(:users, "hedy", pid)
 %% :ok
@@ -90,11 +90,11 @@
 %% ```
 %% iex> :syn.add_node_to_scopes([:users])
 %% :ok
-%% iex> pid = self().
+%% iex> pid = self()
 %% #PID<0.88.0>
 %% iex> :syn.join(:users, {:italy, :lombardy}, pid)
 %% :ok
-%% iex> :syn.members(:users, {:italy, :lombardy}).
+%% iex> :syn.members(:users, {:italy, :lombardy})
 %% [#PID<0.88.0>,:undefined}]
 %% iex> :syn.is_member(:users, {:italy, :lombardy}, pid)
 %% true
@@ -199,7 +199,7 @@ node_scopes() ->
 %% <h2>Examples</h2>
 %% <h3>Elixir</h3>
 %% ```
-%% iex> :syn.add_node_to_scopes([:devices]).
+%% iex> :syn.add_node_to_scopes([:devices])
 %% :ok
 %% '''
 %% <h3>Erlang</h3>
@@ -320,7 +320,7 @@ register(Scope, Name, Pid) ->
 %% {:via, :syn, {:devices, "SN-123-456789"}}
 %% iex> GenServer.start_link(__MODULE__, [], name: tuple)
 %% {ok, #PID<0.105.0>}
-%% iex> GenServer.call(tuple, :your_message).
+%% iex> GenServer.call(tuple, :your_message)
 %% :your_message
 %% '''
 %% <h3>Erlang</h3>
@@ -423,9 +423,9 @@ send({Scope, Name}, Message) ->
 %% <h2>Examples</h2>
 %% <h3>Elixir</h3>
 %% ```
-%% iex> :syn.join(:devices, "area-1").
+%% iex> :syn.join(:devices, "area-1")
 %% :ok
-%% iex> :syn.members(:devices, "area-1").
+%% iex> :syn.members(:devices, "area-1")
 %% [{#PID<0.105.0>, :undefined}]
 %% '''
 %% <h3>Erlang</h3>
@@ -474,7 +474,7 @@ join(Scope, GroupName, Pid) ->
 %% <h2>Examples</h2>
 %% <h3>Elixir</h3>
 %% ```
-%% iex> :syn.join(:devices, "area-1", self(), [meta: :one]).
+%% iex> :syn.join(:devices, "area-1", self(), [meta: :one])
 %% :ok
 %% '''
 %% <h3>Erlang</h3>
