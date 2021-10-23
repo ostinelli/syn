@@ -81,6 +81,8 @@ init_cluster(NodesCount) ->
 
 end_cluster(NodesCount, Config) ->
     SlavesCount = NodesCount - 1,
+    %% clean
+    clean_after_test(),
     %% shutdown
     lists:foreach(fun(I) ->
         IBin = integer_to_binary(I),
@@ -89,8 +91,6 @@ end_cluster(NodesCount, Config) ->
         connect_node(SlaveNode),
         stop_slave(NodeShortName)
     end, lists:seq(1, SlavesCount)),
-    %% clean
-    clean_after_test(),
     %% wait
     timer:sleep(1000).
 
