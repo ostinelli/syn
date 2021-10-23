@@ -220,6 +220,9 @@ three_nodes_discover(Config) ->
     SlaveNode1 = proplists:get_value(syn_slave_1, Config),
     SlaveNode2 = proplists:get_value(syn_slave_2, Config),
 
+    %% add scopes partially with ENV
+    ok = rpc:call(SlaveNode2, application, set_env, [syn, scopes, [scope_all]]),
+
     %% start syn on nodes
     ok = syn:start(),
     ok = rpc:call(SlaveNode1, syn, start, []),
@@ -229,7 +232,7 @@ three_nodes_discover(Config) ->
     ok = syn:add_node_to_scopes([scope_ab]),
     ok = syn:add_node_to_scopes([scope_all]),
     ok = rpc:call(SlaveNode1, syn, add_node_to_scopes, [[scope_ab, scope_bc, scope_all]]),
-    ok = rpc:call(SlaveNode2, syn, add_node_to_scopes, [[scope_bc, scope_c, scope_all]]),
+    ok = rpc:call(SlaveNode2, syn, add_node_to_scopes, [[scope_bc, scope_c]]),
 
     %% subcluster_nodes should return invalid errors
     {'EXIT', {{invalid_scope, custom_abcdef}, _}} = (catch syn_registry:subcluster_nodes(custom_abcdef)),
@@ -909,9 +912,10 @@ three_nodes_cluster_conflicts(Config) ->
     syn_test_suite_helper:assert_wait(
         {PidOnMaster, "meta-1"},
         fun() -> rpc:call(SlaveNode2, syn, lookup, [scope_all, <<"my proc">>]) end
-    ).
+    ),
     %% NB: we can't check for process alive here because we injected the conflicting process in the DB
     %% -> it's not actually monitored
+    ok.
 
 three_nodes_custom_event_handler_reg_unreg(Config) ->
     %% get slaves
