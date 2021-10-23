@@ -23,6 +23,7 @@
 %% OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 %% THE SOFTWARE.
 %% ==========================================================================================================
+%% @private
 -module(syn_pg).
 -behaviour(syn_gen_scope).
 
