@@ -25,7 +25,7 @@
 %% ==========================================================================================================
 
 %% ===================================================================
-%% @doc `syn' exposes all of the global Process Registry and Process Group APIs.
+%% @doc Exposes all of the global Process Registry and Process Group APIs.
 %%
 %% Syn implement Scopes. You may think of Scopes such as database tables, so a set of data elements,
 %% but that's where the analogy ends.
@@ -214,7 +214,7 @@ add_node_to_scopes(Scopes) when is_list(Scopes) ->
     end, Scopes).
 
 %% @doc Returns the nodes of the subcluster for the specified `Scope'.
--spec subcluster_nodes(RegistryOrPg :: registry | pg, Scope :: atom()) -> [node()].
+-spec subcluster_nodes(Manager :: registry | pg, Scope :: atom()) -> [node()].
 subcluster_nodes(registry, Scope) ->
     syn_registry:subcluster_nodes(Scope);
 subcluster_nodes(pg, Scope) ->
@@ -327,12 +327,6 @@ register(Scope, Name, Pid) ->
 %% '''
 %% <h3>Erlang</h3>
 %% ```
-%% 1> syn:register(devices, "SN-123-456789", self(), [{meta, one}]).
-%% ok
-%% 2> syn:lookup(devices, "SN-123-456789").
-%% {<0.79.0>, [{meta, one}]}
-%% '''
-%% ```
 %% 1> Tuple = {via, syn, {devices, "SN-123-456789"}}.
 %% {via, syn, {devices, "SN-123-456789"}}
 %% 2> gen_server:start_link(Tuple, your_module, []).
@@ -388,6 +382,7 @@ local_registry_count(Scope) ->
     registry_count(Scope, node()).
 
 %% ----- \/ gen_server via module interface --------------------------
+%% @private
 -spec register_name(Name :: term(), Pid :: pid()) -> yes | no.
 register_name({Scope, Name}, Pid) ->
     case register(Scope, Name, Pid) of
@@ -395,6 +390,7 @@ register_name({Scope, Name}, Pid) ->
         _ -> no
     end.
 
+%% @private
 -spec unregister_name(Name :: term()) -> term().
 unregister_name({Scope, Name}) ->
     case unregister(Scope, Name) of
@@ -402,6 +398,7 @@ unregister_name({Scope, Name}) ->
         _ -> nil
     end.
 
+%% @private
 -spec whereis_name(Name :: term()) -> pid() | undefined.
 whereis_name({Scope, Name}) ->
     case lookup(Scope, Name) of
@@ -409,6 +406,7 @@ whereis_name({Scope, Name}) ->
         undefined -> undefined
     end.
 
+%% @private
 -spec send(Name :: term(), Message :: term()) -> pid().
 send({Scope, Name}, Message) ->
     case whereis_name({Scope, Name}) of
@@ -629,7 +627,6 @@ multi_call(Scope, GroupName, Message, Timeout) ->
 %% @doc Allows a group member to reply to a multi call.
 %%
 %% See {@link multi_call/4} for info.
--spec multi_call_reply({ClientPid :: pid(), reference()}, Reply :: term()) ->
-    {syn_multi_call_reply, reference(), Reply :: term()}.
+-spec multi_call_reply(Caller :: term(), Reply :: term()) -> any().
 multi_call_reply(Caller, Reply) ->
     syn_pg:multi_call_reply(Caller, Reply).

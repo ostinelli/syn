@@ -28,7 +28,7 @@
 %% ==========================================================================================================
 
 %% ===================================================================
-%% @doc `syn_event_handler' defines Syn's callbacks.
+%% @doc Defines Syn's callbacks.
 %%
 %% You can specify the callback module with {@link syn:set_event_handler/1}.
 %% In your module you need to specify the behavior `syn_event_handler' and implement the callbacks.
@@ -205,6 +205,7 @@
 %% ===================================================================
 %% API
 %% ===================================================================
+%% @private
 -spec ensure_event_handler_loaded() -> module().
 ensure_event_handler_loaded() ->
     %% get handler
@@ -212,6 +213,7 @@ ensure_event_handler_loaded() ->
     %% ensure that is it loaded (not using code:ensure_loaded/1 to support embedded mode)
     catch CustomEventHandler:module_info(exports).
 
+%% @private
 -spec call_event_handler(
     CallbackMethod :: atom(),
     Args :: [term()]
@@ -232,6 +234,7 @@ call_event_handler(CallbackMethod, Args) ->
             ok
     end.
 
+%% @private
 -spec do_resolve_registry_conflict(
     Scope :: atom(),
     Name :: term(),
