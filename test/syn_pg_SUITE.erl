@@ -1078,20 +1078,20 @@ three_nodes_custom_event_handler_joined_left(Config) ->
     SlaveNode1 = proplists:get_value(syn_slave_1, Config),
     SlaveNode2 = proplists:get_value(syn_slave_2, Config),
 
-    %% add custom handler for callbacks
+    %% add custom handler for callbacks (using ENV and method call)
     syn:set_event_handler(syn_test_event_handler_callbacks),
     rpc:call(SlaveNode1, syn, set_event_handler, [syn_test_event_handler_callbacks]),
-    rpc:call(SlaveNode2, syn, set_event_handler, [syn_test_event_handler_callbacks]),
+    rpc:call(SlaveNode2, application, set_env, [syn, event_handler, syn_test_event_handler_callbacks]),
 
     %% start syn on nodes
     ok = syn:start(),
     ok = rpc:call(SlaveNode1, syn, start, []),
     ok = rpc:call(SlaveNode2, syn, start, []),
 
-    %% add scopes
+    %% add scopes (using ENV and method call)
     ok = syn:add_node_to_scopes([scope_all]),
     ok = rpc:call(SlaveNode1, syn, add_node_to_scopes, [[scope_all]]),
-    ok = rpc:call(SlaveNode2, syn, add_node_to_scopes, [[scope_all]]),
+    rpc:call(SlaveNode2, application, set_env, [syn, scopes, [scope_all]]),
 
     %% init
     TestPid = self(),
