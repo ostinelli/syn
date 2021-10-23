@@ -45,6 +45,9 @@
     purge_local_data_for_node/2
 ]).
 
+%% macros
+-define(MODULE_LOG_NAME, registry).
+
 %% tests
 -ifdef(TEST).
 -export([add_to_local_table/7, remove_from_local_table/4]).
@@ -59,7 +62,7 @@
 -spec start_link(Scope :: atom()) ->
     {ok, Pid :: pid()} | {error, {already_started, Pid :: pid()}} | {error, Reason :: term()}.
 start_link(Scope) when is_atom(Scope) ->
-    syn_gen_scope:start_link(?MODULE, Scope).
+    syn_gen_scope:start_link(?MODULE, ?MODULE_LOG_NAME, Scope).
 
 -spec subcluster_nodes(Scope :: atom()) -> [node()].
 subcluster_nodes(Scope) ->
@@ -232,7 +235,9 @@ handle_call({'3.0', unregister_on_node, RequesterNode, Name, Pid}, _From, #state
     end;
 
 handle_call(Request, From, #state{scope = Scope} = State) ->
-    error_logger:warning_msg("SYN[~s<~s>] Received from ~p an unknown call message: ~p", [?MODULE, Scope, From, Request]),
+    error_logger:warning_msg("SYN[~s|~s<~s>] Received from ~p an unknown call message: ~p",
+        [node(), ?MODULE_LOG_NAME, Scope, From, Request]
+    ),
     {reply, undefined, State}.
 
 %% ----------------------------------------------------------------------------------------------------------
@@ -279,8 +284,8 @@ handle_info({'DOWN', _MRef, process, Pid, Reason}, #state{
     case find_registry_entries_by_pid(Pid, TableByPid) of
         [] ->
             error_logger:warning_msg(
-                "SYN[~s<~s>] Received a DOWN message from an unknown process ~p with reason: ~p",
-                [?MODULE, Scope, Pid, Reason]
+                "SYN[~s|~s<~s>] Received a DOWN message from an unknown process ~p with reason: ~p",
+                [node(), ?MODULE_LOG_NAME, Scope, Pid, Reason]
             );
 
         Entries ->
@@ -297,7 +302,7 @@ handle_info({'DOWN', _MRef, process, Pid, Reason}, #state{
     {noreply, State};
 
 handle_info(Info, #state{scope = Scope} = State) ->
-    error_logger:warning_msg("SYN[~s<~s>] Received an unknown info message: ~p", [?MODULE, Scope, Info]),
+    error_logger:warning_msg("SYN[~s|~s<~s>] Received an unknown info message: ~p", [node(), ?MODULE_LOG_NAME, Scope, Info]),
     {noreply, State}.
 
 %% ----------------------------------------------------------------------------------------------------------
@@ -590,8 +595,8 @@ resolve_conflict(Scope, Name, {Pid, Meta, Time}, {TablePid, TableMeta, TableTime
     case PidToKeep of
         Pid ->
             %% -> we keep the remote pid
-            error_logger:info_msg("SYN[~s<~s>] Registry CONFLICT for name ~p: ~p vs ~p -> keeping remote: ~p",
-                [?MODULE, Scope, Name, Pid, TablePid, Pid]
+            error_logger:info_msg("SYN[~s|~s<~s>] Registry CONFLICT for name ~p: ~p vs ~p -> keeping remote: ~p",
+                [node(), ?MODULE_LOG_NAME, Scope, Name, {Pid, Meta}, {TablePid, TableMeta}, Pid]
             ),
             %% update locally, the incoming sync_register will update with the time coming from remote node
             update_local_table(Name, TablePid, {Pid, Meta, Time, undefined}, TableByName, TableByPid),
@@ -606,8 +611,8 @@ resolve_conflict(Scope, Name, {Pid, Meta, Time}, {TablePid, TableMeta, TableTime
 
         TablePid ->
             %% -> we keep the local pid, remote pid will be killed by the other node in the conflict
-            error_logger:info_msg("SYN[~s<~s>] Registry CONFLICT for name ~p: ~p vs ~p -> keeping local: ~p",
-                [?MODULE, Scope, Name, Pid, TablePid, TablePid]
+            error_logger:info_msg("SYN[~s|~s<~s>] Registry CONFLICT for name ~p: ~p vs ~p -> keeping local: ~p",
+                [node(), ?MODULE_LOG_NAME, Scope, Name, {Pid, Meta}, {TablePid, TableMeta}, TablePid]
             ),
             %% overwrite with updated time
             ResolveTime = erlang:system_time(),
@@ -616,8 +621,8 @@ resolve_conflict(Scope, Name, {Pid, Meta, Time}, {TablePid, TableMeta, TableTime
             syn_gen_scope:broadcast({'3.0', sync_register, Name, TablePid, TableMeta, ResolveTime, syn_conflict_resolution}, State);
 
         Invalid ->
-            error_logger:info_msg("SYN[~s<~s>] Registry CONFLICT for name ~p: ~p vs ~p -> none chosen (got: ~p)",
-                [?MODULE, Scope, Name, Pid, TablePid, Invalid]
+            error_logger:info_msg("SYN[~s|~s<~s>] Registry CONFLICT for name ~p: ~p vs ~p -> none chosen (got: ~p)",
+                [node(), ?MODULE_LOG_NAME, Scope, Name, {Pid, Meta}, {TablePid, TableMeta}, Invalid]
             ),
             %% remove
             maybe_demonitor(TablePid, TableByPid),

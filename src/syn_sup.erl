@@ -31,7 +31,7 @@
 -export([start_link/0]).
 -export([node_scopes/0, add_node_to_scope/1]).
 
-%% Supervisor callbacks
+%% supervisor callbacks
 -export([init/1]).
 
 %% includes
@@ -54,7 +54,7 @@ node_scopes() ->
 
 -spec add_node_to_scope(Scope :: atom()) -> ok.
 add_node_to_scope(Scope) when is_atom(Scope) ->
-    error_logger:info_msg("SYN[~s] Adding node to scope", [Scope]),
+    error_logger:info_msg("SYN[~s] Adding node to scope <~s>", [node(), Scope]),
     Scopes0 = application:get_env(syn, scopes, []),
     case lists:member(Scope, Scopes0) of
         true ->

@@ -70,7 +70,8 @@
 %% records
 -record(state, {
     handler = undefined :: undefined | module(),
-    handler_state = undefined :: term(),
+    handler_state :: term(),
+    handler_log_name :: atom(),
     scope = undefined :: atom(),
     process_name :: atom(),
     nodes_map = #{} :: #{node() => pid()},

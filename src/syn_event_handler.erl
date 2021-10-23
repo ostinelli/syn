@@ -224,7 +224,7 @@ call_event_handler(CallbackMethod, Args) ->
             catch Class:Reason:Stacktrace ->
                 error_logger:error_msg(
                     "SYN[~s] Error ~p:~p in custom handler ~p: ~p",
-                    [?MODULE, Class, Reason, CallbackMethod, Stacktrace]
+                    [node(), Class, Reason, CallbackMethod, Stacktrace]
                 )
             end;
 
@@ -249,7 +249,7 @@ do_resolve_registry_conflict(Scope, Name, {Pid1, Meta1, Time1}, {Pid2, Meta2, Ti
             catch Class:Reason ->
                 error_logger:error_msg(
                     "SYN[~s] Error ~p in custom handler resolve_registry_conflict: ~p",
-                    [?MODULE, Class, Reason]
+                    [node(), Class, Reason]
                 ),
                 {undefined, false}
             end;
