@@ -252,7 +252,9 @@ subcluster_nodes(pg, Scope) ->
 %% '''
 -spec set_event_handler(module()) -> ok.
 set_event_handler(Module) ->
-    application:set_env(syn, event_handler, Module).
+    application:set_env(syn, event_handler, Module),
+    %% ensure event handler is loaded
+    syn_event_handler:ensure_event_handler_loaded().
 
 %% ----- \/ registry -------------------------------------------------
 %% @doc Looks up a registry entry in the specified `Scope'.

@@ -46,16 +46,12 @@ start_link() ->
 
 -spec node_scopes() -> [atom()].
 node_scopes() ->
-    %% always have a default scope for all nodes
-    case application:get_env(syn, scopes) of
-        undefined -> [];
-        {ok, Scopes} -> Scopes
-    end.
+    application:get_env(syn, scopes, []).
 
 -spec add_node_to_scope(Scope :: atom()) -> ok.
 add_node_to_scope(Scope) when is_atom(Scope) ->
     error_logger:info_msg("SYN[~s] Adding node to scope <~s>", [node(), Scope]),
-    Scopes0 = application:get_env(syn, scopes, []),
+    Scopes0 = node_scopes(),
     case lists:member(Scope, Scopes0) of
         true ->
             %% nothing to do
