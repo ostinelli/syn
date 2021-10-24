@@ -95,7 +95,7 @@
 %% iex> :syn.join(:users, {:italy, :lombardy}, pid)
 %% :ok
 %% iex> :syn.members(:users, {:italy, :lombardy})
-%% [#PID<0.88.0>,:undefined}]
+%% [{#PID<0.88.0>,:undefined}]
 %% iex> :syn.is_member(:users, {:italy, :lombardy}, pid)
 %% true
 %% iex> :syn.publish(:users, {:italy, :lombardy}, "hello lombardy!")
@@ -225,7 +225,7 @@ subcluster_nodes(pg, Scope) ->
 %% Please see {@link syn_event_handler} for information on callbacks.
 %%
 %% There are 2 ways to set a handler module. One is by using this method, the other is to set the environment variable `syn'
-%% with the key `scopes'. In this latter case, you're probably best off using an application configuration file:
+%% with the key `event_handler'. In this latter case, you're probably best off using an application configuration file:
 %%
 %% <h3>Elixir</h3>
 %% ```
