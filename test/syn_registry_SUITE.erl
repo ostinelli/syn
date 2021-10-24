@@ -277,7 +277,7 @@ three_nodes_discover(Config) ->
 
     %% crash a scope process on 2
     rpc:call(SlaveNode2, syn_test_suite_helper, kill_process, [syn_registry_scope_bc]),
-    rpc:call(SlaveNode2, syn_test_suite_helper, wait_process_name_ready, [syn_registry_default]),
+    rpc:call(SlaveNode2, syn_test_suite_helper, wait_process_name_ready, [syn_registry_scope_bc]),
 
     %% check
     syn_test_suite_helper:assert_registry_scope_subcluster(node(), scope_ab, [SlaveNode1]),
