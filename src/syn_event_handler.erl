@@ -34,7 +34,7 @@
 %% In your module you need to specify the behavior `syn_event_handler' and implement the callbacks.
 %% All callbacks are optional, so you just need to define the ones you need.
 %%
-%% All of the callbacks, except for `resolve_registry_conflict/3', are called on all the nodes of the cluster.
+%% All of the callbacks, except for `resolve_registry_conflict/4', are called on all the nodes of the cluster.
 %% This allows you to receive events for the processes running on nodes that get shut down, or in case of net splits.
 %%
 %% The argument `Reason' in the callbacks can be:
@@ -51,7 +51,7 @@
 %%      scope process had crashed.</li>
 %% </ul>
 %% While all callbacks do not have a direct effect on Syn (their return value is ignored), a special case is the callback
-%% `resolve_registry_conflict/3'. If specified, this is the method that will be used to resolve registry conflicts when detected.
+%% `resolve_registry_conflict/4'. If specified, this is the method that will be used to resolve registry conflicts when detected.
 %%
 %% In case of net splits or race conditions, a specific name might get registered simultaneously on two different nodes.
 %% When this happens, the cluster experiences a registry naming conflict.
@@ -64,7 +64,7 @@
 %% </ul>
 %% This is a very simple mechanism that can be imprecise, as system clocks are not perfectly aligned in a cluster.
 %% If something more elaborate is desired, or if you do not want the discarded process to be killed (i.e. to perform
-%% a graceful shutdown), you MAY specify a custom handler that implements the `resolve_registry_conflict/3' callback.
+%% a graceful shutdown), you MAY specify a custom handler that implements the `resolve_registry_conflict/4' callback.
 %% To this effect, you may also store additional data to resolve conflicts in the `Meta' value, since it will be passed
 %% into the callback for both of the conflicting processes.
 %%
@@ -193,6 +193,7 @@
 ) -> any().
 
 -callback resolve_registry_conflict(
+    Scope :: atom(),
     Name :: term(),
     {Pid1 :: pid(), Meta1 :: term(), Time1 :: non_neg_integer()},
     {Pid2 :: pid(), Meta2 :: term(), Time2 :: non_neg_integer()}
@@ -200,18 +201,19 @@
 
 -optional_callbacks([on_process_registered/5, on_registry_process_updated/5, on_process_unregistered/5]).
 -optional_callbacks([on_process_joined/5, on_group_process_updated/5, on_process_left/5]).
--optional_callbacks([resolve_registry_conflict/3]).
+-optional_callbacks([resolve_registry_conflict/4]).
 
 %% ===================================================================
 %% API
 %% ===================================================================
 %% @private
--spec ensure_event_handler_loaded() -> module().
+-spec ensure_event_handler_loaded() -> ok.
 ensure_event_handler_loaded() ->
     %% get handler
     CustomEventHandler = get_custom_event_handler(),
     %% ensure that is it loaded (not using code:ensure_loaded/1 to support embedded mode)
-    catch CustomEventHandler:module_info(exports).
+    catch CustomEventHandler:module_info(exports),
+    ok.
 
 %% @private
 -spec call_event_handler(
