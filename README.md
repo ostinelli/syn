@@ -1,10 +1,21 @@
 ![CI](https://github.com/ostinelli/syn/actions/workflows/ci.yml/badge.svg) [![Hex pm](https://img.shields.io/hexpm/v/syn.svg)](https://hex.pm/packages/syn)
 
 # Syn
-**Syn** (short for _synonym_) is a scalable global Process Registry and Process Group manager for Erlang and Elixir.
-Syn automatically manages dynamic clusters (addition / removal of nodes), and is also able to recover from net splits.
+**Syn** (short for _synonym_) is a scalable global Process Registry and Process Group manager for Erlang and Elixir,
+able to automatically manage dynamic clusters (addition / removal of nodes) and to recover from net splits.
 
-[Documentation](https://hexdocs.pm/syn/)
+Syn is a replacement for Erlang/OTP
+[global](https://www.erlang.org/doc/man/global.html)'s registry and
+[pg](https://www.erlang.org/doc/man/pg.html). The main differences with these OTP's implementations are:
+
+ *  `global`: OTP's global module choses Consistency over Availability, therefore it can become difficult to scale
+    when registration rates are elevated and the cluster becomes larger. If eventual consistency is acceptable in your
+    case, Syn can considerably increase the registry's performance. Additionally, Syn allows to attach metadata to every
+    registered process, which also gets synchronized across the cluster.
+ *  `pg`: OTP's pg module, like Syn, implements Strong Eventual Consistency. However, Syn also allows to attach metadata
+    information to processes, and implements [cluster-wide callbacks](syn_event_handler.html) on the main events. 
+ 
+[[Documentation](https://hexdocs.pm/syn/)]
 
 ## Introduction
 
@@ -48,7 +59,8 @@ since the likelihood of concurrent incoming requests that would register process
 
 In addition, write speeds were a determining factor in the architecture of Syn.
 
-Therefore, Availability has been chosen over Consistency and Syn is [eventually consistent](http://en.wikipedia.org/wiki/Eventual_consistency).
+Therefore, Availability has been chosen over Consistency and Syn implements
+[strong eventual consistency](http://en.wikipedia.org/wiki/Eventual_consistency).
 
 ## Installation
 

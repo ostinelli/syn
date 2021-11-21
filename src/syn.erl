@@ -192,7 +192,7 @@ node_scopes() ->
 %% <h3>Erlang</h3>
 %% ```
 %% {syn, [
-%%   {scopes, [:devices, :users]}
+%%   {scopes, [devices, users]}
 %% ]}
 %% '''
 %%
@@ -213,7 +213,7 @@ add_node_to_scopes(Scopes) when is_list(Scopes) ->
         syn_sup:add_node_to_scope(Scope)
     end, Scopes).
 
-%% @doc Returns the nodes of the subcluster for the specified `Scope'.
+%% @doc Returns the nodes of the subcluster for the specified Scope.
 -spec subcluster_nodes(Manager :: registry | pg, Scope :: atom()) -> [node()].
 subcluster_nodes(registry, Scope) ->
     syn_registry:subcluster_nodes(Scope);
@@ -257,7 +257,7 @@ set_event_handler(Module) ->
     syn_event_handler:ensure_event_handler_loaded().
 
 %% ----- \/ registry -------------------------------------------------
-%% @doc Looks up a registry entry in the specified `Scope'.
+%% @doc Looks up a registry entry in the specified Scope.
 %%
 %% <h2>Examples</h2>
 %% <h3>Elixir</h3>
@@ -284,7 +284,7 @@ lookup(Scope, Name) ->
 register(Scope, Name, Pid) ->
     register(Scope, Name, Pid, undefined).
 
-%% @doc Registers a process with metadata in the specified `Scope'.
+%% @doc Registers a process with metadata in the specified Scope.
 %%
 %% Possible error reasons:
 %% <ul>
@@ -338,7 +338,7 @@ register(Scope, Name, Pid) ->
 register(Scope, Name, Pid, Meta) ->
     syn_registry:register(Scope, Name, Pid, Meta).
 
-%% @doc Unregisters a process from specified `Scope'.
+%% @doc Unregisters a process from specified Scope.
 %%
 %% Possible error reasons:
 %% <ul>
@@ -353,7 +353,7 @@ register(Scope, Name, Pid, Meta) ->
 unregister(Scope, Name) ->
     syn_registry:unregister(Scope, Name).
 
-%% @doc Returns the count of all registered processes for the specified `Scope'.
+%% @doc Returns the count of all registered processes for the specified Scope.
 %%
 %% <h2>Examples</h2>
 %% <h3>Elixir</h3>
@@ -370,7 +370,7 @@ unregister(Scope, Name) ->
 registry_count(Scope) ->
     syn_registry:count(Scope).
 
-%% @doc Returns the count of all registered processes for the specified `Scope' running on a node.
+%% @doc Returns the count of all registered processes for the specified Scope running on a node.
 -spec registry_count(Scope :: atom(), Node :: node()) -> non_neg_integer().
 registry_count(Scope, Node) ->
     syn_registry:count(Scope, Node).
@@ -418,7 +418,7 @@ send({Scope, Name}, Message) ->
     end.
 
 %% ----- \/ groups ---------------------------------------------------
-%% @doc Returns the list of all members for GroupName in the specified `Scope'.
+%% @doc Returns the list of all members for GroupName in the specified Scope.
 %%
 %% <h2>Examples</h2>
 %% <h3>Elixir</h3>
@@ -439,17 +439,17 @@ send({Scope, Name}, Message) ->
 members(Scope, GroupName) ->
     syn_pg:members(Scope, GroupName).
 
-%% @doc Returns whether a `pid()' is a member of GroupName in the specified `Scope'.
+%% @doc Returns whether a `pid()' is a member of GroupName in the specified Scope.
 -spec is_member(Scope :: atom(), GroupName :: term(), Pid :: pid()) -> boolean().
 is_member(Scope, GroupName, Pid) ->
     syn_pg:is_member(Scope, GroupName, Pid).
 
-%% @doc Returns the list of all members for GroupName in the specified `Scope' running on the local node.
+%% @doc Returns the list of all members for GroupName in the specified Scope running on the local node.
 -spec local_members(Scope :: atom(), GroupName :: term()) -> [{Pid :: pid(), Meta :: term()}].
 local_members(Scope, GroupName) ->
     syn_pg:local_members(Scope, GroupName).
 
-%% @doc Returns whether a `pid()' is a member of GroupName in the specified `Scope' running on the local node.
+%% @doc Returns whether a `pid()' is a member of GroupName in the specified Scope running on the local node.
 -spec is_local_member(Scope :: atom(), GroupName :: term(), Pid :: pid()) -> boolean().
 is_local_member(Scope, GroupName, Pid) ->
     syn_pg:is_local_member(Scope, GroupName, Pid).
@@ -460,7 +460,7 @@ is_local_member(Scope, GroupName, Pid) ->
 join(Scope, GroupName, Pid) ->
     join(Scope, GroupName, Pid, undefined).
 
-%% @doc Adds a `pid()' with metadata to GroupName in the specified `Scope'.
+%% @doc Adds a `pid()' with metadata to GroupName in the specified Scope.
 %%
 %% Possible error reasons:
 %% <ul>
@@ -486,11 +486,11 @@ join(Scope, GroupName, Pid) ->
 join(Scope, GroupName, Pid, Meta) ->
     syn_pg:join(Scope, GroupName, Pid, Meta).
 
-%% @doc Removes a `pid()' from GroupName in the specified `Scope'.
+%% @doc Removes a `pid()' from GroupName in the specified Scope.
 %%
 %% Possible error reasons:
 %% <ul>
-%% <li>`not_in_group': The `pid()' is not in GroupName for the specified `Scope'.</li>
+%% <li>`not_in_group': The `pid()' is not in GroupName for the specified Scope.</li>
 %% </ul>
 %%
 %% You don't need to remove processes that are about to die, since they are monitored by Syn and they will be removed
@@ -499,7 +499,7 @@ join(Scope, GroupName, Pid, Meta) ->
 leave(Scope, GroupName, Pid) ->
     syn_pg:leave(Scope, GroupName, Pid).
 
-%% @doc Returns the count of all the groups for the specified `Scope'.
+%% @doc Returns the count of all the groups for the specified Scope.
 %%
 %% <h2>Examples</h2>
 %% <h3>Elixir</h3>
@@ -516,7 +516,7 @@ leave(Scope, GroupName, Pid) ->
 group_count(Scope) ->
     syn_pg:count(Scope).
 
-%% @doc Returns the count of all the groups for the specified `Scope' which have at least 1 process running on `Node'.
+%% @doc Returns the count of all the groups for the specified Scope which have at least 1 process running on `Node'.
 -spec group_count(Scope :: atom(), Node :: node()) -> non_neg_integer().
 group_count(Scope, Node) ->
     syn_pg:count(Scope, Node).
@@ -527,7 +527,7 @@ group_count(Scope, Node) ->
 local_group_count(Scope) ->
     group_count(Scope, node()).
 
-%% @doc Returns the group names for the specified `Scope'.
+%% @doc Returns the group names for the specified Scope.
 %%
 %% The order of the group names is not guaranteed to be the same on all calls.
 %%
@@ -546,7 +546,7 @@ local_group_count(Scope) ->
 group_names(Scope) ->
     syn_pg:group_names(Scope).
 
-%% @doc Returns the group names for the specified `Scope' which have at least 1 process running on `Node'.
+%% @doc Returns the group names for the specified Scope which have at least 1 process running on `Node'.
 %%
 %% The order of the group names is not guaranteed to be the same on all calls.
 -spec group_names(Scope :: atom(), Node :: node()) -> [GroupName :: term()].
@@ -559,7 +559,7 @@ group_names(Scope, Node) ->
 local_group_names(Scope) ->
     group_names(Scope, node()).
 
-%% @doc Publish a message to all group members in the specified `Scope'.
+%% @doc Publish a message to all group members in the specified Scope.
 %%
 %% `RecipientCount' is the count of the intended recipients.
 %%
@@ -588,7 +588,7 @@ local_group_names(Scope) ->
 publish(Scope, GroupName, Message) ->
     syn_pg:publish(Scope, GroupName, Message).
 
-%% @doc Publish a message to all group members running on the local node in the specified `Scope'.
+%% @doc Publish a message to all group members running on the local node in the specified Scope.
 %%
 %% Works similarly to {@link publish/3} for local processes.
 -spec local_publish(Scope :: atom(), GroupName :: term(), Message :: term()) -> {ok, RecipientCount :: non_neg_integer()}.
@@ -605,7 +605,7 @@ local_publish(Scope, GroupName, Message) ->
 multi_call(Scope, GroupName, Message) ->
     multi_call(Scope, GroupName, Message, ?DEFAULT_MULTI_CALL_TIMEOUT_MS).
 
-%% @doc Calls all group members in the specified `Scope' and collects their replies.
+%% @doc Calls all group members in the specified Scope and collects their replies.
 %%
 %% When this call is issued, all members will receive a tuple in the format:
 %%
