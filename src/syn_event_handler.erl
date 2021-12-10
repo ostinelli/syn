@@ -84,24 +84,10 @@
 %%   ‎@behaviour :syn_event_handler
 %%
 %%   ‎@impl true
-%%   ‎@spec on_process_unregistered(
-%%     scope :: atom(),
-%%     name :: term(),
-%%     pid :: pid(),
-%%     meta :: term(),
-%%     reason :: atom()
-%%   ) :: term()
 %%   def on_process_unregistered(scope, name, pid, meta, reason) do
 %%   end
 %%
 %%   ‎@impl true
-%%   ‎@spec on_process_left(
-%%     scope :: atom(),
-%%     group_name :: term(),
-%%     pid :: pid(),
-%%     meta :: term(),
-%%     reason :: atom()
-%%   ) :: term()
 %%   def on_process_left(scope, group_name, pid, meta, reason) do
 %%   end
 %% end
