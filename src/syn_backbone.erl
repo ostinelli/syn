@@ -32,6 +32,7 @@
 -export([create_tables_for_scope/1]).
 -export([get_table_name/2]).
 -export([save_process_name/2, get_process_name/1]).
+-export([is_strict_mode/0]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
@@ -74,6 +75,10 @@ get_table_name(TableId, Scope) ->
         [{_, TableName}] -> TableName;
         [] -> undefined
     end.
+
+-spec is_strict_mode() -> boolean().
+is_strict_mode() ->
+    application:get_env(syn, strict_mode, false).
 
 %% ===================================================================
 %% Callbacks

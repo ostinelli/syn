@@ -286,14 +286,21 @@ register(Scope, Name, Pid) ->
 
 %% @doc Registers a process with metadata in the specified Scope.
 %%
+%% You may re-register a process multiple times, and you may also register the same process with different names.
+%%
+%% To update a process' metadata, <a href="options.html#strict_mode">`strict_mode'</a> must be enabled.
+%%
+%% When a process gets registered, Syn will automatically monitor it.
+%%
 %% Possible error reasons:
 %% <ul>
-%% <li>`taken': name is already registered with another `pid()'.</li>
 %% <li>`not_alive': The `pid()' being registered is not alive.</li>
+%% <li>`taken': name is already registered with another `pid()'.</li>
+%% <li>`non_strict_update': process is already registered with different metadata,
+%% but <a href="options.html#strict_mode">`strict_mode'</a> is not enabled.</li>
+%% <li>`not_self': the method is called from a process other than `self()',
+%% but <a href="options.html#strict_mode">`strict_mode'</a> is enabled.</li>
 %% </ul>
-%%
-%% You may re-register a process multiple times, for example if you need to update its metadata.
-%% When a process gets registered, Syn will automatically monitor it. You may also register the same process with different names.
 %%
 %% <h2>Examples</h2>
 %% <h3>Elixir</h3>
@@ -462,14 +469,21 @@ join(Scope, GroupName, Pid) ->
 
 %% @doc Adds a `pid()' with metadata to GroupName in the specified Scope.
 %%
+%% A process can join multiple groups. A process may join the same group multiple times, though it will still be
+%% listed only once in it.
+%%
+%% To update a process' metadata, <a href="options.html#strict_mode">`strict_mode'</a> must be enabled.
+%%
+%% When a process joins a group, Syn will automatically monitor it.
+%%
 %% Possible error reasons:
 %% <ul>
 %% <li>`not_alive': The `pid()' being added is not alive.</li>
+%% <li>`non_strict_update': process is already in group with different metadata,
+%% but <a href="options.html#strict_mode">`strict_mode'</a> is not enabled.</li>
+%% <li>`not_self': the method is called from a process other than `self()',
+%% but <a href="options.html#strict_mode">`strict_mode'</a> is enabled.</li>
 %% </ul>
-%%
-%% A process can join multiple groups. When a process joins a group, Syn will automatically monitor it.
-%% A process may join the same group multiple times, for example if you need to update its metadata,
-%% though it will still be listed only once in it.
 %%
 %% <h2>Examples</h2>
 %% <h3>Elixir</h3>

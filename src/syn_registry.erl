@@ -83,18 +83,24 @@ lookup(Scope, Name) ->
 
 -spec register(Scope :: atom(), Name :: term(), Pid :: pid(), Meta :: term()) -> ok | {error, Reason :: term()}.
 register(Scope, Name, Pid, Meta) ->
-    Node = node(Pid),
-    case syn_gen_scope:call(?MODULE, Node, Scope, {'3.0', register_on_node, node(), Name, Pid, Meta}) of
-        {ok, {CallbackMethod, Time, TableByName, TableByPid}} when Node =/= node() ->
-            %% update table on caller node immediately so that subsequent calls have an updated registry
-            add_to_local_table(Name, Pid, Meta, Time, undefined, TableByName, TableByPid),
-            %% callback
-            syn_event_handler:call_event_handler(CallbackMethod, [Scope, Name, Pid, Meta, normal]),
-            %% return
-            ok;
+    case syn_backbone:is_strict_mode() of
+        true when Pid =/= self() ->
+            {error, not_self};
 
-        {Response, _} ->
-            Response
+        _ ->
+            Node = node(Pid),
+            case syn_gen_scope:call(?MODULE, Node, Scope, {'3.0', register_on_node, node(), Name, Pid, Meta}) of
+                {ok, {CallbackMethod, Time, TableByName, TableByPid}} when Node =/= node() ->
+                    %% update table on caller node immediately so that subsequent calls have an updated registry
+                    add_to_local_table(Name, Pid, Meta, Time, undefined, TableByName, TableByPid),
+                    %% callback
+                    syn_event_handler:call_event_handler(CallbackMethod, [Scope, Name, Pid, Meta, normal]),
+                    %% return
+                    ok;
+
+                {Response, _} ->
+                    Response
+            end
     end.
 
 -spec unregister(Scope :: atom(), Name :: term()) -> ok | {error, Reason :: term()}.
@@ -198,7 +204,14 @@ handle_call({'3.0', register_on_node, RequesterNode, Name, Pid, Meta}, _From, #s
                     {reply, {ok, noop}, State};
 
                 {Name, Pid, _, _, MRef, _} ->
-                    do_register_on_node(Name, Pid, Meta, MRef, normal, RequesterNode, on_registry_process_updated, State);
+                    %% same pid, different meta
+                    case syn_backbone:is_strict_mode() of
+                        true ->
+                            do_register_on_node(Name, Pid, Meta, MRef, normal, RequesterNode, on_registry_process_updated, State);
+
+                        false ->
+                            {reply, {{error, non_strict_update}, undefined}, State}
+                    end;
 
                 _ ->
                     {reply, {{error, taken}, undefined}, State}

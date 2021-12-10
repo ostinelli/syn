@@ -33,6 +33,9 @@
 
 %% tests
 -export([
+    one_node_strict_mode/1
+]).
+-export([
     three_nodes_discover/1,
     three_nodes_join_leave_and_monitor/1,
     three_nodes_join_filter_unknown_node/1,
@@ -69,6 +72,7 @@
 %% -------------------------------------------------------------------
 all() ->
     [
+        {group, one_node_pg},
         {group, three_nodes_pg},
         {group, four_nodes_pg}
     ].
@@ -87,6 +91,9 @@ all() ->
 %% -------------------------------------------------------------------
 groups() ->
     [
+        {one_node_pg, [shuffle], [
+            one_node_strict_mode
+        ]},
         {three_nodes_pg, [shuffle], [
             three_nodes_discover,
             three_nodes_join_leave_and_monitor,
@@ -185,6 +192,33 @@ end_per_testcase(_, _Config) ->
 %% ===================================================================
 %% Tests
 %% ===================================================================
+one_node_strict_mode(_Config) ->
+    %% start syn
+    ok = syn:start(),
+    syn:add_node_to_scopes([scope]),
+
+    %% start process
+    Pid = syn_test_suite_helper:start_process(),
+
+    %% strict mode disabled
+    ok = syn:join(scope, "strict-false", Pid, metadata),
+    ok = syn:join(scope, "strict-false", Pid, metadata),
+    {error, non_strict_update} = syn:join(scope, "strict-false", Pid, new_metadata),
+    ok = syn:join(scope, "strict-false", Pid, metadata),
+    [{Pid, metadata}] = syn:members(scope, "strict-false"),
+    ok = syn:leave(scope, "strict-false", Pid),
+
+    %% strict mode enabled
+    application:set_env(syn, strict_mode, true),
+    {error, not_self} = syn:join(scope, "strict-true", Pid, metadata),
+    Self = self(),
+    ok = syn:join(scope, "strict-true", Self, metadata),
+    ok = syn:join(scope, "strict-true", Self, new_metadata),
+    [{Self, new_metadata}] = syn:members(scope, "strict-true"),
+    ok = syn:join(scope, "strict-true", Self),
+    [{Self, undefined}] = syn:members(scope, "strict-true"),
+    ok = syn:leave(scope, "strict-true", Self).
+
 three_nodes_discover(Config) ->
     %% get slaves
     SlaveNode1 = proplists:get_value(syn_slave_1, Config),
@@ -478,9 +512,13 @@ three_nodes_join_leave_and_monitor(Config) ->
     1 = rpc:call(SlaveNode2, syn, group_count, [scope_bc, SlaveNode1]),
     0 = rpc:call(SlaveNode2, syn, group_count, [scope_bc, SlaveNode2]),
 
-    %% re-join to edit meta
-    ok = syn:join(scope_ab, {group, "one"}, PidWithMeta, <<"with updated meta">>),
-    ok = rpc:call(SlaveNode2, syn, join, [scope_bc, {group, "two"}, PidRemoteOn1, added_meta]), %% updated on slave 2
+    %% enable strict to allow for updates
+    application:set_env(syn, strict_mode, true),
+    rpc:call(SlaveNode1, application, set_env, [syn, strict_mode, true]),
+
+    %% re-join to edit meta (strict is enabled, so send message)
+    PidWithMeta ! {pg_update_meta, scope_ab, {group, "one"}, <<"with updated meta">>},
+    PidRemoteOn1 ! {pg_update_meta, scope_bc, {group, "two"}, added_meta},
 
     %% retrieve
     syn_test_suite_helper:assert_wait(
@@ -568,7 +606,11 @@ three_nodes_join_leave_and_monitor(Config) ->
     1 = rpc:call(SlaveNode2, syn, group_count, [scope_bc, SlaveNode1]),
     0 = rpc:call(SlaveNode2, syn, group_count, [scope_bc, SlaveNode2]),
 
-    syn:join(scope_ab, {group, "two"}, PidRemoteOn1),
+    %% disable strict
+    application:set_env(syn, strict_mode, false),
+    rpc:call(SlaveNode1, application, set_env, [syn, strict_mode, false]),
+
+    ok = syn:join(scope_ab, {group, "two"}, PidRemoteOn1),
     syn_test_suite_helper:assert_wait(
         lists:sort([{Pid, undefined}, {PidWithMeta, "with-meta-2"}, {PidRemoteOn1, undefined}]),
         fun() -> lists:sort(syn:members(scope_ab, {group, "two"})) end
@@ -1123,8 +1165,11 @@ three_nodes_custom_event_handler_joined_left(Config) ->
         {on_process_joined, SlaveNode2, scope_all, "my-group", Pid2, <<"meta-for-2">>, normal}
     ]),
 
-    %% ---> on meta update
-    ok = syn:join(scope_all, "my-group", Pid, {recipient, self(), <<"new-meta-0">>}),
+    %% enable strict to allow for updates
+    application:set_env(syn, strict_mode, true),
+
+    %% ---> on meta update (strict is enabled, so send message)
+    Pid ! {pg_update_meta, scope_all, "my-group", {recipient, self(), <<"new-meta-0">>}},
 
     %% check callbacks called
     syn_test_suite_helper:assert_received_messages([
@@ -1133,24 +1178,17 @@ three_nodes_custom_event_handler_joined_left(Config) ->
         {on_group_process_updated, SlaveNode2, scope_all, "my-group", Pid, <<"new-meta-0">>, normal}
     ]),
 
-    %% update meta from another node
-    ok = rpc:call(SlaveNode1, syn, join, [scope_all, "my-group", Pid, {recipient, self(), <<"new-meta">>}]),
-
-    %% check callbacks called
-    syn_test_suite_helper:assert_received_messages([
-        {on_group_process_updated, LocalNode, scope_all, "my-group", Pid, <<"new-meta">>, normal},
-        {on_group_process_updated, SlaveNode1, scope_all, "my-group", Pid, <<"new-meta">>, normal},
-        {on_group_process_updated, SlaveNode2, scope_all, "my-group", Pid, <<"new-meta">>, normal}
-    ]),
+    %% disable strict
+    application:set_env(syn, strict_mode, false),
 
     %% ---> on left
     ok = syn:leave(scope_all, "my-group", Pid),
 
     %% check callbacks called
     syn_test_suite_helper:assert_received_messages([
-        {on_process_left, LocalNode, scope_all, "my-group", Pid, <<"new-meta">>, normal},
-        {on_process_left, SlaveNode1, scope_all, "my-group", Pid, <<"new-meta">>, normal},
-        {on_process_left, SlaveNode2, scope_all, "my-group", Pid, <<"new-meta">>, normal}
+        {on_process_left, LocalNode, scope_all, "my-group", Pid, <<"new-meta-0">>, normal},
+        {on_process_left, SlaveNode1, scope_all, "my-group", Pid, <<"new-meta-0">>, normal},
+        {on_process_left, SlaveNode2, scope_all, "my-group", Pid, <<"new-meta-0">>, normal}
     ]),
 
     %% leave from another node
@@ -1169,7 +1207,7 @@ three_nodes_custom_event_handler_joined_left(Config) ->
 
     %% ---> after a netsplit
     PidRemoteOn1 = syn_test_suite_helper:start_process(SlaveNode1),
-    syn:join(scope_all, remote_on_1, PidRemoteOn1, {recipient, self(), <<"netsplit">>}),
+    ok = syn:join(scope_all, remote_on_1, PidRemoteOn1, {recipient, self(), <<"netsplit">>}),
 
     %% check callbacks called
     syn_test_suite_helper:assert_received_messages([
@@ -1221,7 +1259,7 @@ three_nodes_custom_event_handler_joined_left(Config) ->
 
     %% ---> call if process died during the scope process crash
     TransientPid = syn_test_suite_helper:start_process(),
-    syn:join(scope_all, "transient-group", TransientPid, {recipient, self(), "transient-meta"}),
+    ok = syn:join(scope_all, "transient-group", TransientPid, {recipient, self(), "transient-meta"}),
 
     %% check callbacks called
     syn_test_suite_helper:assert_received_messages([
@@ -1631,6 +1669,12 @@ four_nodes_concurrency(Config) ->
     ok = rpc:call(SlaveNode2, syn, start, []),
     ok = rpc:call(SlaveNode3, syn, start, []),
 
+    %% enable strict to allow for updates
+    application:set_env(syn, strict_mode, true),
+    rpc:call(SlaveNode1, application, set_env, [syn, strict_mode, true]),
+    rpc:call(SlaveNode2, application, set_env, [syn, strict_mode, true]),
+    rpc:call(SlaveNode3, application, set_env, [syn, strict_mode, true]),
+
     %% add scopes
     ok = syn:add_node_to_scopes([scope_all]),
     ok = rpc:call(SlaveNode1, syn, add_node_to_scopes, [[scope_all]]),
@@ -1641,30 +1685,16 @@ four_nodes_concurrency(Config) ->
     TestPid = self(),
     Iterations = 250,
 
-    %% pids
-    PidLocal = syn_test_suite_helper:start_process(),
-    PidOn1 = syn_test_suite_helper:start_process(SlaveNode1),
-    PidOn2 = syn_test_suite_helper:start_process(SlaveNode2),
-    PidOn3 = syn_test_suite_helper:start_process(SlaveNode3),
-
-    LocalNode = node(),
-    PidMap = #{
-        LocalNode => PidLocal,
-        SlaveNode1 => PidOn1,
-        SlaveNode2 => PidOn2,
-        SlaveNode3 => PidOn3
-    },
-
     %% concurrent test
     WorkerFun = fun() ->
-        Pid = maps:get(node(), PidMap),
+        Self = self(),
         lists:foreach(fun(_) ->
             %% loop
             RandomMeta = rand:uniform(99999),
-            ok = syn:join(scope_all, <<"concurrent-scope">>, Pid, RandomMeta),
+            ok = syn:join(scope_all, <<"concurrent-scope">>, Self, RandomMeta),
             %% random leave
             case rand:uniform(5) of
-                1 -> syn:leave(scope_all, <<"concurrent-scope">>, Pid);
+                1 -> syn:leave(scope_all, <<"concurrent-scope">>, Self);
                 _ -> ok
             end,
             %% random sleep
@@ -1673,6 +1703,8 @@ four_nodes_concurrency(Config) ->
         end, lists:seq(1, Iterations)),
         TestPid ! {done, node()}
     end,
+
+    LocalNode = node(),
 
     %% spawn concurrent
     spawn(LocalNode, WorkerFun),

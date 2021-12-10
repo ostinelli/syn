@@ -125,6 +125,7 @@ clean_after_test() ->
         rpc:call(Node, application, stop, [syn]),
         %% clean env
         rpc:call(Node, application, unset_env, [syn, event_handler]),
+        rpc:call(Node, application, unset_env, [syn, strict_mode]),
         %% messages
         flush_inbox()
     end, Nodes).
@@ -315,7 +316,16 @@ send_error_logger_to_disk() ->
 %% ===================================================================
 process_main() ->
     receive
-        _ -> process_main()
+        {registry_update_meta, Scope, Name, NewMeta} ->
+            ok = syn:register(Scope, Name, self(), NewMeta),
+            process_main();
+
+        {pg_update_meta, Scope, GroupName, NewMeta} ->
+            ok = syn:join(Scope, GroupName, self(), NewMeta),
+            process_main();
+
+        _ ->
+            process_main()
     end.
 
 do_assert_scope_subcluster(Type, Node, Scope, ExpectedNodes) ->

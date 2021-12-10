@@ -128,18 +128,24 @@ is_local_member(Scope, GroupName, Pid) ->
 
 -spec join(Scope :: atom(), GroupName :: term(), Pid :: pid(), Meta :: term()) -> ok.
 join(Scope, GroupName, Pid, Meta) ->
-    Node = node(Pid),
-    case syn_gen_scope:call(?MODULE, Node, Scope, {'3.0', join_on_node, node(), GroupName, Pid, Meta}) of
-        {ok, {CallbackMethod, Time, TableByName, TableByPid}} when Node =/= node() ->
-            %% update table on caller node immediately so that subsequent calls have an updated pg
-            add_to_local_table(GroupName, Pid, Meta, Time, undefined, TableByName, TableByPid),
-            %% callback
-            syn_event_handler:call_event_handler(CallbackMethod, [Scope, GroupName, Pid, Meta, normal]),
-            %% return
-            ok;
+    case syn_backbone:is_strict_mode() of
+        true when Pid =/= self() ->
+            {error, not_self};
 
-        {Response, _} ->
-            Response
+        _ ->
+            Node = node(Pid),
+            case syn_gen_scope:call(?MODULE, Node, Scope, {'3.0', join_on_node, node(), GroupName, Pid, Meta}) of
+                {ok, {CallbackMethod, Time, TableByName, TableByPid}} when Node =/= node() ->
+                    %% update table on caller node immediately so that subsequent calls have an updated pg
+                    add_to_local_table(GroupName, Pid, Meta, Time, undefined, TableByName, TableByPid),
+                    %% callback
+                    syn_event_handler:call_event_handler(CallbackMethod, [Scope, GroupName, Pid, Meta, normal]),
+                    %% return
+                    ok;
+
+                {Response, _} ->
+                    Response
+            end
     end.
 
 -spec leave(Scope :: atom(), GroupName :: term(), Pid :: pid()) -> ok | {error, Reason :: term()}.
@@ -279,12 +285,19 @@ handle_call({'3.0', join_on_node, RequesterNode, GroupName, Pid, Meta}, _From, #
                     end,
                     do_join_on_node(GroupName, Pid, Meta, MRef, normal, RequesterNode, on_process_joined, State);
 
-                {{_, Meta}, _, _, _, _} ->
+                {{_, _}, Meta, _, _, _} ->
                     %% re-joined with same meta
-                    {ok, noop};
+                    {reply, {ok, noop}, State};
 
                 {{_, _}, _, _, MRef, _} ->
-                    do_join_on_node(GroupName, Pid, Meta, MRef, normal, RequesterNode, on_group_process_updated, State)
+                    %% re-joined with different meta
+                    case syn_backbone:is_strict_mode() of
+                        true ->
+                            do_join_on_node(GroupName, Pid, Meta, MRef, normal, RequesterNode, on_group_process_updated, State);
+
+                        false ->
+                            {reply, {{error, non_strict_update}, undefined}, State}
+                    end
             end;
 
         false ->
