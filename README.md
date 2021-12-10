@@ -6,15 +6,15 @@ able to automatically manage dynamic clusters (addition / removal of nodes) and 
 
 Syn is a replacement for Erlang/OTP
 [global](https://www.erlang.org/doc/man/global.html)'s registry and
-[pg](https://www.erlang.org/doc/man/pg.html). The main differences with these OTP's implementations are:
+[pg](https://www.erlang.org/doc/man/pg.html) modules. The main differences with these OTP's implementations are:
 
- *  `global`: OTP's global module choses Consistency over Availability, therefore it can become difficult to scale
-    when registration rates are elevated and the cluster becomes larger. If eventual consistency is acceptable in your
-    case, Syn can considerably increase the registry's performance. Additionally, Syn allows to attach metadata to every
-    registered process, which also gets synchronized across the cluster.
- *  `pg`: OTP's pg module, like Syn, implements Strong Eventual Consistency. However, Syn also allows to attach metadata
-    information to processes, and implements [cluster-wide callbacks](syn_event_handler.html) on the main events. 
- 
+* OTP's `global` module chooses Consistency over Availability, therefore it can become difficult to scale
+  when registration rates are elevated and the cluster becomes larger. If eventual consistency is acceptable in your
+  case, Syn can considerably increase the registry's performance.
+* Syn allows to attach metadata to every process, which also gets synchronized across the cluster.
+* Syn implements [cluster-wide callbacks](syn_event_handler.html) on the main events, which are also properly triggered
+  after net splits.
+
 [[Documentation](https://hexdocs.pm/syn/)]
 
 ## Introduction

@@ -60,8 +60,8 @@ At almost the same time another process might also request to update process A's
 its metadata to `[{color, "blue"}, {weight, 1.0}]`.
 
 These requests will be delivered to the authority node which will treat them sequentially.
-Therefore, the first incoming request (for eg. the one to set size) will be overwritten shortly after
-by the second incoming request (to set the weight), thus resulting in the loss of the `{size, 100}` tuple
+Therefore, the first incoming request (for eg. the one that sets the size) will be overwritten shortly after
+by the second incoming request (the one that sets the weight), thus resulting in the loss of the `{size, 100}` tuple
 in the process' metadata.  The end result will be that process A' metadata will be propagated to the whole cluster as
 `[{color, "blue"}, {weight, 1.0}]`.
 
@@ -98,7 +98,7 @@ With `strict_mode` turned on:
 ok
 ```
 
-`strict_mode` can be turned on by setting the `strict_mode` configuration variable.
+Strict mode can be turned on by setting the `strict_mode` configuration variable.
 
 #### Elixir
 ```elixir
