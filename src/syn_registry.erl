@@ -205,13 +205,7 @@ handle_call({'3.0', register_on_node, RequesterNode, Name, Pid, Meta}, _From, #s
 
                 {Name, Pid, _, _, MRef, _} ->
                     %% same pid, different meta
-                    case syn_backbone:is_strict_mode() of
-                        true ->
-                            do_register_on_node(Name, Pid, Meta, MRef, normal, RequesterNode, on_registry_process_updated, State);
-
-                        false ->
-                            {reply, {{error, non_strict_update}, undefined}, State}
-                    end;
+                    do_register_on_node(Name, Pid, Meta, MRef, normal, RequesterNode, on_registry_process_updated, State);
 
                 _ ->
                     {reply, {{error, taken}, undefined}, State}

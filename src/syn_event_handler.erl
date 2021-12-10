@@ -37,9 +37,6 @@
 %% All of the callbacks, except for `resolve_registry_conflict/4', are called on all the nodes of the cluster.
 %% This allows you to receive events for the processes running on nodes that get shut down, or in case of net splits.
 %%
-%% For the `on_registry_process_updated/5' and `on_group_process_updated/5' callbacks to be called,
-%% <a href="options.html#strict_mode">`strict_mode'</a> must be enabled.
-%%
 %% The argument `Reason' in the callbacks can be:
 %% <ul>
 %% <li> `normal' for expected operations.</li>

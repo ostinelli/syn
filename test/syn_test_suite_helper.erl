@@ -316,14 +316,6 @@ send_error_logger_to_disk() ->
 %% ===================================================================
 process_main() ->
     receive
-        {registry_update_meta, Scope, Name, NewMeta} ->
-            ok = syn:register(Scope, Name, self(), NewMeta),
-            process_main();
-
-        {pg_update_meta, Scope, GroupName, NewMeta} ->
-            ok = syn:join(Scope, GroupName, self(), NewMeta),
-            process_main();
-
         _ ->
             process_main()
     end.

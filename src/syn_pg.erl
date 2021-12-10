@@ -291,13 +291,7 @@ handle_call({'3.0', join_on_node, RequesterNode, GroupName, Pid, Meta}, _From, #
 
                 {{_, _}, _, _, MRef, _} ->
                     %% re-joined with different meta
-                    case syn_backbone:is_strict_mode() of
-                        true ->
-                            do_join_on_node(GroupName, Pid, Meta, MRef, normal, RequesterNode, on_group_process_updated, State);
-
-                        false ->
-                            {reply, {{error, non_strict_update}, undefined}, State}
-                    end
+                    do_join_on_node(GroupName, Pid, Meta, MRef, normal, RequesterNode, on_group_process_updated, State)
             end;
 
         false ->

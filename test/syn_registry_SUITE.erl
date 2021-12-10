@@ -222,19 +222,13 @@ one_node_strict_mode(_Config) ->
     ok = syn:start(),
     syn:add_node_to_scopes([scope]),
 
-    %% start process
-    Pid = syn_test_suite_helper:start_process(),
-
-    %% strict mode disabled
-    ok = syn:register(scope, "strict-false", Pid, metadata),
-    ok = syn:register(scope, "strict-false", Pid, metadata),
-    {error, non_strict_update} = syn:register(scope, "strict-false", Pid, new_metadata),
-    {Pid, metadata} = syn:lookup(scope, "strict-false"),
-    ok = syn:register(scope, "strict-false", Pid, metadata),
-
     %% strict mode enabled
     application:set_env(syn, strict_mode, true),
+
+    %% start process
+    Pid = syn_test_suite_helper:start_process(),
     {error, not_self} = syn:register(scope, "strict-true", Pid, metadata),
+
     Self = self(),
     ok = syn:register(scope, "strict-true", Self, metadata),
     ok = syn:register(scope, "strict-true", Self, new_metadata),
@@ -454,11 +448,8 @@ three_nodes_register_unregister_and_monitor(Config) ->
     1 = rpc:call(SlaveNode2, syn, registry_count, [scope_bc, SlaveNode1]),
     0 = rpc:call(SlaveNode2, syn, registry_count, [scope_bc, SlaveNode2]),
 
-    %% enable strict to allow for updates
-    application:set_env(syn, strict_mode, true),
-
-    %% re-register to edit meta (strict is enabled, so send message)
-    PidWithMeta ! {registry_update_meta, scope_ab, "scope_a_alias", <<"with_meta_updated">>},
+    %% re-register to edit meta
+    ok = syn:register(scope_ab, "scope_a_alias", PidWithMeta, <<"with_meta_updated">>),
 
     syn_test_suite_helper:assert_wait(
         {PidWithMeta, <<"with_meta_updated">>},
@@ -469,9 +460,6 @@ three_nodes_register_unregister_and_monitor(Config) ->
         fun() -> rpc:call(SlaveNode1, syn, lookup, [scope_ab, "scope_a_alias"]) end
     ),
     {badrpc, {'EXIT', {{invalid_scope, scope_ab}, _}}} = (catch rpc:call(SlaveNode2, syn, lookup, [scope_ab, "scope_a_alias"])),
-
-    %% disable strict
-    application:set_env(syn, strict_mode, false),
 
     %% register remote
     ok = syn:register(scope_ab, "ab_on_1", PidRemoteWithMetaOn1, <<"ab-on-1">>),
@@ -1000,17 +988,24 @@ three_nodes_custom_event_handler_reg_unreg(Config) ->
         {on_process_registered, SlaveNode2, scope_all, "proc-handler-2", Pid2, <<"meta-for-2">>, normal}
     ]),
 
-    %% enable strict to allow for updates
-    application:set_env(syn, strict_mode, true),
-
-    %% ---> on meta update (strict is enabled, so send message)
-    Pid ! {registry_update_meta, scope_all, "proc-handler", {recipient, self(), <<"new-meta">>}},
+    %% ---> on meta update
+    ok = syn:register(scope_all, "proc-handler", Pid, {recipient, self(), <<"new-meta">>}),
 
     %% check callbacks called
     syn_test_suite_helper:assert_received_messages([
         {on_registry_process_updated, LocalNode, scope_all, "proc-handler", Pid, <<"new-meta">>, normal},
         {on_registry_process_updated, SlaveNode1, scope_all, "proc-handler", Pid, <<"new-meta">>, normal},
         {on_registry_process_updated, SlaveNode2, scope_all, "proc-handler", Pid, <<"new-meta">>, normal}
+    ]),
+
+    %% meta update from another node
+    ok = rpc:call(SlaveNode1, syn, register, [scope_all, "proc-handler-2", Pid2, {recipient, self(), <<"meta-for-2-update">>}]),
+
+    %% check callbacks called
+    syn_test_suite_helper:assert_received_messages([
+        {on_registry_process_updated, LocalNode, scope_all, "proc-handler-2", Pid2, <<"meta-for-2-update">>, normal},
+        {on_registry_process_updated, SlaveNode1, scope_all, "proc-handler-2", Pid2, <<"meta-for-2-update">>, normal},
+        {on_registry_process_updated, SlaveNode2, scope_all, "proc-handler-2", Pid2, <<"meta-for-2-update">>, normal}
     ]),
 
     %% ---> on unregister
@@ -1028,18 +1023,15 @@ three_nodes_custom_event_handler_reg_unreg(Config) ->
 
     %% check callbacks called
     syn_test_suite_helper:assert_received_messages([
-        {on_process_unregistered, LocalNode, scope_all, "proc-handler-2", Pid2, <<"meta-for-2">>, normal},
-        {on_process_unregistered, SlaveNode1, scope_all, "proc-handler-2", Pid2, <<"meta-for-2">>, normal},
-        {on_process_unregistered, SlaveNode2, scope_all, "proc-handler-2", Pid2, <<"meta-for-2">>, normal}
+        {on_process_unregistered, LocalNode, scope_all, "proc-handler-2", Pid2, <<"meta-for-2-update">>, normal},
+        {on_process_unregistered, SlaveNode1, scope_all, "proc-handler-2", Pid2, <<"meta-for-2-update">>, normal},
+        {on_process_unregistered, SlaveNode2, scope_all, "proc-handler-2", Pid2, <<"meta-for-2-update">>, normal}
     ]),
 
     %% clean & check
     syn_test_suite_helper:kill_process(Pid),
     %% no messages
     syn_test_suite_helper:assert_empty_queue(),
-
-    %% disable strict
-    application:set_env(syn, strict_mode, false),
 
     %% ---> after a netsplit
     PidRemoteOn1 = syn_test_suite_helper:start_process(SlaveNode1),
