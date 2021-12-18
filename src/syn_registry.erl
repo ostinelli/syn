@@ -234,8 +234,17 @@ handle_call({'3.0', register_or_update_on_node, RequesterNode, Name, Pid, MetaOr
 
                 {Name, Pid, TableMeta, _, MRef, _} when is_function(MetaOrFun) ->
                     %% update with fun
-                    Meta = MetaOrFun(Pid, TableMeta),
-                    do_register_on_node(Name, Pid, Meta, MRef, normal, RequesterNode, on_registry_process_updated, State);
+                    try MetaOrFun(Pid, TableMeta) of
+                        Meta ->
+                            do_register_on_node(Name, Pid, Meta, MRef, normal, RequesterNode, on_registry_process_updated, State)
+
+                    catch Class:Reason:Stacktrace ->
+                        error_logger:error_msg(
+                            "SYN[~s] Error ~p:~p in registry update function: ~p",
+                            [node(), Class, Reason, Stacktrace]
+                        ),
+                        {reply, {{error, {update_fun, {Reason, Stacktrace}}}, undefined}, State}
+                    end;
 
                 {Name, Pid, MetaOrFun, _, _, _} ->
                     %% same pid, same meta

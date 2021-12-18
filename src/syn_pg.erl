@@ -324,8 +324,17 @@ handle_call({'3.0', join_or_update_on_node, RequesterNode, GroupName, Pid, MetaO
 
                 {{_, _}, TableMeta, _, MRef, _} when is_function(MetaOrFun) ->
                     %% update with fun
-                    Meta = MetaOrFun(TableMeta),
-                    do_join_on_node(GroupName, Pid, Meta, MRef, normal, RequesterNode, on_group_process_updated, State);
+                    try MetaOrFun(TableMeta) of
+                        Meta ->
+                            do_join_on_node(GroupName, Pid, Meta, MRef, normal, RequesterNode, on_group_process_updated, State)
+
+                    catch Class:Reason:Stacktrace ->
+                        error_logger:error_msg(
+                            "SYN[~s] Error ~p:~p in pg update function: ~p",
+                            [node(), Class, Reason, Stacktrace]
+                        ),
+                        {reply, {{error, {update_fun, {Reason, Stacktrace}}}, undefined}, State}
+                    end;
 
                 {{_, _}, MetaOrFun, _, _, _} ->
                     %% re-joined with same meta
