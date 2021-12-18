@@ -78,14 +78,14 @@ If you're using [rebar3](https://github.com/erlang/rebar3), add `syn` as a depen
 
 ```erlang
 {deps, [
-  {syn, {git, "git://github.com/ostinelli/syn.git", {tag, "3.1.0"}}}
+  {syn, {git, "git://github.com/ostinelli/syn.git", {tag, "3.2.0"}}}
 ]}.
 ```
 Or, if you're using [Hex.pm](https://hex.pm/) as package manager (with the [rebar3_hex](https://github.com/hexpm/rebar3_hex) plugin):
 
 ```erlang
 {deps, [
-  {syn, "3.1.0"}
+  {syn, "3.2.0"}
 ]}.
 ```
 
