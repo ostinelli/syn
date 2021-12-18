@@ -134,7 +134,7 @@
 -export([set_event_handler/1]).
 %% registry
 -export([lookup/2]).
--export([register/3, register/4]).
+-export([register/3, register/4, update_registry/3]).
 -export([unregister/2]).
 -export([registry_count/1, registry_count/2]).
 -export([local_registry_count/1]).
@@ -343,6 +343,30 @@ register(Scope, Name, Pid) ->
 -spec register(Scope :: atom(), Name :: term(), Pid :: pid(), Meta :: term()) -> ok | {error, Reason :: term()}.
 register(Scope, Name, Pid, Meta) ->
     syn_registry:register(Scope, Name, Pid, Meta).
+
+%% @doc Updates the registered Name metadata in the specified Scope.
+%%
+%% Atomically calls Fun with the current metadata, and stores the return value as new metadata.
+%%
+%% <h2>Examples</h2>
+%% <h3>Elixir</h3>
+%% ```
+%% iex> :syn.register(:devices, "SN-123-456789", self(), 10)
+%% :ok
+%% iex> :syn.update_registry(:devices, "area-1", fn existing_meta -> existing_meta * 2 end)
+%% {:ok, {#PID<0.105.0>, 20}}
+%% '''
+%% <h3>Erlang</h3>
+%% ```
+%% 1> syn:register(devices, "SN-123-456789", self(), 10).
+%% ok
+%% 2> syn:update_registry(devices, "SN-123-456789", fun(ExistingMeta) -> ExistingMeta * 2 end).
+%% {ok, {<0.69.0>, 20}}
+%% '''
+-spec update_registry(Scope :: atom(), Name :: term(), Fun :: function()) ->
+    {ok, {Pid :: pid(), Meta :: term()}} | {error, Reason :: term()}.
+update_registry(Scope, Name, Fun) ->
+    syn_registry:update(Scope, Name, Fun).
 
 %% @doc Unregisters a process from specified Scope.
 %%

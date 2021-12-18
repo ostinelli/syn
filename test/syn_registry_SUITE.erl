@@ -43,7 +43,8 @@
     three_nodes_cluster_changes/1,
     three_nodes_cluster_conflicts/1,
     three_nodes_custom_event_handler_reg_unreg/1,
-    three_nodes_custom_event_handler_conflict_resolution/1
+    three_nodes_custom_event_handler_conflict_resolution/1,
+    three_nodes_update/1
 ]).
 -export([
     four_nodes_concurrency/1
@@ -96,7 +97,8 @@ groups() ->
             three_nodes_cluster_changes,
             three_nodes_cluster_conflicts,
             three_nodes_custom_event_handler_reg_unreg,
-            three_nodes_custom_event_handler_conflict_resolution
+            three_nodes_custom_event_handler_conflict_resolution,
+            three_nodes_update
         ]},
         {four_nodes_registry, [shuffle], [
             four_nodes_concurrency
@@ -1453,6 +1455,102 @@ three_nodes_custom_event_handler_conflict_resolution(Config) ->
         true,
         fun() -> rpc:call(SlaveNode2, erlang, is_process_alive, [PidOn2]) end
     ).
+
+three_nodes_update(Config) ->
+    %% get slaves
+    SlaveNode1 = proplists:get_value(syn_slave_1, Config),
+    SlaveNode2 = proplists:get_value(syn_slave_2, Config),
+
+    %% start syn
+    ok = syn:start(),
+    ok = rpc:call(SlaveNode1, syn, start, []),
+    ok = rpc:call(SlaveNode2, syn, start, []),
+
+    %% add scopes
+    ok = syn:add_node_to_scopes([scope_all]),
+    ok = rpc:call(SlaveNode1, syn, add_node_to_scopes, [[scope_all, scope_bc]]),
+    ok = rpc:call(SlaveNode2, syn, add_node_to_scopes, [[scope_all, scope_bc]]),
+
+    %% start processes
+    Pid = syn_test_suite_helper:start_process(),
+    PidOn1 = syn_test_suite_helper:start_process(SlaveNode1),
+
+    %% init
+    TestPid = self(),
+    LocalNode = node(),
+
+    %% register
+    ok = syn:register(scope_all, "my-proc", Pid, {recipient, TestPid, 10}),
+
+    %% add custom handler for resolution (using method call)
+    syn:set_event_handler(syn_test_event_handler_callbacks),
+    rpc:call(SlaveNode1, syn, set_event_handler, [syn_test_event_handler_callbacks]),
+    rpc:call(SlaveNode2, syn, set_event_handler, [syn_test_event_handler_callbacks]),
+
+    %% errors
+    {error, undefined} = syn:update_registry(scope_all, "unknown", fun(ExistingMeta) -> ExistingMeta end),
+
+    %% update
+    {ok, {Pid, {recipient, TestPid, 20}}} = syn:update_registry(scope_all, "my-proc", fun({recipient, TestPid0, Count}) ->
+        {recipient, TestPid0, Count * 2}
+    end),
+
+    %% retrieve
+    syn_test_suite_helper:assert_wait(
+        {Pid, {recipient, TestPid, 20}},
+        fun() -> syn:lookup(scope_all, "my-proc") end
+    ),
+    syn_test_suite_helper:assert_wait(
+        {Pid, {recipient, TestPid, 20}},
+        fun() -> rpc:call(SlaveNode1, syn, lookup, [scope_all, "my-proc"]) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        {Pid, {recipient, TestPid, 20}},
+        fun() -> rpc:call(SlaveNode2, syn, lookup, [scope_all, "my-proc"]) end
+    ),
+
+    %% check callbacks called
+    syn_test_suite_helper:assert_received_messages([
+        {on_registry_process_updated, LocalNode, scope_all, "my-proc", Pid, 20, normal},
+        {on_registry_process_updated, SlaveNode1, scope_all, "my-proc", Pid, 20, normal},
+        {on_registry_process_updated, SlaveNode2, scope_all, "my-proc", Pid, 20, normal}
+    ]),
+
+    %% register on remote
+    ok = syn:register(scope_all, "my-proc-on-1", PidOn1, {recipient, TestPid, 1000}),
+
+    %% check callbacks called
+    syn_test_suite_helper:assert_received_messages([
+        {on_process_registered, LocalNode, scope_all, "my-proc-on-1", PidOn1, 1000, normal},
+        {on_process_registered, SlaveNode1, scope_all, "my-proc-on-1", PidOn1, 1000, normal},
+        {on_process_registered, SlaveNode2, scope_all, "my-proc-on-1", PidOn1, 1000, normal}
+    ]),
+
+    %% update on remote
+    {ok, {PidOn1, {recipient, TestPid, 1001}}} = syn:update_registry(scope_all, "my-proc-on-1", fun({recipient, TestPid0, Count}) ->
+        {recipient, TestPid0, Count + 1}
+    end),
+
+    %% retrieve
+    syn_test_suite_helper:assert_wait(
+        {PidOn1, {recipient, TestPid, 1001}},
+        fun() -> syn:lookup(scope_all, "my-proc-on-1") end
+    ),
+    syn_test_suite_helper:assert_wait(
+        {PidOn1, {recipient, TestPid, 1001}},
+        fun() -> rpc:call(SlaveNode1, syn, lookup, [scope_all, "my-proc-on-1"]) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        {PidOn1, {recipient, TestPid, 1001}},
+        fun() -> rpc:call(SlaveNode2, syn, lookup, [scope_all, "my-proc-on-1"]) end
+    ),
+
+    %% check callbacks called
+    syn_test_suite_helper:assert_received_messages([
+        {on_registry_process_updated, LocalNode, scope_all, "my-proc-on-1", PidOn1, 1001, normal},
+        {on_registry_process_updated, SlaveNode1, scope_all, "my-proc-on-1", PidOn1, 1001, normal},
+        {on_registry_process_updated, SlaveNode2, scope_all, "my-proc-on-1", PidOn1, 1001, normal}
+    ]).
 
 four_nodes_concurrency(Config) ->
     %% get slaves

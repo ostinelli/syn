@@ -156,6 +156,8 @@ join(Scope, GroupName, Pid, Meta) ->
 update_member(Scope, GroupName, Pid, Fun) when is_function(Fun) ->
     join_or_update(Scope, GroupName, Pid, Fun).
 
+-spec join_or_update(Scope :: atom(), GroupName :: term(), Pid :: pid(), MetaOrFun :: term() | function()) ->
+    {ok, {Pid :: pid(), Meta :: term()}} | {error, Reason :: term()}.
 join_or_update(Scope, GroupName, Pid, MetaOrFun) ->
     case syn_backbone:is_strict_mode() of
         true when Pid =/= self() ->

@@ -32,6 +32,7 @@
 -export([subcluster_nodes/1]).
 -export([lookup/2]).
 -export([register/4]).
+-export([update/3]).
 -export([unregister/2]).
 -export([count/1, count/2]).
 
@@ -83,23 +84,52 @@ lookup(Scope, Name) ->
 
 -spec register(Scope :: atom(), Name :: term(), Pid :: pid(), Meta :: term()) -> ok | {error, Reason :: term()}.
 register(Scope, Name, Pid, Meta) ->
+    case register_or_update(Scope, Name, Pid, Meta) of
+        {ok, _} -> ok;
+        {error, Reason} -> {error, Reason}
+    end.
+
+-spec update(Scope :: atom(), Name :: term(), Fun :: function()) ->
+    {ok, {Pid :: pid(), Meta :: term()}} | {error, Reason :: term()}.
+update(Scope, Name, Fun) ->
+    case syn_backbone:get_table_name(syn_registry_by_name, Scope) of
+        undefined ->
+            error({invalid_scope, Scope});
+
+        TableByName ->
+            % get process' node
+            case find_registry_entry_by_name(Name, TableByName) of
+                undefined ->
+                    {error, undefined};
+
+                {Name, Pid, _, _, _, _} ->
+                    register_or_update(Scope, Name, Pid, Fun)
+            end
+    end.
+
+-spec register_or_update(Scope :: atom(), Name :: term(), Pid :: pid(), MetaOrFun :: term() | function()) ->
+    {ok, {Pid :: pid(), Meta :: term()}} | {error, Reason :: term()}.
+register_or_update(Scope, Name, Pid, MetaOrFun) ->
     case syn_backbone:is_strict_mode() of
         true when Pid =/= self() ->
             {error, not_self};
 
         _ ->
             Node = node(Pid),
-            case syn_gen_scope:call(?MODULE, Node, Scope, {'3.0', register_on_node, node(), Name, Pid, Meta}) of
-                {ok, {CallbackMethod, Time, TableByName, TableByPid}} when Node =/= node() ->
+            case syn_gen_scope:call(?MODULE, Node, Scope, {'3.0', register_or_update_on_node, node(), Name, Pid, MetaOrFun}) of
+                {ok, {CallbackMethod, Meta, Time, TableByName, TableByPid}} when Node =/= node() ->
                     %% update table on caller node immediately so that subsequent calls have an updated registry
                     add_to_local_table(Name, Pid, Meta, Time, undefined, TableByName, TableByPid),
                     %% callback
                     syn_event_handler:call_event_handler(CallbackMethod, [Scope, Name, Pid, Meta, normal]),
                     %% return
-                    ok;
+                    {ok, {Pid, Meta}};
 
-                {Response, _} ->
-                    Response
+                {ok, {_, Meta, _, _, _}} ->
+                    {ok, {Pid, Meta}};
+
+                {{error, Reason}, _} ->
+                    {error, Reason}
             end
     end.
 
@@ -184,28 +214,36 @@ init(#state{
     {noreply, #state{}, timeout() | hibernate | {continue, term()}} |
     {stop, Reason :: term(), Reply :: term(), #state{}} |
     {stop, Reason :: term(), #state{}}.
-handle_call({'3.0', register_on_node, RequesterNode, Name, Pid, Meta}, _From, #state{
+handle_call({'3.0', register_or_update_on_node, RequesterNode, Name, Pid, MetaOrFun}, _From, #state{
     table_by_name = TableByName,
     table_by_pid = TableByPid
 } = State) ->
     case is_process_alive(Pid) of
         true ->
             case find_registry_entry_by_name(Name, TableByName) of
+                undefined when is_function(MetaOrFun) ->
+                    {reply, {{error, undefined}, undefined}, State};
+
                 undefined ->
                     %% available
                     MRef = case find_monitor_for_pid(Pid, TableByPid) of
                         undefined -> erlang:monitor(process, Pid);  %% process is not monitored yet, add
                         MRef0 -> MRef0
                     end,
-                    do_register_on_node(Name, Pid, Meta, MRef, normal, RequesterNode, on_process_registered, State);
+                    do_register_on_node(Name, Pid, MetaOrFun, MRef, normal, RequesterNode, on_process_registered, State);
 
-                {Name, Pid, Meta, _, _, _} ->
+                {Name, Pid, TableMeta, _, MRef, _} when is_function(MetaOrFun) ->
+                    %% update with fun
+                    Meta = MetaOrFun(TableMeta),
+                    do_register_on_node(Name, Pid, Meta, MRef, normal, RequesterNode, on_registry_process_updated, State);
+
+                {Name, Pid, MetaOrFun, _, _, _} ->
                     %% same pid, same meta
                     {reply, {ok, noop}, State};
 
                 {Name, Pid, _, _, MRef, _} ->
                     %% same pid, different meta
-                    do_register_on_node(Name, Pid, Meta, MRef, normal, RequesterNode, on_registry_process_updated, State);
+                    do_register_on_node(Name, Pid, MetaOrFun, MRef, normal, RequesterNode, on_registry_process_updated, State);
 
                 _ ->
                     {reply, {{error, taken}, undefined}, State}
@@ -387,6 +425,7 @@ do_rebuild_monitors([{Name, Pid, Meta, Time} | T], NewMRefs, Scope, TableByName,
         reply,
         {ok, {
             CallbackMethod :: atom(),
+            Meta :: term(),
             Time :: non_neg_integer(),
             TableByName :: atom(),
             TableByPid :: atom()
@@ -406,7 +445,7 @@ do_register_on_node(Name, Pid, Meta, MRef, Reason, RequesterNode, CallbackMethod
     %% broadcast
     syn_gen_scope:broadcast({'3.0', sync_register, Name, Pid, Meta, Time, Reason}, [RequesterNode], State),
     %% return
-    {reply, {ok, {CallbackMethod, Time, TableByName, TableByPid}}, State}.
+    {reply, {ok, {CallbackMethod, Meta, Time, TableByName, TableByPid}}, State}.
 
 -spec get_registry_tuples_for_node(Node :: node(), TableByName :: atom()) -> [syn_registry_tuple()].
 get_registry_tuples_for_node(Node, TableByName) ->
