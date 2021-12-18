@@ -1488,12 +1488,17 @@ three_nodes_update(Config) ->
     rpc:call(SlaveNode2, syn, set_event_handler, [syn_test_event_handler_callbacks]),
 
     %% errors
-    {error, undefined} = syn:update_registry(scope_all, "unknown", fun(ExistingMeta) -> ExistingMeta end),
+    {error, undefined} = syn:update_registry(scope_all, "unknown", fun(_IPid, ExistingMeta) -> ExistingMeta end),
 
     %% update
-    {ok, {Pid, {recipient, TestPid, 20}}} = syn:update_registry(scope_all, "my-proc", fun({recipient, TestPid0, Count}) ->
-        {recipient, TestPid0, Count * 2}
-    end),
+    {ok, {Pid, {recipient, TestPid, 20}}} = syn:update_registry(
+        scope_all,
+        "my-proc",
+        fun(IPid, {recipient, TestPid0, Count}) ->
+            IPid = Pid,
+            {recipient, TestPid0, Count * 2}
+        end
+    ),
 
     %% retrieve
     syn_test_suite_helper:assert_wait(
@@ -1527,9 +1532,13 @@ three_nodes_update(Config) ->
     ]),
 
     %% update on remote
-    {ok, {PidOn1, {recipient, TestPid, 1001}}} = syn:update_registry(scope_all, "my-proc-on-1", fun({recipient, TestPid0, Count}) ->
-        {recipient, TestPid0, Count + 1}
-    end),
+    {ok, {PidOn1, {recipient, TestPid, 1001}}} = syn:update_registry(
+        scope_all,
+        "my-proc-on-1",
+        fun(_IPid, {recipient, TestPid0, Count}) ->
+            {recipient, TestPid0, Count + 1}
+        end
+    ),
 
     %% retrieve
     syn_test_suite_helper:assert_wait(

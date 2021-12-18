@@ -234,7 +234,7 @@ handle_call({'3.0', register_or_update_on_node, RequesterNode, Name, Pid, MetaOr
 
                 {Name, Pid, TableMeta, _, MRef, _} when is_function(MetaOrFun) ->
                     %% update with fun
-                    Meta = MetaOrFun(TableMeta),
+                    Meta = MetaOrFun(Pid, TableMeta),
                     do_register_on_node(Name, Pid, Meta, MRef, normal, RequesterNode, on_registry_process_updated, State);
 
                 {Name, Pid, MetaOrFun, _, _, _} ->
