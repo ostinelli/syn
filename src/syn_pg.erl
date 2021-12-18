@@ -33,7 +33,9 @@
 -export([join/4]).
 -export([leave/3]).
 -export([members/2]).
+-export([member/3]).
 -export([is_member/3]).
+-export([update_member/4]).
 -export([local_members/2]).
 -export([is_local_member/3]).
 -export([count/1, count/2]).
@@ -80,9 +82,16 @@ subcluster_nodes(Scope) ->
 
 -spec members(Scope :: atom(), GroupName :: term()) -> [{Pid :: pid(), Meta :: term()}].
 members(Scope, GroupName) ->
-    do_get_members(Scope, GroupName, '_').
+    do_get_members(Scope, GroupName, undefined, undefined).
 
--spec is_member(Scope :: atom(), GroupName :: term(), Pid :: pid()) -> boolean().
+-spec member(Scope :: atom(), GroupName :: term(), pid()) -> {pid(), Meta :: term()} | undefined.
+member(Scope, GroupName, Pid) ->
+    case do_get_members(Scope, GroupName, Pid, undefined) of
+        [] -> undefined;
+        [Member] -> Member
+    end.
+
+-spec is_member(Scope :: atom(), GroupName :: term(), pid()) -> boolean().
 is_member(Scope, GroupName, Pid) ->
     case syn_backbone:get_table_name(syn_pg_by_name, Scope) of
         undefined ->
@@ -95,25 +104,34 @@ is_member(Scope, GroupName, Pid) ->
             end
     end.
 
--spec local_members(Scope :: atom(), GroupName :: term()) -> [{Pid :: pid(), Meta :: term()}].
+-spec local_members(Scope :: atom(), GroupName :: term()) -> [{pid(), Meta :: term()}].
 local_members(Scope, GroupName) ->
-    do_get_members(Scope, GroupName, node()).
+    do_get_members(Scope, GroupName, undefined, node()).
 
--spec do_get_members(Scope :: atom(), GroupName :: term(), NodeParam :: atom()) -> [{Pid :: pid(), Meta :: term()}].
-do_get_members(Scope, GroupName, NodeParam) ->
+-spec do_get_members(Scope :: atom(), GroupName :: term(), pid() | undefined, Node :: node() | undefined) ->
+    [{pid(), Meta :: term()}].
+do_get_members(Scope, GroupName, Pid, Node) ->
+    PidParam = case Pid of
+        undefined -> '$2';
+        _ -> Pid
+    end,
+    NodeParam = case Node of
+        undefined -> '_';
+        _ -> Node
+    end,
     case syn_backbone:get_table_name(syn_pg_by_name, Scope) of
         undefined ->
             error({invalid_scope, Scope});
 
         TableByName ->
             ets:select(TableByName, [{
-                {{GroupName, '$2'}, '$3', '_', '_', NodeParam},
+                {{GroupName, PidParam}, '$3', '_', '_', NodeParam},
                 [],
-                [{{'$2', '$3'}}]
+                [{{PidParam, '$3'}}]
             }])
     end.
 
--spec is_local_member(Scope :: atom(), GroupName :: term(), Pid :: pid()) -> boolean().
+-spec is_local_member(Scope :: atom(), GroupName :: term(), pid()) -> boolean().
 is_local_member(Scope, GroupName, Pid) ->
     case syn_backbone:get_table_name(syn_pg_by_name, Scope) of
         undefined ->
@@ -128,27 +146,41 @@ is_local_member(Scope, GroupName, Pid) ->
 
 -spec join(Scope :: atom(), GroupName :: term(), Pid :: pid(), Meta :: term()) -> ok.
 join(Scope, GroupName, Pid, Meta) ->
+    case join_or_update(Scope, GroupName, Pid, Meta) of
+        {ok, _} -> ok;
+        {error, Reason} -> {error, Reason}
+    end.
+
+-spec update_member(Scope :: atom(), GroupName :: term(), Pid :: pid(), Fun :: function()) ->
+    {ok, {Pid :: pid(), Meta :: term()}} | {error, Reason :: term()}.
+update_member(Scope, GroupName, Pid, Fun) when is_function(Fun) ->
+    join_or_update(Scope, GroupName, Pid, Fun).
+
+join_or_update(Scope, GroupName, Pid, MetaOrFun) ->
     case syn_backbone:is_strict_mode() of
         true when Pid =/= self() ->
             {error, not_self};
 
         _ ->
             Node = node(Pid),
-            case syn_gen_scope:call(?MODULE, Node, Scope, {'3.0', join_on_node, node(), GroupName, Pid, Meta}) of
-                {ok, {CallbackMethod, Time, TableByName, TableByPid}} when Node =/= node() ->
+            case syn_gen_scope:call(?MODULE, Node, Scope, {'3.0', join_or_update_on_node, node(), GroupName, Pid, MetaOrFun}) of
+                {ok, {CallbackMethod, Meta, Time, TableByName, TableByPid}} when Node =/= node() ->
                     %% update table on caller node immediately so that subsequent calls have an updated pg
                     add_to_local_table(GroupName, Pid, Meta, Time, undefined, TableByName, TableByPid),
                     %% callback
                     syn_event_handler:call_event_handler(CallbackMethod, [Scope, GroupName, Pid, Meta, normal]),
                     %% return
-                    ok;
+                    {ok, {Pid, Meta}};
 
-                {Response, _} ->
-                    Response
+                {ok, {_, Meta, _, _, _}} ->
+                    {ok, {Pid, Meta}};
+
+                {{error, Reason}, _} ->
+                    {error, Reason}
             end
     end.
 
--spec leave(Scope :: atom(), GroupName :: term(), Pid :: pid()) -> ok | {error, Reason :: term()}.
+-spec leave(Scope :: atom(), GroupName :: term(), pid()) -> ok | {error, Reason :: term()}.
 leave(Scope, GroupName, Pid) ->
     case syn_backbone:get_table_name(syn_pg_by_name, Scope) of
         undefined ->
@@ -236,7 +268,7 @@ multi_call(Scope, GroupName, Message, Timeout) ->
     end, Members),
     collect_replies(orddict:from_list(Members)).
 
--spec multi_call_reply({CallerPid :: pid(), reference()}, Reply :: term()) -> any().
+-spec multi_call_reply({CallerPid :: term(), reference()}, Reply :: term()) -> any().
 multi_call_reply({CallerPid, Ref}, Reply) ->
     CallerPid ! {syn_multi_call_reply, Ref, Reply}.
 
@@ -270,28 +302,36 @@ init(#state{
     {noreply, #state{}, timeout() | hibernate | {continue, term()}} |
     {stop, Reason :: term(), Reply :: term(), #state{}} |
     {stop, Reason :: term(), #state{}}.
-handle_call({'3.0', join_on_node, RequesterNode, GroupName, Pid, Meta}, _From, #state{
+handle_call({'3.0', join_or_update_on_node, RequesterNode, GroupName, Pid, MetaOrFun}, _From, #state{
     table_by_name = TableByName,
     table_by_pid = TableByPid
 } = State) ->
     case is_process_alive(Pid) of
         true ->
             case find_pg_entry_by_name_and_pid(GroupName, Pid, TableByName) of
+                undefined when is_function(MetaOrFun) ->
+                    {reply, {{error, undefined}, undefined}, State};
+
                 undefined ->
                     %% add
                     MRef = case find_monitor_for_pid(Pid, TableByPid) of
                         undefined -> erlang:monitor(process, Pid);  %% process is not monitored yet, create
                         MRef0 -> MRef0
                     end,
-                    do_join_on_node(GroupName, Pid, Meta, MRef, normal, RequesterNode, on_process_joined, State);
+                    do_join_on_node(GroupName, Pid, MetaOrFun, MRef, normal, RequesterNode, on_process_joined, State);
 
-                {{_, _}, Meta, _, _, _} ->
+                {{_, _}, TableMeta, _, MRef, _} when is_function(MetaOrFun) ->
+                    %% update with fun
+                    Meta = MetaOrFun(TableMeta),
+                    do_join_on_node(GroupName, Pid, Meta, MRef, normal, RequesterNode, on_group_process_updated, State);
+
+                {{_, _}, MetaOrFun, _, _, _} ->
                     %% re-joined with same meta
                     {reply, {ok, noop}, State};
 
                 {{_, _}, _, _, MRef, _} ->
                     %% re-joined with different meta
-                    do_join_on_node(GroupName, Pid, Meta, MRef, normal, RequesterNode, on_group_process_updated, State)
+                    do_join_on_node(GroupName, Pid, MetaOrFun, MRef, normal, RequesterNode, on_group_process_updated, State)
             end;
 
         false ->
@@ -467,6 +507,7 @@ do_rebuild_monitors([{GroupName, Pid, Meta, Time} | T], NewMRefs, Scope, TableBy
         reply,
         {ok, {
             CallbackMethod :: atom(),
+            Meta :: term(),
             Time :: non_neg_integer(),
             TableByName :: atom(),
             TableByPid :: atom()
@@ -486,7 +527,7 @@ do_join_on_node(GroupName, Pid, Meta, MRef, Reason, RequesterNode, CallbackMetho
     %% broadcast
     syn_gen_scope:broadcast({'3.0', sync_join, GroupName, Pid, Meta, Time, Reason}, [RequesterNode], State),
     %% return
-    {reply, {ok, {CallbackMethod, Time, TableByName, TableByPid}}, State}.
+    {reply, {ok, {CallbackMethod, Meta, Time, TableByName, TableByPid}}, State}.
 
 -spec get_pg_tuples_for_node(Node :: node(), TableByName :: atom()) -> [syn_pg_tuple()].
 get_pg_tuples_for_node(Node, TableByName) ->

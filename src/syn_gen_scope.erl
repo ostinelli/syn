@@ -79,7 +79,7 @@
 %% API
 %% ===================================================================
 -spec start_link(Handler :: module(), HandlerLogName :: atom(), Scope :: atom()) ->
-    {ok, Pid :: pid()} | {error, {already_started, Pid :: pid()}} | {error, Reason :: term()}.
+    {ok, pid()} | {error, {already_started, pid()}} | {error, Reason :: term()}.
 start_link(Handler, HandlerLogName, Scope) when is_atom(Scope) ->
     %% build name
     HandlerBin = list_to_binary(atom_to_list(Handler)),

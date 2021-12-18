@@ -43,7 +43,8 @@
     three_nodes_custom_event_handler_joined_left/1,
     three_nodes_publish/1,
     three_nodes_multi_call/1,
-    three_nodes_group_names/1
+    three_nodes_group_names/1,
+    three_nodes_member_and_update/1
 ]).
 -export([
     four_nodes_concurrency/1
@@ -102,7 +103,8 @@ groups() ->
             three_nodes_custom_event_handler_joined_left,
             three_nodes_publish,
             three_nodes_multi_call,
-            three_nodes_group_names
+            three_nodes_group_names,
+            three_nodes_member_and_update
         ]},
         {four_nodes_pg, [shuffle], [
             four_nodes_concurrency
@@ -1645,6 +1647,109 @@ three_nodes_group_names(Config) ->
         [],
         fun() -> lists:sort(rpc:call(SlaveNode2, syn, group_names, [scope_all, SlaveNode2])) end
     ).
+
+three_nodes_member_and_update(Config) ->
+    %% get slaves
+    SlaveNode1 = proplists:get_value(syn_slave_1, Config),
+    SlaveNode2 = proplists:get_value(syn_slave_2, Config),
+
+    %% start syn on nodes
+    ok = syn:start(),
+    ok = rpc:call(SlaveNode1, syn, start, []),
+    ok = rpc:call(SlaveNode2, syn, start, []),
+
+    %% add scopes
+    ok = syn:add_node_to_scopes([scope_all]),
+    ok = rpc:call(SlaveNode1, syn, add_node_to_scopes, [[scope_all]]),
+    ok = rpc:call(SlaveNode2, syn, add_node_to_scopes, [[scope_all]]),
+
+    %% start processes
+    Pid = syn_test_suite_helper:start_process(),
+    PidOn1 = syn_test_suite_helper:start_process(SlaveNode1),
+
+    %% init
+    TestPid = self(),
+    LocalNode = node(),
+
+    %% join
+    ok = syn:join(scope_all, "my-group", Pid, {recipient, TestPid, 10}),
+
+    %% retrieve
+    {Pid, {recipient, TestPid, 10}} = syn:member(scope_all, "my-group", Pid),
+    undefined = syn:member(scope_all, "my-group", PidOn1),
+    {'EXIT', {{invalid_scope, custom}, _}} = (catch syn:member(custom, "group", PidOn1)),
+
+    %% add custom handler for callbacks
+    syn:set_event_handler(syn_test_event_handler_callbacks),
+    rpc:call(SlaveNode1, syn, set_event_handler, [syn_test_event_handler_callbacks]),
+    rpc:call(SlaveNode2, syn, set_event_handler, [syn_test_event_handler_callbacks]),
+
+    %% errors
+    {error, undefined} = syn:update_member(scope_all, "my-group", PidOn1, fun(ExistingMeta) -> ExistingMeta end),
+    InvalidPid = list_to_pid("<0.9999.0>"),
+    {error, not_alive} = syn:update_member(scope_all, "my-group", InvalidPid, fun(ExistingMeta) -> ExistingMeta end),
+
+    %% update
+    {ok, {Pid, {recipient, TestPid, 20}}} = syn:update_member(scope_all, "my-group", Pid, fun({recipient, TestPid0, Count}) ->
+        {recipient, TestPid0, Count * 2}
+    end),
+
+    %% retrieve
+    syn_test_suite_helper:assert_wait(
+        {Pid, {recipient, TestPid, 20}},
+        fun() -> syn:member(scope_all, "my-group", Pid) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        {Pid, {recipient, TestPid, 20}},
+        fun() -> rpc:call(SlaveNode1, syn, member, [scope_all, "my-group", Pid]) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        {Pid, {recipient, TestPid, 20}},
+        fun() -> rpc:call(SlaveNode2, syn, member, [scope_all, "my-group", Pid]) end
+    ),
+
+    %% check callbacks called
+    syn_test_suite_helper:assert_received_messages([
+        {on_group_process_updated, LocalNode, scope_all, "my-group", Pid, 20, normal},
+        {on_group_process_updated, SlaveNode1, scope_all, "my-group", Pid, 20, normal},
+        {on_group_process_updated, SlaveNode2, scope_all, "my-group", Pid, 20, normal}
+    ]),
+
+    %% join on remote
+    ok = syn:join(scope_all, "my-group", PidOn1, {recipient, TestPid, 1000}),
+
+    %% check callbacks called
+    syn_test_suite_helper:assert_received_messages([
+        {on_process_joined, LocalNode, scope_all, "my-group", PidOn1, 1000, normal},
+        {on_process_joined, SlaveNode1, scope_all, "my-group", PidOn1, 1000, normal},
+        {on_process_joined, SlaveNode2, scope_all, "my-group", PidOn1, 1000, normal}
+    ]),
+
+    %% update on remote
+    {ok, {PidOn1, {recipient, TestPid, 1001}}} = syn:update_member(scope_all, "my-group", PidOn1, fun({recipient, TestPid0, Count}) ->
+        {recipient, TestPid0, Count + 1}
+    end),
+
+    %% retrieve
+    syn_test_suite_helper:assert_wait(
+        {PidOn1, {recipient, TestPid, 1001}},
+        fun() -> syn:member(scope_all, "my-group", PidOn1) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        {PidOn1, {recipient, TestPid, 1001}},
+        fun() -> rpc:call(SlaveNode1, syn, member, [scope_all, "my-group", PidOn1]) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        {PidOn1, {recipient, TestPid, 1001}},
+        fun() -> rpc:call(SlaveNode2, syn, member, [scope_all, "my-group", PidOn1]) end
+    ),
+
+    %% check callbacks called
+    syn_test_suite_helper:assert_received_messages([
+        {on_group_process_updated, LocalNode, scope_all, "my-group", PidOn1, 1001, normal},
+        {on_group_process_updated, SlaveNode1, scope_all, "my-group", PidOn1, 1001, normal},
+        {on_group_process_updated, SlaveNode2, scope_all, "my-group", PidOn1, 1001, normal}
+    ]).
 
 four_nodes_concurrency(Config) ->
     %% get slaves

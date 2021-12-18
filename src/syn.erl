@@ -141,7 +141,7 @@
 %% gen_server via interface
 -export([register_name/2, unregister_name/1, whereis_name/1, send/2]).
 %% groups
--export([members/2, is_member/3]).
+-export([members/2, member/3, is_member/3, update_member/4]).
 -export([local_members/2, is_local_member/3]).
 -export([join/3, join/4]).
 -export([leave/3]).
@@ -429,7 +429,7 @@ send({Scope, Name}, Message) ->
 %% <h2>Examples</h2>
 %% <h3>Elixir</h3>
 %% ```
-%% iex> :syn.join(:devices, "area-1")
+%% iex> :syn.join(:devices, "area-1", self())
 %% :ok
 %% iex> :syn.members(:devices, "area-1")
 %% [{#PID<0.105.0>, :undefined}]
@@ -445,10 +445,55 @@ send({Scope, Name}, Message) ->
 members(Scope, GroupName) ->
     syn_pg:members(Scope, GroupName).
 
+%% @doc Returns the member for GroupName in the specified Scope.
+%%
+%% <h2>Examples</h2>
+%% <h3>Elixir</h3>
+%% ```
+%% iex> :syn.join(:devices, "area-1", self(), :meta)
+%% :ok
+%% iex> :syn.member(:devices, "area-1", self())
+%% {#PID<0.105.0>, :meta}
+%% '''
+%% <h3>Erlang</h3>
+%% ```
+%% 1> syn:join(devices, "area-1", self(), meta).
+%% ok
+%% 2> syn:member(devices, "area-1", self()).
+%% [{<0.69.0>, meta}]
+%% '''
+-spec member(Scope :: atom(), GroupName :: term(), pid()) -> {pid(), Meta :: term()} | undefined.
+member(Scope, GroupName, Pid) ->
+    syn_pg:member(Scope, GroupName, Pid).
+
 %% @doc Returns whether a `pid()' is a member of GroupName in the specified Scope.
 -spec is_member(Scope :: atom(), GroupName :: term(), Pid :: pid()) -> boolean().
 is_member(Scope, GroupName, Pid) ->
     syn_pg:is_member(Scope, GroupName, Pid).
+
+%% @doc Updates the GroupName member metadata in the specified Scope.
+%%
+%% Atomically calls Fun with the current metadata, and stores the return value as new metadata.
+%%
+%% <h2>Examples</h2>
+%% <h3>Elixir</h3>
+%% ```
+%% iex> :syn.join(:devices, "area-1", self(), 10)
+%% :ok
+%% iex> :syn.update_member(:devices, "area-1", self(), fn existing_meta -> existing_meta * 2 end)
+%% {:ok, {#PID<0.105.0>, 20}}
+%% '''
+%% <h3>Erlang</h3>
+%% ```
+%% 1> syn:join(devices, "area-1", self(), 10).
+%% ok
+%% 2> syn:update_member(devices, "area-1", self(), fun(ExistingMeta) -> ExistingMeta * 2 end).
+%% {ok, {<0.69.0>, 20}}
+%% '''
+-spec update_member(Scope :: atom(), GroupName :: term(), Pid :: pid(), Fun :: function()) ->
+    {ok, {Pid :: pid(), Meta :: term()}} | {error, Reason :: term()}.
+update_member(Scope, GroupName, Pid, Fun) ->
+    syn_pg:update_member(Scope, GroupName, Pid, Fun).
 
 %% @doc Returns the list of all members for GroupName in the specified Scope running on the local node.
 -spec local_members(Scope :: atom(), GroupName :: term()) -> [{Pid :: pid(), Meta :: term()}].
