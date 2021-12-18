@@ -46,30 +46,23 @@ config :syn,
 ## strict_mode
 By default, Syn doesn't enforce which processes perform the Registry and Process Groups operations:
 for instance, a process can be registered by a call running in another process.
-While this is fine in standard operations, those that end up updating a process' metadata could potentially
+While this is fine in most operations, those that end up updating a process' metadata can potentially
 lead to race conditions if caution is not taken.
 
-Operations are serialized by the [authority node](internals.html#node-authority) responsible for a process, however
-simultaneous requests coming from different processes to update a specific process' metadata can result
-in unexpected consequences, even if this doesn't compromise Syn's strict eventual consistency
-(i.e. the data across the cluster will still eventually converge).
+Just as for simple Key Value stores, proper application design needs to be implemented.
+Otherwise, two different processes updating simultaneously the value of a key will end up overwriting each other,
+with the last successful write being the data ultimately kept.
 
-Imagine for instance that a process A has a metadata of attributes such as `[{color, "blue"}]`. A different process
-might request to update process A's metadata to include size, by setting its metadata to `[{color, "blue"}, {size, 100}]`.
-At almost the same time another process might also request to update process A's metadata to include weight, by setting
-its metadata to `[{color, "blue"}, {weight, 1.0}]`.
-
-These requests will be delivered to the authority node which will treat them sequentially.
-Therefore, the first incoming request (for eg. the one that sets the size) will be overwritten shortly after
-by the second incoming request (the one that sets the weight), thus resulting in the loss of the `{size, 100}` tuple
-in the process' metadata.  The end result will be that process A' metadata will be propagated to the whole cluster as
-`[{color, "blue"}, {weight, 1.0}]`.
+Similarly, simultaneous requests coming from different processes to update a specific process' metadata will
+result in the last write received by the  [authority node](internals.html#node-authority) being propagated
+to the whole cluster.
 
 This can be circumvented by proper application design, for instance by ensuring that a single process
 is always responsible for updating a specific process' metadata.
 
-When enabled, Syn's `strict_mode` is a helper to enforce that a process can only update its own metadata.
-This basically means that the `Pid` parameter of most methods must be `self()`.
+When enabled, Syn's `strict_mode` is a _helper_ which enforces that a process can only update its own metadata.
+This basically means that the `Pid` parameter of most methods must be `self()`. Therefore, concurrent requests from
+different processes to update another process' metadata will be rejected, which can help to control the flow.
 
 `strict_mode` is a global setting that cannot be specified on a per-scope basis. The same setting SHOULD be set
 on every Erlang cluster node running Syn.

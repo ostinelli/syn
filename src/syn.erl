@@ -288,8 +288,11 @@ register(Scope, Name, Pid) ->
 %%
 %% You may register the same process with different names.
 %% You may also re-register a process multiple times, for example if you need to update its metadata, however it is
-%% RECOMMENDED to be aware of the implications of updating metadata, see the <a href="options.html#strict_mode">`strict_mode'</a>
+%% recommended to be aware of the implications of updating metadata, see the <a href="options.html#strict_mode">`strict_mode'</a>
 %% option for more information.
+%%
+%% If you want to update a process' metadata by modifying its existing one, you may consider using
+%% {@link update_registry/3} instead.
 %%
 %% When a process gets registered, Syn will automatically monitor it.
 %%
@@ -346,21 +349,29 @@ register(Scope, Name, Pid, Meta) ->
 
 %% @doc Updates the registered Name metadata in the specified Scope.
 %%
-%% Atomically calls Fun with the current metadata, and stores the return value as new metadata.
+%% Atomically calls Fun with the current metadata, and stores the return value as new metadata. It is
+%% recommended to be aware of the implications of updating metadata, see the <a href="options.html#strict_mode">`strict_mode'</a>
+%% option for more information.
+%%
+%% Possible error reasons:
+%% <ul>
+%% <li>`undefined': The Name cannot be found.</li>
+%% <li>`{update_fun, {Reason, Stacktrace}}': An error has occurred in applying the supplied Fun.</li>
+%% </ul>
 %%
 %% <h2>Examples</h2>
 %% <h3>Elixir</h3>
 %% ```
 %% iex> :syn.register(:devices, "SN-123-456789", self(), 10)
 %% :ok
-%% iex> :syn.update_registry(:devices, "area-1", fn existing_meta -> existing_meta * 2 end)
+%% iex> :syn.update_registry(:devices, "area-1", fn _pid, existing_meta -> existing_meta * 2 end)
 %% {:ok, {#PID<0.105.0>, 20}}
 %% '''
 %% <h3>Erlang</h3>
 %% ```
 %% 1> syn:register(devices, "SN-123-456789", self(), 10).
 %% ok
-%% 2> syn:update_registry(devices, "SN-123-456789", fun(ExistingMeta) -> ExistingMeta * 2 end).
+%% 2> syn:update_registry(devices, "SN-123-456789", fun(_Pid, ExistingMeta) -> ExistingMeta * 2 end).
 %% {ok, {<0.69.0>, 20}}
 %% '''
 -spec update_registry(Scope :: atom(), Name :: term(), Fun :: function()) ->
@@ -486,7 +497,7 @@ members(Scope, GroupName) ->
 %% 2> syn:member(devices, "area-1", self()).
 %% [{<0.69.0>, meta}]
 %% '''
--spec member(Scope :: atom(), GroupName :: term(), pid()) -> {pid(), Meta :: term()} | undefined.
+-spec member(Scope :: atom(), GroupName :: term(), Pid :: pid()) -> {Pid :: pid(), Meta :: term()} | undefined.
 member(Scope, GroupName, Pid) ->
     syn_pg:member(Scope, GroupName, Pid).
 
@@ -497,7 +508,15 @@ is_member(Scope, GroupName, Pid) ->
 
 %% @doc Updates the GroupName member metadata in the specified Scope.
 %%
-%% Atomically calls Fun with the current metadata, and stores the return value as new metadata.
+%% Atomically calls Fun with the current metadata, and stores the return value as new metadata. It is
+%% recommended to be aware of the implications of updating metadata, see the <a href="options.html#strict_mode">`strict_mode'</a>
+%% option for more information.
+%%
+%% Possible error reasons:
+%% <ul>
+%% <li>`undefined': The `pid()' cannot be found in GroupName.</li>
+%% <li>`{update_fun, {Reason, Stacktrace}}': An error has occurred in applying the supplied Fun.</li>
+%% </ul>
 %%
 %% <h2>Examples</h2>
 %% <h3>Elixir</h3>
@@ -539,8 +558,11 @@ join(Scope, GroupName, Pid) ->
 %%
 %% A process can join multiple groups.
 %% A process may also join the same group multiple times, for example if you need to update its metadata, however it is
-%% RECOMMENDED to be aware of the implications of updating metadata, see the <a href="options.html#strict_mode">`strict_mode'</a>
+%% recommended to be aware of the implications of updating metadata, see the <a href="options.html#strict_mode">`strict_mode'</a>
 %% option for more information.
+%%
+%% If you want to update a process' metadata by modifying its existing one, you may consider using
+%% {@link update_member/4} instead.
 %%
 %% When a process joins a group, Syn will automatically monitor it.
 %%
