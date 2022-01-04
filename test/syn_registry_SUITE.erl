@@ -34,6 +34,7 @@
 %% tests
 -export([
     one_node_via_register_unregister/1,
+    one_node_via_register_unregister_with_metadata/1,
     one_node_strict_mode/1
 ]).
 -export([
@@ -88,6 +89,7 @@ groups() ->
     [
         {one_node_registry, [shuffle], [
             one_node_via_register_unregister,
+            one_node_via_register_unregister_with_metadata,
             one_node_strict_mode
         ]},
         {three_nodes_registry, [shuffle], [
@@ -217,6 +219,48 @@ one_node_via_register_unregister(_Config) ->
         fun() -> syn:lookup(scope, <<"my proc">>) end
     ),
     %% send via syn
+    {badarg, {GenServerNameCustom, anything}} = (catch syn:send(GenServerNameCustom, anything)).
+
+one_node_via_register_unregister_with_metadata(_Config) ->
+    %% start syn
+    ok = syn:start(),
+    syn:add_node_to_scopes([scope]),
+
+    %% start gen server via syn
+    GenServerNameCustom = {scope, <<"my proc">>},
+    GenServerNameCustomMeta = {scope, <<"my proc">>, my_metadata},
+    TupleCustom = {via, syn, GenServerNameCustom},
+    TupleCustomMeta = {via, syn, GenServerNameCustomMeta},
+    {ok, PidCustom} = syn_test_gen_server:start_link(TupleCustomMeta),
+
+    %% retrieve
+    {PidCustom, my_metadata} = syn:lookup(scope, <<"my proc">>),
+
+    %% call
+    pong = syn_test_gen_server:ping(TupleCustomMeta),
+    pong = syn_test_gen_server:ping(TupleCustom),
+
+    %% send via syn
+    syn:send(GenServerNameCustomMeta, {self(), send_ping}),
+    syn_test_suite_helper:assert_received_messages([
+        reply_pong
+    ]),
+    syn:send(GenServerNameCustom, {self(), send_ping}),
+    syn_test_suite_helper:assert_received_messages([
+        reply_pong
+    ]),
+
+    %% stop server
+    syn_test_gen_server:stop(TupleCustomMeta),
+
+    %% retrieve
+    syn_test_suite_helper:assert_wait(
+        undefined,
+        fun() -> syn:lookup(scope, <<"my proc">>) end
+    ),
+
+    %% send via syn
+    {badarg, {GenServerNameCustomMeta, anything}} = (catch syn:send(GenServerNameCustomMeta, anything)),
     {badarg, {GenServerNameCustom, anything}} = (catch syn:send(GenServerNameCustom, anything)).
 
 one_node_strict_mode(_Config) ->

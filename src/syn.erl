@@ -429,11 +429,22 @@ register_name({Scope, Name}, Pid) ->
     case register(Scope, Name, Pid) of
         ok -> yes;
         _ -> no
+    end;
+register_name({Scope, Name, Meta}, Pid) ->
+    case register(Scope, Name, Pid, Meta) of
+        ok -> yes;
+        _ -> no
     end.
 
 %% @private
 -spec unregister_name(Name :: term()) -> term().
 unregister_name({Scope, Name}) ->
+    unregister_name(Scope, Name);
+unregister_name({Scope, Name, _Meta}) ->
+    unregister_name(Scope, Name).
+
+-spec unregister_name(Scope :: atom(), Name :: term()) -> term().
+unregister_name(Scope, Name) ->
     case unregister(Scope, Name) of
         ok -> Name;
         _ -> nil
@@ -442,6 +453,12 @@ unregister_name({Scope, Name}) ->
 %% @private
 -spec whereis_name(Name :: term()) -> pid() | undefined.
 whereis_name({Scope, Name}) ->
+    whereis_name(Scope, Name);
+whereis_name({Scope, Name, _Meta}) ->
+    whereis_name(Scope, Name).
+
+-spec whereis_name(Scope :: atom(), Name :: term()) -> pid() | undefined.
+whereis_name(Scope, Name) ->
     case lookup(Scope, Name) of
         {Pid, _Meta} -> Pid;
         undefined -> undefined
@@ -449,10 +466,10 @@ whereis_name({Scope, Name}) ->
 
 %% @private
 -spec send(Name :: term(), Message :: term()) -> pid().
-send({Scope, Name}, Message) ->
-    case whereis_name({Scope, Name}) of
+send(Name, Message) ->
+    case whereis_name(Name) of
         undefined ->
-            {badarg, {{Scope, Name}, Message}};
+            {badarg, {Name, Message}};
         Pid ->
             Pid ! Message,
             Pid
