@@ -64,7 +64,7 @@ Therefore, Availability has been chosen over Consistency and Syn implements
 
 ## Installation
 
-### For Elixir
+#### Elixir
 Add it to your deps:
 
 ```elixir
@@ -73,7 +73,7 @@ defp deps do
 end
 ```
 
-### For Erlang
+#### Erlang
 If you're using [rebar3](https://github.com/erlang/rebar3), add `syn` as a dependency in your project's `rebar.config` file:
 
 ```erlang
@@ -105,12 +105,100 @@ Ensure that `syn` is started with your application, for example by adding it in 
 ]}.
 ```
 
+## Quickstart
+
+### Registry
+
+#### Elixir
+
+```elixir
+iex> :syn.add_node_to_scopes([:users])
+:ok
+iex> pid = self()
+#PID<0.105.0>
+iex> :syn.register(:users, "hedy", pid)
+:ok
+iex> :syn.lookup(:users, "hedy")
+{#PID<0.105.0>,:undefined}
+iex> :syn.register(:users, "hedy", pid, [city: "Milan"])
+:ok
+iex> :syn.lookup(:users, "hedy")
+{#PID<0.105.0>,[city: "Milan"]}
+iex> :syn.registry_count(:users)
+1
+```
+
+#### Erlang
+
+```erlang
+1> syn:add_node_to_scopes([users]).
+ok
+2> Pid = self().
+<0.93.0>
+3> syn:register(users, "hedy", Pid).
+ok
+4> syn:lookup(users, "hedy").
+{<0.93.0>,undefined}
+5> syn:register(users, "hedy", Pid, [{city, "Milan"}]).
+ok
+6> syn:lookup(users, "hedy").
+{<0.93.0>,[{city, "Milan"}]}
+7> syn:registry_count(users).
+1
+```
+
+### Process Groups
+
+#### Elixir
+
+```elixir
+iex> :syn.add_node_to_scopes([:users])
+:ok
+iex> pid = self()
+#PID<0.88.0>
+iex> :syn.join(:users, {:italy, :lombardy}, pid)
+:ok
+iex> :syn.members(:users, {:italy, :lombardy})
+[{#PID<0.88.0>,:undefined}]
+iex> :syn.is_member(:users, {:italy, :lombardy}, pid)
+true
+iex> :syn.publish(:users, {:italy, :lombardy}, "hello lombardy!")
+{:ok,1}
+iex> flush()
+Shell got "hello lombardy!"
+ok
+```
+
+#### Erlang
+
+```erlang
+1> syn:add_node_to_scopes([users]).
+ok
+2> Pid = self().
+<0.88.0>
+3> syn:join(users, {italy, lombardy}, Pid).
+ok
+4> syn:members(users, {italy, lombardy}).
+[{<0.88.0>,undefined}]
+5> syn:is_member(users, {italy, lombardy}, Pid).
+true
+6> syn:publish(users, {italy, lombardy}, "hello lombardy!").
+{ok,1}
+7> flush().
+Shell got "hello lombardy!"
+ok
+```
+
 ## Contributing
 So you want to contribute? That's great! Please follow the guidelines below. It will make it easier to get merged in.
 
-Before implementing a new feature, please submit a ticket to discuss what you intend to do. Your feature might already be in the works, or an alternative implementation might have already been discussed.
+Before implementing a new feature, please submit a ticket to discuss what you intend to do. Your feature might
+already be in the works, or an alternative implementation might have already been discussed.
 
-Do not commit to master in your fork. Provide a clean branch without merge commits. Every pull request should have its own topic branch. In this way, every additional adjustments to the original pull request might be done easily, and squashed with `git rebase -i`. The updated branch will be visible in the same pull request, so there will be no need to open new pull requests when there are changes to be applied.
+Do not commit to master in your fork. Provide a clean branch without merge commits. Every pull request should have
+its own topic branch. In this way, every additional adjustments to the original pull request might be done easily,
+and squashed with `git rebase -i`. The updated branch will be visible in the same pull request, so there will be no need
+to open new pull requests when there are changes to be applied.
 
 Ensure that proper testing is included. To run Syn tests you simply have to be in the project's root directory and run:
 
@@ -120,7 +208,7 @@ $ make test
 
 ## License
 
-Copyright (c) 2015-2021 Roberto Ostinelli and Neato Robotics, Inc.
+Copyright (c) 2015-2022 Roberto Ostinelli and Neato Robotics, Inc.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

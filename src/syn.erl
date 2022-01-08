@@ -3,7 +3,7 @@
 %%
 %% The MIT License (MIT)
 %%
-%% Copyright (c) 2015-2021 Roberto Ostinelli <roberto@ostinelli.net> and Neato Robotics, Inc.
+%% Copyright (c) 2015-2022 Roberto Ostinelli <roberto@ostinelli.net> and Neato Robotics, Inc.
 %%
 %% Permission is hereby granted, free of charge, to any person obtaining a copy
 %% of this software and associated documentation files (the "Software"), to deal
@@ -48,80 +48,6 @@
 %% <li>An `error({invalid_remote_scope, Scope, RemoteNode})' if the Pid passed in as variable is running on a
 %% node that has not been added to the specified Scope, or if the remote scope process is temporarily down.</li>
 %% </ul>
-%%
-%% <h2>Quickstart</h2>
-%% <h3>Registry</h3>
-%% <h4>Elixir</h4>
-%% ```
-%% iex> :syn.add_node_to_scopes([:users])
-%% :ok
-%% iex> pid = self()
-%% #PID<0.105.0>
-%% iex> :syn.register(:users, "hedy", pid)
-%% :ok
-%% iex> :syn.lookup(:users, "hedy")
-%% {#PID<0.105.0>,:undefined}
-%% iex> :syn.register(:users, "hedy", pid, [city: "Milan"])
-%% :ok
-%% iex> :syn.lookup(:users, "hedy")
-%% {#PID<0.105.0>,[city: "Milan"]}
-%% iex> :syn.registry_count(:users)
-%% 1
-%% '''
-%% <h4>Erlang</h4>
-%% ```
-%% 1> syn:add_node_to_scopes([users]).
-%% ok
-%% 2> Pid = self().
-%% <0.93.0>
-%% 3> syn:register(users, "hedy", Pid).
-%% ok
-%% 4> syn:lookup(users, "hedy").
-%% {<0.93.0>,undefined}
-%% 5> syn:register(users, "hedy", Pid, [{city, "Milan"}]).
-%% ok
-%% 6> syn:lookup(users, "hedy").
-%% {<0.93.0>,[{city, "Milan"}]}
-%% 7> syn:registry_count(users).
-%% 1
-%% '''
-%% <h3>Process Groups</h3>
-%% <h4>Elixir</h4>
-%% ```
-%% iex> :syn.add_node_to_scopes([:users])
-%% :ok
-%% iex> pid = self()
-%% #PID<0.88.0>
-%% iex> :syn.join(:users, {:italy, :lombardy}, pid)
-%% :ok
-%% iex> :syn.members(:users, {:italy, :lombardy})
-%% [{#PID<0.88.0>,:undefined}]
-%% iex> :syn.is_member(:users, {:italy, :lombardy}, pid)
-%% true
-%% iex> :syn.publish(:users, {:italy, :lombardy}, "hello lombardy!")
-%% {:ok,1}
-%% iex> flush()
-%% Shell got "hello lombardy!"
-%% ok
-%% '''
-%% <h4>Erlang</h4>
-%% ```
-%% 1> syn:add_node_to_scopes([users]).
-%% ok
-%% 2> Pid = self().
-%% <0.88.0>
-%% 3> syn:join(users, {italy, lombardy}, Pid).
-%% ok
-%% 4> syn:members(users, {italy, lombardy}).
-%% [{<0.88.0>,undefined}]
-%% 5> syn:is_member(users, {italy, lombardy}, Pid).
-%% true
-%% 6> syn:publish(users, {italy, lombardy}, "hello lombardy!").
-%% {ok,1}
-%% 7> flush().
-%% Shell got "hello lombardy!"
-%% ok
-%% '''
 %% @end
 %% ===================================================================
 -module(syn).
