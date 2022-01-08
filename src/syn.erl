@@ -248,8 +248,14 @@ register(Scope, Name, Pid) ->
 %%
 %% Processes can also be registered as `gen_server' names, by usage of via-tuples. This way, you can use the `gen_server'
 %% API with these tuples without referring to the Pid directly. If you do so, you MUST use a `gen_server' name
-%% in format `{Scope, Name}', i.e. your via tuple will look like `{via, syn, {my_scope, <<"process name">>}}'.
-%% See here below for examples.
+%% in format:
+%% <ul>
+%% <li>`{Scope, Name}' or</li>
+%% <li>`{Scope, Name, Meta}'</li>
+%% </ul>
+%% i.e. your via tuple will look like `{via, syn, {my_scope, <<"process name">>}}' or, with meta,
+%% `{via, syn, {my_scope, <<"process name">>, process_meta}}'. See here below for examples.
+%%
 %% <h2>Examples</h2>
 %% <h3>Elixir</h3>
 %% ```
