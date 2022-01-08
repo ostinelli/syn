@@ -1692,7 +1692,7 @@ three_nodes_member_and_update(Config) ->
     {error, undefined} = syn:update_member(scope_all, "my-group", PidOn1, fun(ExistingMeta) -> ExistingMeta end),
     InvalidPid = list_to_pid("<0.9999.0>"),
     {error, not_alive} = syn:update_member(scope_all, "my-group", InvalidPid, fun(ExistingMeta) -> ExistingMeta end),
-    {error, {update_fun, {badarith, _}}} = syn:update_member(scope_all, "my-group", Pid, fun(_ExistingMeta) -> 1 / 0 end),
+    {error, {update_fun, {badarith, _}}} = syn:update_member(scope_all, "my-group", Pid, fun(_ExistingMeta) -> 1/0 end),
 
     %% update
     {ok, {Pid, {recipient, TestPid, 20}}} = syn:update_member(scope_all, "my-group", Pid, fun({recipient, TestPid0, Count}) ->
@@ -1719,6 +1719,29 @@ three_nodes_member_and_update(Config) ->
         {on_group_process_updated, SlaveNode1, scope_all, "my-group", Pid, 20, normal},
         {on_group_process_updated, SlaveNode2, scope_all, "my-group", Pid, 20, normal}
     ]),
+
+    %% update with same data
+    {ok, {Pid, {recipient, TestPid, 20}}} = syn:update_member(scope_all, "my-group", Pid, fun({recipient, TestPid0, Count}) ->
+        {recipient, TestPid0, Count}
+    end),
+
+    %% retrieve
+    syn_test_suite_helper:assert_wait(
+        {Pid, {recipient, TestPid, 20}},
+        fun() -> syn:member(scope_all, "my-group", Pid) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        {Pid, {recipient, TestPid, 20}},
+        fun() -> rpc:call(SlaveNode1, syn, member, [scope_all, "my-group", Pid]) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        {Pid, {recipient, TestPid, 20}},
+        fun() -> rpc:call(SlaveNode2, syn, member, [scope_all, "my-group", Pid]) end
+    ),
+
+    %% check no callbacks called
+    timer:sleep(100),
+    syn_test_suite_helper:assert_empty_queue(),
 
     %% join on remote
     ok = syn:join(scope_all, "my-group", PidOn1, {recipient, TestPid, 1000}),

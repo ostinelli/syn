@@ -328,6 +328,9 @@ handle_call({'3.0', join_or_update_on_node, RequesterNode, GroupName, Pid, MetaO
                 {{_, _}, TableMeta, _, MRef, _} when is_function(MetaOrFun) ->
                     %% update with fun
                     try MetaOrFun(TableMeta) of
+                        Meta when Meta =:= TableMeta ->
+                            {reply, {noop, TableMeta}, State};
+
                         Meta ->
                             do_join_on_node(GroupName, Pid, Meta, MRef, normal, RequesterNode, on_group_process_updated, State)
 

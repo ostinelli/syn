@@ -1581,6 +1581,30 @@ three_nodes_update(Config) ->
         {on_registry_process_updated, SlaveNode2, scope_all, "my-proc", Pid, 20, normal}
     ]),
 
+    %% update with same data
+    {ok, {Pid, {recipient, TestPid, 20}}} = syn:update_registry(scope_all, "my-proc", fun(IPid, {recipient, TestPid0, Count}) ->
+        IPid = Pid,
+        {recipient, TestPid0, Count}
+    end),
+
+    %% retrieve
+    syn_test_suite_helper:assert_wait(
+        {Pid, {recipient, TestPid, 20}},
+        fun() -> syn:lookup(scope_all, "my-proc") end
+    ),
+    syn_test_suite_helper:assert_wait(
+        {Pid, {recipient, TestPid, 20}},
+        fun() -> rpc:call(SlaveNode1, syn, lookup, [scope_all, "my-proc"]) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        {Pid, {recipient, TestPid, 20}},
+        fun() -> rpc:call(SlaveNode2, syn, lookup, [scope_all, "my-proc"]) end
+    ),
+
+    %% check no callbacks called
+    timer:sleep(100),
+    syn_test_suite_helper:assert_empty_queue(),
+
     %% register on remote
     ok = syn:register(scope_all, "my-proc-on-1", PidOn1, {recipient, TestPid, 1000}),
 
