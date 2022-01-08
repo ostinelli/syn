@@ -181,7 +181,10 @@ join_or_update(Scope, GroupName, Pid, MetaOrFun) ->
                     {ok, {Pid, Meta}};
 
                 {{error, Reason}, _} ->
-                    {error, Reason}
+                    {error, Reason};
+
+                {raise, Class, Reason, Stacktrace} ->
+                    erlang:raise(Class, Reason, Stacktrace)
             end
     end.
 
@@ -339,7 +342,7 @@ handle_call({'3.0', join_or_update_on_node, RequesterNode, GroupName, Pid, MetaO
                             "SYN[~s] Error ~p:~p in pg update function: ~p",
                             [node(), Class, Reason, Stacktrace]
                         ),
-                        {reply, {{error, {update_fun, {Reason, Stacktrace}}}, undefined}, State}
+                        {reply, {raise, Class, Reason, Stacktrace}, State}
                     end;
 
                 {{_, _}, MetaOrFun, _, _, _} ->

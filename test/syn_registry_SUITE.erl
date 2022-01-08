@@ -1538,7 +1538,11 @@ three_nodes_update(Config) ->
 
     %% errors
     {error, undefined} = syn:update_registry(scope_all, "unknown", fun(_IPid, ExistingMeta) -> ExistingMeta end),
-    {error, {update_fun, {badarith, _}}} = syn:update_registry(scope_all, "my-proc", fun(_IPid, _IMeta) -> 1/0 end),
+
+    %% throw in calling process
+    {'EXIT', {test_error, _Stacktrace}} = (catch syn:update_registry(scope_all, "my-proc", fun(_IPid, _IMeta) ->
+        error(test_error)
+    end)),
 
     %% retrieve
     syn_test_suite_helper:assert_wait(

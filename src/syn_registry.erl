@@ -132,7 +132,10 @@ register_or_update(Scope, Name, Pid, MetaOrFun) ->
                     {ok, {Pid, Meta}};
 
                 {{error, Reason}, _} ->
-                    {error, Reason}
+                    {error, Reason};
+
+                {raise, Class, Reason, Stacktrace} ->
+                    erlang:raise(Class, Reason, Stacktrace)
             end
     end.
 
@@ -249,7 +252,7 @@ handle_call({'3.0', register_or_update_on_node, RequesterNode, Name, Pid, MetaOr
                             "SYN[~s] Error ~p:~p in registry update function: ~p",
                             [node(), Class, Reason, Stacktrace]
                         ),
-                        {reply, {{error, {update_fun, {Reason, Stacktrace}}}, undefined}, State}
+                        {reply, {raise, Class, Reason, Stacktrace}, State}
                     end;
 
                 {Name, Pid, MetaOrFun, _, _, _} ->

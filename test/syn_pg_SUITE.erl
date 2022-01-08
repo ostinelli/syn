@@ -1692,7 +1692,11 @@ three_nodes_member_and_update(Config) ->
     {error, undefined} = syn:update_member(scope_all, "my-group", PidOn1, fun(ExistingMeta) -> ExistingMeta end),
     InvalidPid = list_to_pid("<0.9999.0>"),
     {error, not_alive} = syn:update_member(scope_all, "my-group", InvalidPid, fun(ExistingMeta) -> ExistingMeta end),
-    {error, {update_fun, {badarith, _}}} = syn:update_member(scope_all, "my-group", Pid, fun(_ExistingMeta) -> 1/0 end),
+
+    %% throw in calling process
+    {'EXIT', {test_error, _Stacktrace}} = (catch syn:update_member(scope_all, "my-group", Pid, fun(_ExistingMeta) ->
+        error(test_error)
+    end)),
 
     %% update
     {ok, {Pid, {recipient, TestPid, 20}}} = syn:update_member(scope_all, "my-group", Pid, fun({recipient, TestPid0, Count}) ->

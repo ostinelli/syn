@@ -288,8 +288,9 @@ register(Scope, Name, Pid, Meta) ->
 %% Possible error reasons:
 %% <ul>
 %% <li>`undefined': The Name cannot be found.</li>
-%% <li>`{update_fun, {Reason, Stacktrace}}': An error has occurred in applying the supplied Fun.</li>
 %% </ul>
+%%
+%% Note: an error in the update fun will be raised in the calling process.
 %%
 %% <h2>Examples</h2>
 %% <h3>Elixir</h3>
@@ -463,8 +464,9 @@ is_member(Scope, GroupName, Pid) ->
 %% Possible error reasons:
 %% <ul>
 %% <li>`undefined': The `pid()' cannot be found in GroupName.</li>
-%% <li>`{update_fun, {Reason, Stacktrace}}': An error has occurred in applying the supplied Fun.</li>
 %% </ul>
+%%
+%% Note: an error in the update fun will be raised in the calling process.
 %%
 %% <h2>Examples</h2>
 %% <h3>Elixir</h3>
