@@ -131,7 +131,7 @@ register_or_update(Scope, Name, Pid, MetaOrFun) ->
                 {noop, Meta} ->
                     {ok, {Pid, Meta}};
 
-                {{error, Reason}, _} ->
+                {error, Reason} ->
                     {error, Reason};
 
                 {raise, Class, Reason, Stacktrace} ->
@@ -162,8 +162,11 @@ unregister(Scope, Name) ->
                             %% return
                             ok;
 
-                        {Response, _} ->
-                            Response
+                        {ok, _} ->
+                            ok;
+
+                        {error, Reason} ->
+                            {error, Reason}
                     end
             end
     end.
@@ -264,11 +267,11 @@ handle_call({'3.0', register_or_update_on_node, RequesterNode, Name, Pid, MetaOr
                     do_register_on_node(Name, Pid, MetaOrFun, MRef, normal, RequesterNode, on_registry_process_updated, State);
 
                 _ ->
-                    {reply, {{error, taken}, undefined}, State}
+                    {reply, {error, taken}, State}
             end;
 
         false ->
-            {reply, {{error, not_alive}, undefined}, State}
+            {reply, {error, not_alive}, State}
     end;
 
 handle_call({'3.0', unregister_on_node, RequesterNode, Name, Pid}, _From, #state{
@@ -278,7 +281,7 @@ handle_call({'3.0', unregister_on_node, RequesterNode, Name, Pid}, _From, #state
 } = State) ->
     case find_registry_entry_by_name(Name, TableByName) of
         undefined ->
-            {reply, {{error, undefined}, undefined}, State};
+            {reply, {error, undefined}, State};
 
         {Name, Pid, Meta, _, _, _} ->
             %% demonitor if the process is not registered under other names
@@ -294,7 +297,7 @@ handle_call({'3.0', unregister_on_node, RequesterNode, Name, Pid}, _From, #state
 
         _ ->
             %% process is registered locally with another pid: race condition, wait for sync to happen & return error
-            {reply, {{error, race_condition}, undefined}, State}
+            {reply, {error, race_condition}, State}
     end;
 
 handle_call(Request, From, #state{scope = Scope} = State) ->

@@ -180,7 +180,7 @@ join_or_update(Scope, GroupName, Pid, MetaOrFun) ->
                 {noop, Meta} ->
                     {ok, {Pid, Meta}};
 
-                {{error, Reason}, _} ->
+                {error, Reason} ->
                     {error, Reason};
 
                 {raise, Class, Reason, Stacktrace} ->
@@ -205,8 +205,11 @@ leave(Scope, GroupName, Pid) ->
                     %% return
                     ok;
 
-                {Response, _} ->
-                    Response
+                {ok, _} ->
+                    ok;
+
+                {error, Reason} ->
+                    {error, Reason}
             end
     end.
 
@@ -318,7 +321,7 @@ handle_call({'3.0', join_or_update_on_node, RequesterNode, GroupName, Pid, MetaO
         true ->
             case find_pg_entry_by_name_and_pid(GroupName, Pid, TableByName) of
                 undefined when is_function(MetaOrFun) ->
-                    {reply, {{error, undefined}, undefined}, State};
+                    {reply, {error, undefined}, State};
 
                 undefined ->
                     %% add
@@ -355,7 +358,7 @@ handle_call({'3.0', join_or_update_on_node, RequesterNode, GroupName, Pid, MetaO
             end;
 
         false ->
-            {reply, {{error, not_alive}, undefined}, State}
+            {reply, {error, not_alive}, State}
     end;
 
 handle_call({'3.0', leave_on_node, RequesterNode, GroupName, Pid}, _From, #state{
@@ -365,7 +368,7 @@ handle_call({'3.0', leave_on_node, RequesterNode, GroupName, Pid}, _From, #state
 } = State) ->
     case find_pg_entry_by_name_and_pid(GroupName, Pid, TableByName) of
         undefined ->
-            {reply, {{error, not_in_group}, undefined}, State};
+            {reply, {error, not_in_group}, State};
 
         {{_, _}, Meta, _, _, _} ->
             %% is this the last group process is in?
