@@ -128,6 +128,9 @@ register_or_update(Scope, Name, Pid, MetaOrFun) ->
                 {ok, {_, Meta, _, _, _}} ->
                     {ok, {Pid, Meta}};
 
+                {noop, Meta} ->
+                    {ok, {Pid, Meta}};
+
                 {{error, Reason}, _} ->
                     {error, Reason}
             end
@@ -248,7 +251,7 @@ handle_call({'3.0', register_or_update_on_node, RequesterNode, Name, Pid, MetaOr
 
                 {Name, Pid, MetaOrFun, _, _, _} ->
                     %% same pid, same meta
-                    {reply, {ok, noop}, State};
+                    {reply, {noop, MetaOrFun}, State};
 
                 {Name, Pid, _, _, MRef, _} ->
                     %% same pid, different meta

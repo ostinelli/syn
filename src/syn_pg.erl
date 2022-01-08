@@ -177,6 +177,9 @@ join_or_update(Scope, GroupName, Pid, MetaOrFun) ->
                 {ok, {_, Meta, _, _, _}} ->
                     {ok, {Pid, Meta}};
 
+                {noop, Meta} ->
+                    {ok, {Pid, Meta}};
+
                 {{error, Reason}, _} ->
                     {error, Reason}
             end
@@ -338,7 +341,7 @@ handle_call({'3.0', join_or_update_on_node, RequesterNode, GroupName, Pid, MetaO
 
                 {{_, _}, MetaOrFun, _, _, _} ->
                     %% re-joined with same meta
-                    {reply, {ok, noop}, State};
+                    {reply, {noop, MetaOrFun}, State};
 
                 {{_, _}, _, _, MRef, _} ->
                     %% re-joined with different meta

@@ -1674,6 +1674,10 @@ three_nodes_member_and_update(Config) ->
     %% join
     ok = syn:join(scope_all, "my-group", Pid, {recipient, TestPid, 10}),
 
+    %% rejoin with same data
+    ok = syn:join(scope_all, "my-group", Pid, {recipient, TestPid, 10}),
+    ok = rpc:call(SlaveNode1, syn, join, [scope_all, "my-group", Pid, {recipient, TestPid, 10}]),
+
     %% retrieve
     {Pid, {recipient, TestPid, 10}} = syn:member(scope_all, "my-group", Pid),
     undefined = syn:member(scope_all, "my-group", PidOn1),

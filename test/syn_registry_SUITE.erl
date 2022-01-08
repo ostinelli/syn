@@ -1527,6 +1527,10 @@ three_nodes_update(Config) ->
     %% register
     ok = syn:register(scope_all, "my-proc", Pid, {recipient, TestPid, 10}),
 
+    %% re-register with same data
+    ok = syn:register(scope_all, "my-proc", Pid, {recipient, TestPid, 10}),
+    ok = rpc:call(SlaveNode1, syn, register, [scope_all, "my-proc", Pid, {recipient, TestPid, 10}]),
+
     %% add custom handler for resolution (using method call)
     syn:set_event_handler(syn_test_event_handler_callbacks),
     rpc:call(SlaveNode1, syn, set_event_handler, [syn_test_event_handler_callbacks]),
