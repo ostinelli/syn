@@ -426,10 +426,7 @@ local_registry_count(Scope) ->
 %% @private
 -spec register_name(Name :: term(), Pid :: pid()) -> yes | no.
 register_name({Scope, Name}, Pid) ->
-    case register(Scope, Name, Pid) of
-        ok -> yes;
-        _ -> no
-    end;
+    register_name({Scope, Name, undefined}, Pid);
 register_name({Scope, Name, Meta}, Pid) ->
     case register(Scope, Name, Pid, Meta) of
         ok -> yes;
@@ -443,6 +440,7 @@ unregister_name({Scope, Name}) ->
 unregister_name({Scope, Name, _Meta}) ->
     unregister_name(Scope, Name).
 
+%% @private
 -spec unregister_name(Scope :: atom(), Name :: term()) -> term().
 unregister_name(Scope, Name) ->
     case unregister(Scope, Name) of
@@ -457,6 +455,7 @@ whereis_name({Scope, Name}) ->
 whereis_name({Scope, Name, _Meta}) ->
     whereis_name(Scope, Name).
 
+%% @private
 -spec whereis_name(Scope :: atom(), Name :: term()) -> pid() | undefined.
 whereis_name(Scope, Name) ->
     case lookup(Scope, Name) of
@@ -466,10 +465,10 @@ whereis_name(Scope, Name) ->
 
 %% @private
 -spec send(Name :: term(), Message :: term()) -> pid().
-send(Name, Message) ->
-    case whereis_name(Name) of
+send(Tuple, Message) ->
+    case whereis_name(Tuple) of
         undefined ->
-            {badarg, {Name, Message}};
+            {badarg, {Tuple, Message}};
         Pid ->
             Pid ! Message,
             Pid

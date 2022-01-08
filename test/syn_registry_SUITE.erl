@@ -202,22 +202,29 @@ one_node_via_register_unregister(_Config) ->
     GenServerNameCustom = {scope, <<"my proc">>},
     TupleCustom = {via, syn, GenServerNameCustom},
     {ok, PidCustom} = syn_test_gen_server:start_link(TupleCustom),
+
     %% retrieve
     {PidCustom, undefined} = syn:lookup(scope, <<"my proc">>),
+    PidCustom = syn:whereis_name(GenServerNameCustom),
+
     %% call
     pong = syn_test_gen_server:ping(TupleCustom),
+
     %% send via syn
     syn:send(GenServerNameCustom, {self(), send_ping}),
     syn_test_suite_helper:assert_received_messages([
         reply_pong
     ]),
+
     %% stop server
     syn_test_gen_server:stop(TupleCustom),
+
     %% retrieve
     syn_test_suite_helper:assert_wait(
         undefined,
         fun() -> syn:lookup(scope, <<"my proc">>) end
     ),
+
     %% send via syn
     {badarg, {GenServerNameCustom, anything}} = (catch syn:send(GenServerNameCustom, anything)).
 
@@ -227,25 +234,20 @@ one_node_via_register_unregister_with_metadata(_Config) ->
     syn:add_node_to_scopes([scope]),
 
     %% start gen server via syn
-    GenServerNameCustom = {scope, <<"my proc">>},
     GenServerNameCustomMeta = {scope, <<"my proc">>, my_metadata},
-    TupleCustom = {via, syn, GenServerNameCustom},
     TupleCustomMeta = {via, syn, GenServerNameCustomMeta},
     {ok, PidCustom} = syn_test_gen_server:start_link(TupleCustomMeta),
 
     %% retrieve
     {PidCustom, my_metadata} = syn:lookup(scope, <<"my proc">>),
+    PidCustom = syn:whereis_name(GenServerNameCustomMeta),
+    PidCustom = syn:whereis_name({scope, <<"my proc">>}),
 
     %% call
     pong = syn_test_gen_server:ping(TupleCustomMeta),
-    pong = syn_test_gen_server:ping(TupleCustom),
 
     %% send via syn
     syn:send(GenServerNameCustomMeta, {self(), send_ping}),
-    syn_test_suite_helper:assert_received_messages([
-        reply_pong
-    ]),
-    syn:send(GenServerNameCustom, {self(), send_ping}),
     syn_test_suite_helper:assert_received_messages([
         reply_pong
     ]),
@@ -260,8 +262,7 @@ one_node_via_register_unregister_with_metadata(_Config) ->
     ),
 
     %% send via syn
-    {badarg, {GenServerNameCustomMeta, anything}} = (catch syn:send(GenServerNameCustomMeta, anything)),
-    {badarg, {GenServerNameCustom, anything}} = (catch syn:send(GenServerNameCustom, anything)).
+    {badarg, {GenServerNameCustomMeta, anything}} = (catch syn:send(GenServerNameCustomMeta, anything)).
 
 one_node_strict_mode(_Config) ->
     %% start syn
