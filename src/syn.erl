@@ -68,8 +68,9 @@
 -export([register_name/2, unregister_name/1, whereis_name/1, send/2]).
 %% groups
 -export([members/2, member/3, is_member/3, update_member/4]).
--export([member_count/2]).
+-export([member_count/2, member_count/3]).
 -export([local_members/2, is_local_member/3]).
+-export([local_member_count/2]).
 -export([join/3, join/4]).
 -export([leave/3]).
 -export([group_count/1, group_count/2]).
@@ -468,6 +469,11 @@ member(Scope, GroupName, Pid) ->
 member_count(Scope, GroupName) ->
     syn_pg:member_count(Scope, GroupName).
 
+%% @doc Returns the count of all members for the specified Scope and GroupName which have at least 1 process running on `Node'.
+-spec member_count(Scope :: atom(), GroupName :: term(), Node :: node()) -> non_neg_integer().
+member_count(Scope, GroupName, Node) ->
+    syn_pg:member_count(Scope, GroupName, Node).
+
 %% @doc Returns whether a `pid()' is a member of GroupName in the specified Scope.
 -spec is_member(Scope :: atom(), GroupName :: term(), Pid :: pid()) -> boolean().
 is_member(Scope, GroupName, Pid) ->
@@ -515,6 +521,12 @@ local_members(Scope, GroupName) ->
 -spec is_local_member(Scope :: atom(), GroupName :: term(), Pid :: pid()) -> boolean().
 is_local_member(Scope, GroupName, Pid) ->
     syn_pg:is_local_member(Scope, GroupName, Pid).
+
+%% @equiv member_count(Scope, GroupName, node())
+%% @end
+-spec local_member_count(Scope :: atom(), GroupName :: term()) -> non_neg_integer().
+local_member_count(Scope, GroupName) ->
+    member_count(Scope, GroupName, node()).
 
 %% @equiv join(Scope, GroupName, Pid, undefined)
 %% @end

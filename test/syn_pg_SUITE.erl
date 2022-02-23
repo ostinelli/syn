@@ -36,6 +36,9 @@
     one_node_strict_mode/1
 ]).
 -export([
+    two_nodes_member_count/1
+]).
+-export([
     three_nodes_discover/1,
     three_nodes_join_leave_and_monitor/1,
     three_nodes_join_filter_unknown_node/1,
@@ -74,6 +77,7 @@
 all() ->
     [
         {group, one_node_pg},
+        {group, two_nodes_pg},
         {group, three_nodes_pg},
         {group, four_nodes_pg}
     ].
@@ -94,6 +98,9 @@ groups() ->
     [
         {one_node_pg, [shuffle], [
             one_node_strict_mode
+        ]},
+        {two_nodes_pg, [shuffle], [
+            two_nodes_member_count
         ]},
         {three_nodes_pg, [shuffle], [
             three_nodes_discover,
@@ -135,27 +142,24 @@ end_per_suite(_Config) ->
 %% Config0 = Config1 = [tuple()]
 %% Reason = any()
 %% -------------------------------------------------------------------
+init_per_group(two_nodes_pg, Config) ->
+    do_init_per_scope(two_nodes_pg, 2, Config);
 init_per_group(three_nodes_pg, Config) ->
-    case syn_test_suite_helper:init_cluster(3) of
-        {error_initializing_cluster, Other} ->
-            end_per_group(three_nodes_pg, Config),
-            {skip, Other};
-
-        NodesConfig ->
-            NodesConfig ++ Config
-    end;
+    do_init_per_scope(three_nodes_pg, 3, Config);
 init_per_group(four_nodes_pg, Config) ->
-    case syn_test_suite_helper:init_cluster(4) of
-        {error_initializing_cluster, Other} ->
-            end_per_group(four_nodes_pg, Config),
-            {skip, Other};
-
-        NodesConfig ->
-            NodesConfig ++ Config
-    end;
-
+    do_init_per_scope(four_nodes_pg, 4, Config);
 init_per_group(_GroupName, Config) ->
     Config.
+
+do_init_per_scope(TestGroup, Count, Config) ->
+    case syn_test_suite_helper:init_cluster(Count) of
+        {error_initializing_cluster, Other} ->
+            end_per_group(TestGroup, Config),
+            {skip, Other};
+
+        NodesConfig ->
+            NodesConfig ++ Config
+    end.
 
 %% -------------------------------------------------------------------
 %% Function: end_per_group(GroupName, Config0) ->
@@ -163,6 +167,8 @@ init_per_group(_GroupName, Config) ->
 %% GroupName = atom()
 %% Config0 = Config1 = [tuple()]
 %% -------------------------------------------------------------------
+end_per_group(two_nodes_pg, Config) ->
+    syn_test_suite_helper:end_cluster(2, Config);
 end_per_group(three_nodes_pg, Config) ->
     syn_test_suite_helper:end_cluster(3, Config);
 end_per_group(four_nodes_pg, Config) ->
@@ -213,6 +219,48 @@ one_node_strict_mode(_Config) ->
     ok = syn:join(scope, "strict", Self),
     [{Self, undefined}] = syn:members(scope, "strict"),
     ok = syn:leave(scope, "strict", Self).
+
+two_nodes_member_count(Config) ->
+    %% get slave
+    SlaveNode1 = proplists:get_value(syn_slave_1, Config),
+
+    %% start syn on nodes
+    ok = syn:start(),
+    ok = rpc:call(SlaveNode1, syn, start, []),
+
+    %% add scopes
+    ok = syn:add_node_to_scopes([scope_all]),
+    ok = rpc:call(SlaveNode1, syn, add_node_to_scopes, [[scope_all]]),
+
+    %% check
+    0 = syn:member_count(scope_all, "one"),
+    0 = syn:member_count(scope_all, "one", node()),
+    0 = syn:member_count(scope_all, "one", SlaveNode1),
+    0 = syn:local_member_count(scope_all, "one"),
+    0 = rpc:call(SlaveNode1, syn, member_count, [scope_all, "one"]),
+    0 = rpc:call(SlaveNode1, syn, member_count, [scope_all, "one", node()]),
+    0 = rpc:call(SlaveNode1, syn, member_count, [scope_all, "one", SlaveNode1]),
+    0 = rpc:call(SlaveNode1, syn, local_member_count, [scope_all, "one"]),
+
+    %% start processes
+    Pid = syn_test_suite_helper:start_process(),
+    Pid2 = syn_test_suite_helper:start_process(),
+    PidOn1 = syn_test_suite_helper:start_process(SlaveNode1),
+
+    %% join
+    ok = syn:join(scope_all, "one", Pid),
+    ok = syn:join(scope_all, "one", Pid2),
+    ok = syn:join(scope_all, "one", PidOn1),
+
+    %% check
+    3 = syn:member_count(scope_all, "one"),
+    2 = syn:member_count(scope_all, "one", node()),
+    1 = syn:member_count(scope_all, "one", SlaveNode1),
+    2 = syn:local_member_count(scope_all, "one"),
+    3 = rpc:call(SlaveNode1, syn, member_count, [scope_all, "one"]),
+    2 = rpc:call(SlaveNode1, syn, member_count, [scope_all, "one", node()]),
+    1 = rpc:call(SlaveNode1, syn, member_count, [scope_all, "one", SlaveNode1]),
+    1 = rpc:call(SlaveNode1, syn, local_member_count, [scope_all, "one"]).
 
 three_nodes_discover(Config) ->
     %% get slaves
@@ -331,7 +379,6 @@ three_nodes_join_leave_and_monitor(Config) ->
     false = rpc:call(SlaveNode1, syn, is_member, [scope_ab, {group, "one"}, PidWithMeta]),
     false = rpc:call(SlaveNode1, syn, is_member, [scope_ab, {group, "one"}, PidRemoteOn1]),
     {badrpc, {'EXIT', {{invalid_scope, scope_ab}, _}}} = (catch rpc:call(SlaveNode2, syn, is_member, [scope_ab, {group, "one"}, Pid])),
-    0 = syn:member_count(scope_ab, {group, "one"}),
 
     [] = syn:local_members(scope_ab, {group, "one"}),
     [] = rpc:call(SlaveNode1, syn, local_members, [scope_ab, {group, "one"}]),
@@ -386,11 +433,8 @@ three_nodes_join_leave_and_monitor(Config) ->
     ok = syn:join(scope_ab, {group, "one"}, Pid),
     ok = syn:join(scope_ab, {group, "one"}, PidWithMeta, <<"with meta">>),
     ok = rpc:call(SlaveNode1, syn, join, [scope_bc, {group, "two"}, PidRemoteOn1]),
-    2 = syn:member_count(scope_ab, {group, "one"}),
-    0 = syn:member_count(scope_ab, {group, "two"}),
     ok = syn:join(scope_ab, {group, "two"}, Pid),
     ok = syn:join(scope_ab, {group, "two"}, PidWithMeta, "with-meta-2"),
-    2 = syn:member_count(scope_ab, {group, "two"}),
 
     %% errors
     {error, not_alive} = syn:join(scope_ab, {"pid not alive"}, list_to_pid("<0.9999.0>")),
