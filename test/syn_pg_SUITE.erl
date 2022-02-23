@@ -331,6 +331,7 @@ three_nodes_join_leave_and_monitor(Config) ->
     false = rpc:call(SlaveNode1, syn, is_member, [scope_ab, {group, "one"}, PidWithMeta]),
     false = rpc:call(SlaveNode1, syn, is_member, [scope_ab, {group, "one"}, PidRemoteOn1]),
     {badrpc, {'EXIT', {{invalid_scope, scope_ab}, _}}} = (catch rpc:call(SlaveNode2, syn, is_member, [scope_ab, {group, "one"}, Pid])),
+    0 = syn:member_count(scope_ab, {group, "one"}),
 
     [] = syn:local_members(scope_ab, {group, "one"}),
     [] = rpc:call(SlaveNode1, syn, local_members, [scope_ab, {group, "one"}]),
@@ -385,8 +386,11 @@ three_nodes_join_leave_and_monitor(Config) ->
     ok = syn:join(scope_ab, {group, "one"}, Pid),
     ok = syn:join(scope_ab, {group, "one"}, PidWithMeta, <<"with meta">>),
     ok = rpc:call(SlaveNode1, syn, join, [scope_bc, {group, "two"}, PidRemoteOn1]),
+    2 = syn:member_count(scope_ab, {group, "one"}),
+    0 = syn:member_count(scope_ab, {group, "two"}),
     ok = syn:join(scope_ab, {group, "two"}, Pid),
     ok = syn:join(scope_ab, {group, "two"}, PidWithMeta, "with-meta-2"),
+    2 = syn:member_count(scope_ab, {group, "two"}),
 
     %% errors
     {error, not_alive} = syn:join(scope_ab, {"pid not alive"}, list_to_pid("<0.9999.0>")),
