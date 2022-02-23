@@ -34,6 +34,7 @@
 -export([leave/3]).
 -export([members/2]).
 -export([member/3]).
+-export([member_count/2]).
 -export([is_member/3]).
 -export([update_member/4]).
 -export([local_members/2]).
@@ -107,6 +108,20 @@ is_member(Scope, GroupName, Pid) ->
 -spec local_members(Scope :: atom(), GroupName :: term()) -> [{pid(), Meta :: term()}].
 local_members(Scope, GroupName) ->
     do_get_members(Scope, GroupName, undefined, node()).
+
+-spec member_count(Scope :: atom(), GroupName :: term()) -> non_neg_integer().
+member_count(Scope, GroupName) ->
+    case syn_backbone:get_table_name(syn_pg_by_name, Scope) of
+        undefined ->
+            error({invalid_scope, Scope});
+
+        TableByName ->
+            ets:select_count(TableByName, [{
+                {{GroupName, '$1'}, '_', '_', '_', '_'},
+                [],
+                [true]
+            }])
+    end.
 
 -spec do_get_members(Scope :: atom(), GroupName :: term(), pid() | undefined, Node :: node() | undefined) ->
     [{pid(), Meta :: term()}].

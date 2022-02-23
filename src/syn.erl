@@ -68,6 +68,7 @@
 -export([register_name/2, unregister_name/1, whereis_name/1, send/2]).
 %% groups
 -export([members/2, member/3, is_member/3, update_member/4]).
+-export([member_count/2]).
 -export([local_members/2, is_local_member/3]).
 -export([join/3, join/4]).
 -export([leave/3]).
@@ -449,6 +450,23 @@ members(Scope, GroupName) ->
 -spec member(Scope :: atom(), GroupName :: term(), Pid :: pid()) -> {Pid :: pid(), Meta :: term()} | undefined.
 member(Scope, GroupName, Pid) ->
     syn_pg:member(Scope, GroupName, Pid).
+
+%% @doc Returns the count of all members for the specified Scope and GroupName.
+%%
+%% <h2>Examples</h2>
+%% <h3>Elixir</h3>
+%% ```
+%% iex> :syn.member_count(:devices, "abc123")
+%% 512473
+%% '''
+%% <h3>Erlang</h3>
+%% ```
+%% 1> syn:member_count(devices, "abc123").
+%% 512473
+%% '''
+-spec member_count(Scope :: atom(), GroupName :: term()) -> non_neg_integer().
+member_count(Scope, GroupName) ->
+    syn_pg:member_count(Scope, GroupName).
 
 %% @doc Returns whether a `pid()' is a member of GroupName in the specified Scope.
 -spec is_member(Scope :: atom(), GroupName :: term(), Pid :: pid()) -> boolean().
