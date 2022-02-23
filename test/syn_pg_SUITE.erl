@@ -1372,8 +1372,8 @@ three_nodes_publish(Config) ->
         {done, PidRemoteOn2}
     ]),
 
-    %% non-existant
-    {ok, 0} = syn:publish(scope_ab, <<"non-existant">>, TestMessage),
+    %% non-existent
+    {ok, 0} = syn:publish(scope_ab, <<"non-existent">>, TestMessage),
     %% no messages
     syn_test_suite_helper:assert_empty_queue(),
 
@@ -1384,8 +1384,8 @@ three_nodes_publish(Config) ->
         {done, Pid}
     ]),
 
-    %% non-existant
-    {ok, 0} = syn:local_publish(scope_ab, <<"non-existant">>, TestMessage),
+    %% non-existent
+    {ok, 0} = syn:local_publish(scope_ab, <<"non-existent">>, TestMessage),
     %% no messages
     syn_test_suite_helper:assert_empty_queue().
 

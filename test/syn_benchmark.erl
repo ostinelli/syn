@@ -127,7 +127,7 @@ start() ->
             %% sum
             RegTakenTime = (lists:max(RegRemoteNodesTimes) + RegPropagationTime),
             RegistrationRate = ProcessCount / RegTakenTime,
-            io:format("====> Registeration rate (with propagation): ~p/sec.~n~n", [RegistrationRate]),
+            io:format("====> Registration rate (with propagation): ~p/sec.~n~n", [RegistrationRate]),
 
             %% start unregistration
             lists:foreach(fun({Node, FromName, ToName}) ->
