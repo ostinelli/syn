@@ -29,9 +29,11 @@
 -export([on_process_registered/5]).
 -export([on_process_unregistered/5]).
 -export([on_registry_process_updated/5]).
+-export([on_registry_process_updated/6]).
 -export([on_process_joined/5]).
 -export([on_process_left/5]).
 -export([on_group_process_updated/5]).
+-export([on_group_process_updated/6]).
 
 on_process_registered(Scope, Name, Pid, {recipient, RecipientPid, AdditionalMeta}, Reason) ->
     RecipientPid ! {on_process_registered, node(), Scope, Name, Pid, AdditionalMeta, Reason}.
@@ -42,6 +44,16 @@ on_process_unregistered(Scope, Name, Pid, {recipient, RecipientPid, AdditionalMe
 on_registry_process_updated(Scope, Name, Pid, {recipient, RecipientPid, AdditionalMeta}, Reason) ->
     RecipientPid ! {on_registry_process_updated, node(), Scope, Name, Pid, AdditionalMeta, Reason}.
 
+on_registry_process_updated(
+    Scope,
+    Name,
+    Pid,
+    {recipient, RecipientPid, PreviousAdditionalMeta},
+    {recipient, RecipientPid, AdditionalMeta},
+    Reason
+) ->
+    RecipientPid ! {on_registry_process_updated, node(), Scope, Name, Pid, PreviousAdditionalMeta, AdditionalMeta, Reason}.
+
 on_process_joined(Scope, GroupName, Pid, {recipient, RecipientPid, AdditionalMeta}, Reason) ->
     RecipientPid ! {on_process_joined, node(), Scope, GroupName, Pid, AdditionalMeta, Reason}.
 
@@ -50,3 +62,13 @@ on_process_left(Scope, GroupName, Pid, {recipient, RecipientPid, AdditionalMeta}
 
 on_group_process_updated(Scope, GroupName, Pid, {recipient, RecipientPid, AdditionalMeta}, Reason) ->
     RecipientPid ! {on_group_process_updated, node(), Scope, GroupName, Pid, AdditionalMeta, Reason}.
+
+on_group_process_updated(
+    Scope,
+    GroupName,
+    Pid,
+    {recipient, RecipientPid, PreviousAdditionalMeta},
+    {recipient, RecipientPid, AdditionalMeta},
+    Reason
+) ->
+    RecipientPid ! {on_group_process_updated, node(), Scope, GroupName, Pid, PreviousAdditionalMeta, AdditionalMeta, Reason}.

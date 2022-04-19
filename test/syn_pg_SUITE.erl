@@ -1207,7 +1207,10 @@ three_nodes_custom_event_handler_joined_left(Config) ->
     syn_test_suite_helper:assert_received_messages([
         {on_group_process_updated, LocalNode, scope_all, "my-group", Pid, <<"new-meta-0">>, normal},
         {on_group_process_updated, SlaveNode1, scope_all, "my-group", Pid, <<"new-meta-0">>, normal},
-        {on_group_process_updated, SlaveNode2, scope_all, "my-group", Pid, <<"new-meta-0">>, normal}
+        {on_group_process_updated, SlaveNode2, scope_all, "my-group", Pid, <<"new-meta-0">>, normal},
+        {on_group_process_updated, LocalNode, scope_all, "my-group", Pid, <<"meta">>, <<"new-meta-0">>, normal},
+        {on_group_process_updated, SlaveNode1, scope_all, "my-group", Pid, <<"meta">>, <<"new-meta-0">>, normal},
+        {on_group_process_updated, SlaveNode2, scope_all, "my-group", Pid, <<"meta">>, <<"new-meta-0">>, normal}
     ]),
 
     %% update meta from another node
@@ -1217,7 +1220,10 @@ three_nodes_custom_event_handler_joined_left(Config) ->
     syn_test_suite_helper:assert_received_messages([
         {on_group_process_updated, LocalNode, scope_all, "my-group", Pid, <<"new-meta">>, normal},
         {on_group_process_updated, SlaveNode1, scope_all, "my-group", Pid, <<"new-meta">>, normal},
-        {on_group_process_updated, SlaveNode2, scope_all, "my-group", Pid, <<"new-meta">>, normal}
+        {on_group_process_updated, SlaveNode2, scope_all, "my-group", Pid, <<"new-meta">>, normal},
+        {on_group_process_updated, LocalNode, scope_all, "my-group", Pid, <<"new-meta-0">>, <<"new-meta">>, normal},
+        {on_group_process_updated, SlaveNode1, scope_all, "my-group", Pid, <<"new-meta-0">>, <<"new-meta">>, normal},
+        {on_group_process_updated, SlaveNode2, scope_all, "my-group", Pid, <<"new-meta-0">>, <<"new-meta">>, normal}
     ]),
 
     %% ---> on left
@@ -1769,7 +1775,10 @@ three_nodes_member_and_update(Config) ->
     syn_test_suite_helper:assert_received_messages([
         {on_group_process_updated, LocalNode, scope_all, "my-group", Pid, 20, normal},
         {on_group_process_updated, SlaveNode1, scope_all, "my-group", Pid, 20, normal},
-        {on_group_process_updated, SlaveNode2, scope_all, "my-group", Pid, 20, normal}
+        {on_group_process_updated, SlaveNode2, scope_all, "my-group", Pid, 20, normal},
+        {on_group_process_updated, LocalNode, scope_all, "my-group", Pid, 10, 20, normal},
+        {on_group_process_updated, SlaveNode1, scope_all, "my-group", Pid, 10, 20, normal},
+        {on_group_process_updated, SlaveNode2, scope_all, "my-group", Pid, 10, 20, normal}
     ]),
 
     %% update with same data
@@ -1828,7 +1837,10 @@ three_nodes_member_and_update(Config) ->
     syn_test_suite_helper:assert_received_messages([
         {on_group_process_updated, LocalNode, scope_all, "my-group", PidOn1, 1001, normal},
         {on_group_process_updated, SlaveNode1, scope_all, "my-group", PidOn1, 1001, normal},
-        {on_group_process_updated, SlaveNode2, scope_all, "my-group", PidOn1, 1001, normal}
+        {on_group_process_updated, SlaveNode2, scope_all, "my-group", PidOn1, 1001, normal},
+        {on_group_process_updated, LocalNode, scope_all, "my-group", PidOn1, 1000, 1001, normal},
+        {on_group_process_updated, SlaveNode1, scope_all, "my-group", PidOn1, 1000, 1001, normal},
+        {on_group_process_updated, SlaveNode2, scope_all, "my-group", PidOn1, 1000, 1001, normal}
     ]).
 
 four_nodes_concurrency(Config) ->

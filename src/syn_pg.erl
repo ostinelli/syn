@@ -188,15 +188,16 @@ join_or_update(Scope, GroupName, Pid, MetaOrFun) ->
         _ ->
             Node = node(Pid),
             case syn_gen_scope:call(?MODULE, Node, Scope, {'3.0', join_or_update_on_node, node(), GroupName, Pid, MetaOrFun}) of
-                {ok, {CallbackMethod, Meta, Time, TableByName, TableByPid}} when Node =/= node() ->
+                {ok, {CallbackMethod, PreviousMeta, Meta, Time, TableByName, TableByPid}} when Node =/= node() ->
                     %% update table on caller node immediately so that subsequent calls have an updated pg
                     add_to_local_table(GroupName, Pid, Meta, Time, undefined, TableByName, TableByPid),
                     %% callback
                     syn_event_handler:call_event_handler(CallbackMethod, [Scope, GroupName, Pid, Meta, normal]),
+                    syn_event_handler:call_event_handler(CallbackMethod, [Scope, GroupName, Pid, PreviousMeta, Meta, normal]),
                     %% return
                     {ok, {Pid, Meta}};
 
-                {ok, {_, Meta, _, _, _}} ->
+                {ok, {_, _, Meta, _, _, _}} ->
                     {ok, {Pid, Meta}};
 
                 {noop, Meta} ->
@@ -351,7 +352,7 @@ handle_call({'3.0', join_or_update_on_node, RequesterNode, GroupName, Pid, MetaO
                         undefined -> erlang:monitor(process, Pid);  %% process is not monitored yet, create
                         MRef0 -> MRef0
                     end,
-                    do_join_on_node(GroupName, Pid, MetaOrFun, MRef, normal, RequesterNode, on_process_joined, State);
+                    do_join_on_node(GroupName, Pid, undefined, MetaOrFun, MRef, normal, RequesterNode, on_process_joined, State);
 
                 {{_, _}, TableMeta, _, MRef, _} when is_function(MetaOrFun) ->
                     %% update with fun
@@ -360,7 +361,7 @@ handle_call({'3.0', join_or_update_on_node, RequesterNode, GroupName, Pid, MetaO
                             {reply, {noop, TableMeta}, State};
 
                         Meta ->
-                            do_join_on_node(GroupName, Pid, Meta, MRef, normal, RequesterNode, on_group_process_updated, State)
+                            do_join_on_node(GroupName, Pid, TableMeta, Meta, MRef, normal, RequesterNode, on_group_process_updated, State)
 
                     catch Class:Reason:Stacktrace ->
                         error_logger:error_msg(
@@ -374,9 +375,9 @@ handle_call({'3.0', join_or_update_on_node, RequesterNode, GroupName, Pid, MetaO
                     %% re-joined with same meta
                     {reply, {noop, MetaOrFun}, State};
 
-                {{_, _}, _, _, MRef, _} ->
+                {{_, _}, TableMeta, _, MRef, _} ->
                     %% re-joined with different meta
-                    do_join_on_node(GroupName, Pid, MetaOrFun, MRef, normal, RequesterNode, on_group_process_updated, State)
+                    do_join_on_node(GroupName, Pid, TableMeta, MetaOrFun, MRef, normal, RequesterNode, on_group_process_updated, State)
             end;
 
         false ->
@@ -541,6 +542,7 @@ do_rebuild_monitors([{GroupName, Pid, Meta, Time} | T], NewMRefs, Scope, TableBy
 -spec do_join_on_node(
     GroupName :: term(),
     Pid :: pid(),
+    PreviousMeta :: term(),
     Meta :: term(),
     MRef :: reference() | undefined,
     Reason :: term(),
@@ -552,6 +554,7 @@ do_rebuild_monitors([{GroupName, Pid, Meta, Time} | T], NewMRefs, Scope, TableBy
         reply,
         {ok, {
             CallbackMethod :: atom(),
+            PreviousMeta :: term(),
             Meta :: term(),
             Time :: non_neg_integer(),
             TableByName :: atom(),
@@ -559,7 +562,7 @@ do_rebuild_monitors([{GroupName, Pid, Meta, Time} | T], NewMRefs, Scope, TableBy
         }},
         #state{}
     }.
-do_join_on_node(GroupName, Pid, Meta, MRef, Reason, RequesterNode, CallbackMethod, #state{
+do_join_on_node(GroupName, Pid, PreviousMeta, Meta, MRef, Reason, RequesterNode, CallbackMethod, #state{
     scope = Scope,
     table_by_name = TableByName,
     table_by_pid = TableByPid
@@ -569,10 +572,11 @@ do_join_on_node(GroupName, Pid, Meta, MRef, Reason, RequesterNode, CallbackMetho
     add_to_local_table(GroupName, Pid, Meta, Time, MRef, TableByName, TableByPid),
     %% callback
     syn_event_handler:call_event_handler(CallbackMethod, [Scope, GroupName, Pid, Meta, Reason]),
+    syn_event_handler:call_event_handler(CallbackMethod, [Scope, GroupName, Pid, PreviousMeta, Meta, normal]),
     %% broadcast
     syn_gen_scope:broadcast({'3.0', sync_join, GroupName, Pid, Meta, Time, Reason}, [RequesterNode], State),
     %% return
-    {reply, {ok, {CallbackMethod, Meta, Time, TableByName, TableByPid}}, State}.
+    {reply, {ok, {CallbackMethod, PreviousMeta, Meta, Time, TableByName, TableByPid}}, State}.
 
 -spec get_pg_tuples_for_node(Node :: node(), TableByName :: atom()) -> [syn_pg_tuple()].
 get_pg_tuples_for_node(Node, TableByName) ->
@@ -705,7 +709,8 @@ handle_pg_sync(GroupName, Pid, Meta, Time, Reason, #state{
             %% callback (call only if meta update)
             case TableMeta =/= Meta of
                 true ->
-                    syn_event_handler:call_event_handler(on_group_process_updated, [Scope, GroupName, Pid, Meta, Reason]);
+                    syn_event_handler:call_event_handler(on_group_process_updated, [Scope, GroupName, Pid, Meta, Reason]),
+                    syn_event_handler:call_event_handler(on_group_process_updated, [Scope, GroupName, Pid, TableMeta, Meta, Reason]);
                 _ -> ok
             end;
 

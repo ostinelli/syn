@@ -1042,7 +1042,10 @@ three_nodes_custom_event_handler_reg_unreg(Config) ->
     syn_test_suite_helper:assert_received_messages([
         {on_registry_process_updated, LocalNode, scope_all, "proc-handler", Pid, <<"new-meta">>, normal},
         {on_registry_process_updated, SlaveNode1, scope_all, "proc-handler", Pid, <<"new-meta">>, normal},
-        {on_registry_process_updated, SlaveNode2, scope_all, "proc-handler", Pid, <<"new-meta">>, normal}
+        {on_registry_process_updated, SlaveNode2, scope_all, "proc-handler", Pid, <<"new-meta">>, normal},
+        {on_registry_process_updated, LocalNode, scope_all, "proc-handler", Pid, <<"meta">>, <<"new-meta">>, normal},
+        {on_registry_process_updated, SlaveNode1, scope_all, "proc-handler", Pid, <<"meta">>, <<"new-meta">>, normal},
+        {on_registry_process_updated, SlaveNode2, scope_all, "proc-handler", Pid, <<"meta">>, <<"new-meta">>, normal}
     ]),
 
     %% meta update from another node
@@ -1052,7 +1055,10 @@ three_nodes_custom_event_handler_reg_unreg(Config) ->
     syn_test_suite_helper:assert_received_messages([
         {on_registry_process_updated, LocalNode, scope_all, "proc-handler-2", Pid2, <<"meta-for-2-update">>, normal},
         {on_registry_process_updated, SlaveNode1, scope_all, "proc-handler-2", Pid2, <<"meta-for-2-update">>, normal},
-        {on_registry_process_updated, SlaveNode2, scope_all, "proc-handler-2", Pid2, <<"meta-for-2-update">>, normal}
+        {on_registry_process_updated, SlaveNode2, scope_all, "proc-handler-2", Pid2, <<"meta-for-2-update">>, normal},
+        {on_registry_process_updated, LocalNode, scope_all, "proc-handler-2", Pid2, <<"meta-for-2">>, <<"meta-for-2-update">>, normal},
+        {on_registry_process_updated, SlaveNode1, scope_all, "proc-handler-2", Pid2, <<"meta-for-2">>, <<"meta-for-2-update">>, normal},
+        {on_registry_process_updated, SlaveNode2, scope_all, "proc-handler-2", Pid2, <<"meta-for-2">>, <<"meta-for-2-update">>, normal}
     ]),
 
     %% ---> on unregister
@@ -1582,7 +1588,10 @@ three_nodes_update(Config) ->
     syn_test_suite_helper:assert_received_messages([
         {on_registry_process_updated, LocalNode, scope_all, "my-proc", Pid, 20, normal},
         {on_registry_process_updated, SlaveNode1, scope_all, "my-proc", Pid, 20, normal},
-        {on_registry_process_updated, SlaveNode2, scope_all, "my-proc", Pid, 20, normal}
+        {on_registry_process_updated, SlaveNode2, scope_all, "my-proc", Pid, 20, normal},
+        {on_registry_process_updated, LocalNode, scope_all, "my-proc", Pid, 10, 20, normal},
+        {on_registry_process_updated, SlaveNode1, scope_all, "my-proc", Pid, 10, 20, normal},
+        {on_registry_process_updated, SlaveNode2, scope_all, "my-proc", Pid, 10, 20, normal}
     ]),
 
     %% update with same data
@@ -1642,7 +1651,10 @@ three_nodes_update(Config) ->
     syn_test_suite_helper:assert_received_messages([
         {on_registry_process_updated, LocalNode, scope_all, "my-proc-on-1", PidOn1, 1001, normal},
         {on_registry_process_updated, SlaveNode1, scope_all, "my-proc-on-1", PidOn1, 1001, normal},
-        {on_registry_process_updated, SlaveNode2, scope_all, "my-proc-on-1", PidOn1, 1001, normal}
+        {on_registry_process_updated, SlaveNode2, scope_all, "my-proc-on-1", PidOn1, 1001, normal},
+        {on_registry_process_updated, LocalNode, scope_all, "my-proc-on-1", PidOn1, 1000, 1001, normal},
+        {on_registry_process_updated, SlaveNode1, scope_all, "my-proc-on-1", PidOn1, 1000, 1001, normal},
+        {on_registry_process_updated, SlaveNode2, scope_all, "my-proc-on-1", PidOn1, 1000, 1001, normal}
     ]).
 
 four_nodes_concurrency(Config) ->

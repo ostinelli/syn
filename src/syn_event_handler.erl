@@ -146,6 +146,15 @@
     Reason :: atom()
 ) -> any().
 
+-callback on_registry_process_updated(
+    Scope :: atom(),
+    Name :: term(),
+    Pid :: pid(),
+    PreviousMeta :: term(),
+    Meta :: term(),
+    Reason :: atom()
+) -> any().
+
 -callback on_process_unregistered(
     Scope :: atom(),
     Name :: term(),
@@ -170,6 +179,15 @@
     Reason :: atom()
 ) -> any().
 
+-callback on_group_process_updated(
+    Scope :: atom(),
+    GroupName :: term(),
+    Pid :: pid(),
+    PreviousMeta :: term(),
+    Meta :: term(),
+    Reason :: atom()
+) -> any().
+
 -callback on_process_left(
     Scope :: atom(),
     GroupName :: term(),
@@ -185,8 +203,8 @@
     {Pid2 :: pid(), Meta2 :: term(), Time2 :: non_neg_integer()}
 ) -> PidToKeep :: pid().
 
--optional_callbacks([on_process_registered/5, on_registry_process_updated/5, on_process_unregistered/5]).
--optional_callbacks([on_process_joined/5, on_group_process_updated/5, on_process_left/5]).
+-optional_callbacks([on_process_registered/5, on_registry_process_updated/5, on_registry_process_updated/6, on_process_unregistered/5]).
+-optional_callbacks([on_process_joined/5, on_group_process_updated/5, on_group_process_updated/6, on_process_left/5]).
 -optional_callbacks([resolve_registry_conflict/4]).
 
 %% ===================================================================
@@ -208,7 +226,7 @@ ensure_event_handler_loaded() ->
 ) -> any().
 call_event_handler(CallbackMethod, Args) ->
     CustomEventHandler = get_custom_event_handler(),
-    case erlang:function_exported(CustomEventHandler, CallbackMethod, 5) of
+    case erlang:function_exported(CustomEventHandler, CallbackMethod, length(Args)) of
         true ->
             try apply(CustomEventHandler, CallbackMethod, Args)
             catch Class:Reason:Stacktrace ->
