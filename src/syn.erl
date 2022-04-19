@@ -446,7 +446,7 @@ members(Scope, GroupName) ->
 %% 1> syn:join(devices, "area-1", self(), meta).
 %% ok
 %% 2> syn:member(devices, "area-1", self()).
-%% [{<0.69.0>, meta}]
+%% {<0.69.0>, meta}
 %% '''
 -spec member(Scope :: atom(), GroupName :: term(), Pid :: pid()) -> {Pid :: pid(), Meta :: term()} | undefined.
 member(Scope, GroupName, Pid) ->
