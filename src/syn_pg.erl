@@ -166,7 +166,7 @@ is_local_member(Scope, GroupName, Pid) ->
             end
     end.
 
--spec join(Scope :: atom(), GroupName :: term(), Pid :: pid(), Meta :: term()) -> ok.
+-spec join(Scope :: atom(), GroupName :: term(), Pid :: pid(), Meta :: term()) -> ok | {error, Reason :: term()}.
 join(Scope, GroupName, Pid, Meta) ->
     case join_or_update(Scope, GroupName, Pid, Meta) of
         {ok, _} -> ok;
