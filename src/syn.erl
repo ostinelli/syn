@@ -299,7 +299,7 @@ register(Scope, Name, Pid, Meta) ->
 %% ```
 %% iex> :syn.register(:devices, "SN-123-456789", self(), 10)
 %% :ok
-%% iex> :syn.update_registry(:devices, "area-1", fn _pid, existing_meta -> existing_meta * 2 end)
+%% iex> :syn.update_registry(:devices, "SN-123-456789", fn _pid, existing_meta -> existing_meta * 2 end)
 %% {:ok, {#PID<0.105.0>, 20}}
 %% '''
 %% <h3>Erlang</h3>
