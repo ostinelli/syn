@@ -12,13 +12,11 @@ jobs:
     name: Tests on OTP ${{matrix.otp}} with rebar v${{matrix.rebar3}}
     strategy:
       matrix:
-        otp: ['24.1.2', '23.3.4.7', '22.3.4.22']
-        rebar3: ['3.17.0']
-        include:
-          - otp: '21.3.8.24'
-            rebar3: '3.15.1'
+        otp: ['26', '25']
+        rebar3: ['3.23.0']
+
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       - uses: erlef/setup-beam@v1
         with:
           otp-version: ${{matrix.otp}}

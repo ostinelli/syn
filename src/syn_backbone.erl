@@ -162,7 +162,7 @@ code_change(_OldVsn, State, _Extra) ->
 %% ===================================================================
 %% Internal
 %% ===================================================================
--spec ensure_table_existence(Type :: ets:type(), TableId :: atom(), Scope :: atom()) -> any().
+-spec ensure_table_existence(Type :: ets:table_type(), TableId :: atom(), Scope :: atom()) -> any().
 ensure_table_existence(Type, TableId, Scope) ->
     %% build name
     TableIdBin = list_to_binary(atom_to_list(TableId)),

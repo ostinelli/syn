@@ -747,7 +747,7 @@ multi_call_and_receive(CollectorPid, Pid, Meta, Message, Timeout) ->
         CollectorPid ! {syn_bad_reply, Pid}
     end.
 
--spec collect_replies(MembersOD :: orddict:orddict({pid(), Meta :: term()})) ->
+-spec collect_replies(MembersOD :: orddict:orddict(pid(), Meta :: term())) ->
     {
         Replies :: [{{pid(), Meta :: term()}, Reply :: term()}],
         BadReplies :: [{pid(), Meta :: term()}]
@@ -756,7 +756,7 @@ collect_replies(MembersOD) ->
     collect_replies(MembersOD, [], []).
 
 -spec collect_replies(
-    MembersOD :: orddict:orddict({pid(), Meta :: term()}),
+    MembersOD :: orddict:orddict(pid(), Meta :: term()),
     Replies :: [{{pid(), Meta :: term()}, Reply :: term()}],
     BadReplies :: [{pid(), Meta :: term()}]
 ) ->
