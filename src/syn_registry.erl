@@ -78,7 +78,20 @@ lookup(Scope, Name) ->
         TableByName ->
             case find_registry_entry_by_name(Name, TableByName) of
                 undefined -> undefined;
-                {Name, Pid, Meta, _, _, _} -> {Pid, Meta}
+                {Name, Pid, Meta, _, _, Node} ->
+                    % This read can be initiated prior to registration, by a
+                    % supervisor or supervisor-like process trying to restart a
+                    % stopped process in response to a 'DOWN', while the 'DOWN'
+                    % handler in this module is yet to update TableByName.
+                    %
+                    % Verifying aliveness avoids confusing already_started
+                    % errors while restarting registered processes.
+                    % The aliveness check is only necessary when the Pid is
+                    % local.
+                    case Node =:= node() andalso not is_process_alive(Pid) of
+                        true -> undefined;
+                        false -> {Pid, Meta}
+                    end
             end
     end.
 

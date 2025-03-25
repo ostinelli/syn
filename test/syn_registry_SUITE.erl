@@ -35,7 +35,8 @@
 -export([
     one_node_via_register_unregister/1,
     one_node_via_register_unregister_with_metadata/1,
-    one_node_strict_mode/1
+    one_node_strict_mode/1,
+    one_node_repeated_restart/1
 ]).
 -export([
     three_nodes_discover/1,
@@ -90,7 +91,8 @@ groups() ->
         {one_node_registry, [shuffle], [
             one_node_via_register_unregister,
             one_node_via_register_unregister_with_metadata,
-            one_node_strict_mode
+            one_node_strict_mode,
+            one_node_repeated_restart
         ]},
         {three_nodes_registry, [shuffle], [
             three_nodes_discover,
@@ -282,6 +284,21 @@ one_node_strict_mode(_Config) ->
     {Self, new_metadata} = syn:lookup(scope, "strict-true"),
     ok = syn:register(scope, "strict-true", Self),
     {Self, undefined} = syn:lookup(scope, "strict-true").
+
+one_node_repeated_restart(_Config) ->
+    %% start syn
+    ok = syn:start(),
+    syn:add_node_to_scopes([scope]),
+    ViaTuple = {via, syn, {scope, <<"my proc">>, my_metadata}},
+    % Data races between the 'DOWN' handler and reads pre-registration reads
+    % cause intermittent failures. Repeat count 100 is heuristically chosen as
+    % it consistently surfaced the problem at the time of writing.
+    RepeatCount = 100,
+    StartStop = fun(_) ->
+        {ok, Pid} = syn_test_gen_server:start_link(ViaTuple),
+        gen_server:stop(Pid)
+    end,
+    lists:foreach(StartStop, lists:duplicate(RepeatCount, 0)).
 
 three_nodes_discover(Config) ->
     %% get slaves
