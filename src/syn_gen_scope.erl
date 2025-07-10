@@ -56,6 +56,8 @@
 %% includes
 -include("syn.hrl").
 
+-include_lib("kernel/include/logger.hrl").
+
 %% callbacks
 -callback init(#state{}) ->
     {ok, HandlerState :: term()}.
@@ -205,9 +207,13 @@ handle_info({'3.0', discover, RemoteScopePid}, #state{
     nodes_map = NodesMap
 } = State) ->
     RemoteScopeNode = node(RemoteScopePid),
-    error_logger:info_msg("SYN[~s|~s<~s>] Received DISCOVER request from node ~s",
-        [node(), HandlerLogName, Scope, RemoteScopeNode]
-    ),
+    ?LOG_INFO(#{msg => discover, from => RemoteScopeNode},
+                 #{
+                   handler_name => HandlerLogName,
+                   scope => Scope,
+                   report_cb => fun syn_logger:?MODULE/1,
+                   domain => [syn, gen_scope]
+                  }),
     %% send local data to remote
     {ok, LocalData} = Handler:get_local_data(State),
     send_to_node(RemoteScopeNode, {'3.0', ack_sync, self(), LocalData}, State),
@@ -230,9 +236,13 @@ handle_info({'3.0', ack_sync, RemoteScopePid, Data}, #state{
     scope = Scope
 } = State) ->
     RemoteScopeNode = node(RemoteScopePid),
-    error_logger:info_msg("SYN[~s|~s<~s>] Received ACK SYNC (~w entries) from node ~s",
-        [node(), HandlerLogName, Scope, length(Data), RemoteScopeNode]
-    ),
+    ?LOG_INFO(#{msg => {ack_sync, Data}, from => RemoteScopeNode},
+                 #{
+                   handler_name => HandlerLogName,
+                   scope => Scope,
+                   report_cb => fun syn_logger:?MODULE/1,
+                   domain => [syn, gen_scope]
+                  }),
     %% save remote data
     Handler:save_remote_data(Data, State),
     %% is this a new node?
@@ -261,9 +271,16 @@ handle_info({'DOWN', MRef, process, Pid, Reason}, #state{
     RemoteNode = node(Pid),
     case maps:take(RemoteNode, NodesMap) of
         {Pid, NodesMap1} ->
-            error_logger:info_msg("SYN[~s|~s<~s>] Scope Process is DOWN on node ~s: ~p",
-                [node(), HandlerLogName, Scope, RemoteNode, Reason]
-            ),
+            ?LOG_INFO(#{
+                           msg => {down, Reason},
+                           from => RemoteNode
+                          },
+                         #{
+                           handler_name => HandlerLogName,
+                           scope => Scope,
+                           report_cb => fun syn_logger:?MODULE/1,
+                           domain => [syn, gen_scope]
+                          }),
             Handler:purge_local_data_for_node(RemoteNode, State),
             {noreply, State#state{nodes_map = NodesMap1}};
 
@@ -280,9 +297,13 @@ handle_info({nodeup, RemoteNode}, #state{
     handler_log_name = HandlerLogName,
     scope = Scope
 } = State) ->
-    error_logger:info_msg("SYN[~s|~s<~s>] Node ~s has joined the cluster, sending discover message",
-        [node(), HandlerLogName, Scope, RemoteNode]
-    ),
+    ?LOG_INFO(#{msg => nodeup, from => RemoteNode},
+                 #{
+                   handler_name => HandlerLogName,
+                   scope => Scope,
+                   report_cb => fun syn_logger:?MODULE/1,
+                   domain => [syn, gen_scope]
+                  }),
     send_to_node(RemoteNode, {'3.0', discover, self()}, State),
     {noreply, State};
 
@@ -301,7 +322,13 @@ handle_continue(after_init, #state{
     scope = Scope,
     process_name = ProcessName
 } = State) ->
-    error_logger:info_msg("SYN[~s|~s<~s>] Discovering the cluster", [node(), HandlerLogName, Scope]),
+    ?LOG_INFO(#{msg => after_init},
+                 #{
+                   handler_name => HandlerLogName,
+                   scope => Scope,
+                   report_cb => fun syn_logger:?MODULE/1,
+                   domain => [syn, gen_scope]
+                  }),
     %% broadcasting is done in the scope process to avoid issues with ordering guarantees
     lists:foreach(fun(RemoteNode) ->
         {ProcessName, RemoteNode} ! {'3.0', discover, self()}
@@ -313,7 +340,13 @@ handle_continue(after_init, #state{
 %% ----------------------------------------------------------------------------------------------------------
 -spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()), #state{}) -> any().
 terminate(Reason, #state{handler_log_name = HandlerLogName, scope = Scope}) ->
-    error_logger:info_msg("SYN[~s|~s<~s>] Terminating with reason: ~p", [node(), HandlerLogName, Scope, Reason]).
+    ?LOG_INFO(#{msg => {terminate, Reason}},
+                 #{
+                   handler_name => HandlerLogName,
+                   scope => Scope,
+                   report_cb => fun syn_logger:?MODULE/1,
+                   domain => [syn, gen_scope]
+                  }).
 
 %% ----------------------------------------------------------------------------------------------------------
 %% Convert process state when code is changed.
