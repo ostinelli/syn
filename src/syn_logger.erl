@@ -4,7 +4,8 @@
          terminate/1,
          callback_error/1,
          unknown_message/1,
-         scope/1]).
+         scope/1,
+         conflict/1]).
 
 syn_gen_scope(#{msg := discover, from := From}) ->
     {"Received DISCOVER request from node ~s", [From]};
@@ -41,3 +42,11 @@ unknown_message(#{kind := Kind, msg := Msg}) ->
 
 scope(#{action := added, new := Scope}) ->
     {"Added node to scope <~s>", [Scope]}.
+
+conflict(#{name := Name, remote := Remote, local := Local, keep := {none, Pid}}) ->
+    {"Registry CONFLICT for name ~p: ~p vs ~p -> none chosen: ~p",
+     [Name, Remote, Local, Pid]};
+conflict(#{name := Name, remote := Remote, local := Local, keep := Keep} = Msg) ->
+    #{Keep := {Pid, _}} = Msg,
+    {"Registry CONFLICT for name ~p: ~p vs ~p -> keeping ~s: ~p",
+     [Name, Remote, Local, Keep, Pid]}.
