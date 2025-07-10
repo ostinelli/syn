@@ -3,7 +3,8 @@
 -export([syn_gen_scope/1,
          terminate/1,
          callback_error/1,
-         unknown_message/1]).
+         unknown_message/1,
+         scope/1]).
 
 syn_gen_scope(#{msg := discover, from := From}) ->
     {"Received DISCOVER request from node ~s", [From]};
@@ -37,3 +38,6 @@ unknown_message(#{kind := call, from := From, msg := Msg}) ->
     {"Received from ~p an unknown call message: ~p", [From, Msg]};
 unknown_message(#{kind := Kind, msg := Msg}) ->
     {"Received an unknown ~p message: ~p", [Kind, Msg]}.
+
+scope(#{action := added, new := Scope}) ->
+    {"Added node to scope <~s>", [Scope]}.
