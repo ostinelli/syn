@@ -344,7 +344,7 @@ terminate(Reason, #state{handler_log_name = HandlerLogName, scope = Scope}) ->
                  #{
                    handler_name => HandlerLogName,
                    scope => Scope,
-                   report_cb => fun syn_logger:?MODULE/1,
+                   report_cb => fun syn_logger:terminate/1,
                    domain => [syn, gen_scope]
                   }).
 

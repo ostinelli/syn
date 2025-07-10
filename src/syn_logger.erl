@@ -40,6 +40,8 @@ unknown_message(#{kind := call, from := From, msg := Msg}) ->
 unknown_message(#{kind := Kind, msg := Msg}) ->
     {"Received an unknown ~p message: ~p", [Kind, Msg]}.
 
+scope(#{action := tables_created, new := Scope}) ->
+    {"Created tabled for scope <~s>", [Scope]};
 scope(#{action := added, new := Scope}) ->
     {"Added node to scope <~s>", [Scope]}.
 
