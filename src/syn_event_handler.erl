@@ -125,6 +125,8 @@
 
 -module(syn_event_handler).
 
+-include_lib("kernel/include/logger.hrl").
+
 %% API
 -export([ensure_event_handler_loaded/0]).
 -export([call_event_handler/2]).
@@ -230,10 +232,16 @@ call_event_handler(CallbackMethod, Args) ->
         true ->
             try apply(CustomEventHandler, CallbackMethod, Args)
             catch Class:Reason:Stacktrace ->
-                error_logger:error_msg(
-                    "SYN[~s] Error ~p:~p in custom handler ~p: ~p",
-                    [node(), Class, Reason, CallbackMethod, Stacktrace]
-                )
+                      ?LOG_ERROR(#{
+                                   class => Class,
+                                   reason => Reason,
+                                   mfa => {CustomEventHandler, CallbackMethod, Args},
+                                   stacktrace => Stacktrace
+                                  },
+                                 #{
+                                   report_cb => fun syn_logger:callback_error/1,
+                                   domain => [syn, event_handler]
+                                  })
             end;
 
         _ ->
@@ -255,11 +263,18 @@ do_resolve_registry_conflict(Scope, Name, {Pid1, Meta1, Time1}, {Pid2, Meta2, Ti
                 PidToKeep when is_pid(PidToKeep) -> {PidToKeep, false};
                 _ -> {undefined, false}
 
-            catch Class:Reason ->
-                error_logger:error_msg(
-                    "SYN[~s] Error ~p in custom handler resolve_registry_conflict: ~p",
-                    [node(), Class, Reason]
-                ),
+            catch Class:Reason:Stacktrace ->
+                      ?LOG_ERROR(#{
+                                   class => Class,
+                                   reason => Reason,
+                                   mfa => {CustomEventHandler,
+                                           resolve_registry_conflict, [Scope, Name, {Pid1, Meta1, Time1}, {Pid2, Meta2, Time2}]},
+                                   stacktrace => Stacktrace
+                                  },
+                                 #{
+                                   report_cb => fun syn_logger:callback_error/1,
+                                   domain => [syn, event_handler]
+                                  }),
                 {undefined, false}
             end;
 
