@@ -69,6 +69,8 @@
 %% includes
 -include("syn.hrl").
 
+-include_lib("kernel/include/logger.hrl").
+
 %% ===================================================================
 %% API
 %% ===================================================================
@@ -364,10 +366,16 @@ handle_call({'3.0', join_or_update_on_node, RequesterNode, GroupName, Pid, MetaO
                             do_join_on_node(GroupName, Pid, TableMeta, Meta, MRef, normal, RequesterNode, on_group_process_updated, State)
 
                     catch Class:Reason:Stacktrace ->
-                        error_logger:error_msg(
-                            "SYN[~s] Error ~p:~p in pg update function: ~p",
-                            [node(), Class, Reason, Stacktrace]
-                        ),
+                      ?LOG_ERROR(#{
+                                   class => Class,
+                                   reason => Reason,
+                                   fa => {update, [TableMeta]},
+                                   stacktrace => Stacktrace
+                                  },
+                                 #{
+                                   report_cb => fun syn_logger:callback_error/1,
+                                   domain => [syn, pg]
+                                  }),
                         {reply, {raise, Class, Reason, Stacktrace}, State}
                     end;
 
@@ -407,9 +415,16 @@ handle_call({'3.0', leave_on_node, RequesterNode, GroupName, Pid}, _From, #state
     end;
 
 handle_call(Request, From, #state{scope = Scope} = State) ->
-    error_logger:warning_msg("SYN[~s|~s<~s>] Received from ~p an unknown call message: ~p",
-        [node(), ?MODULE_LOG_NAME, Scope, From, Request]
-    ),
+    ?LOG_WARNING(#{
+                   kind => call,
+                   from => From,
+                   msg => Request
+                  },
+                 #{
+                   scope => Scope,
+                   report_cb => fun syn_logger:unknown_message/1,
+                   domain => [syn, pg]
+                  }),
     {reply, undefined, State}.
 
 %% ----------------------------------------------------------------------------------------------------------
@@ -456,10 +471,16 @@ handle_info({'DOWN', _MRef, process, Pid, Reason}, #state{
 } = State) ->
     case find_pg_entries_by_pid(Pid, TableByPid) of
         [] ->
-            error_logger:warning_msg(
-                "SYN[~s|~s<~s>] Received a DOWN message from an unknown process ~p with reason: ~p",
-                [node(), ?MODULE_LOG_NAME, Scope, Pid, Reason]
-            );
+            ?LOG_WARNING(#{
+                           kind => down,
+                           pid => Pid,
+                           reason => Reason
+                          },
+                         #{
+                           scope => Scope,
+                           report_cb => fun syn_logger:unknown_message/1,
+                           domain => [syn, pg]
+                          });
 
         Entries ->
             lists:foreach(fun({{_Pid, GroupName}, Meta, _, _, _}) ->
@@ -475,7 +496,15 @@ handle_info({'DOWN', _MRef, process, Pid, Reason}, #state{
     {noreply, State};
 
 handle_info(Info, #state{scope = Scope} = State) ->
-    error_logger:warning_msg("SYN[~s|~s<~s>] Received an unknown info message: ~p", [node(), ?MODULE_LOG_NAME, Scope, Info]),
+    ?LOG_WARNING(#{
+                   kind => info,
+                   msg => Info
+                  },
+                 #{
+                   scope => Scope,
+                   report_cb => fun syn_logger:unknown_message/1,
+                   domain => [syn, pg]
+                  }),
     {noreply, State}.
 
 %% ----------------------------------------------------------------------------------------------------------
