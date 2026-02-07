@@ -320,7 +320,7 @@ handle_info({'3.0', sync_register, Name, Pid, Meta, Time, Reason}, #state{nodes_
             handle_registry_sync(Name, Pid, Meta, Time, Reason, State);
 
         false ->
-            %% ignore, race condition
+            %% ignore, node not yet discovered (ack_sync not yet received)
             ok
     end,
     {noreply, State};

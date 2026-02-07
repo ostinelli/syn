@@ -36,7 +36,8 @@
 -export([
     broadcast/2,
     broadcast/3,
-    send_to_node/3
+    send_to_node/3,
+    send_to_node_ordered/3
 ]).
 
 %% gen_server callbacks
@@ -127,6 +128,10 @@ broadcast(Message, ExcludedNodes, #state{multicast_pid = MulticastPid} = State) 
 send_to_node(RemoteNode, Message, #state{process_name = ProcessName}) ->
     {ProcessName, RemoteNode} ! Message.
 
+-spec send_to_node_ordered(RemoteNode :: node(), Message :: term(), #state{}) -> any().
+send_to_node_ordered(RemoteNode, Message, #state{multicast_pid = MulticastPid, process_name = ProcessName}) ->
+    MulticastPid ! {send_single, RemoteNode, Message, ProcessName}.
+
 %% ===================================================================
 %% Callbacks
 %% ===================================================================
@@ -208,9 +213,9 @@ handle_info({'3.0', discover, RemoteScopePid}, #state{
     error_logger:info_msg("SYN[~s|~s<~s>] Received DISCOVER request from node ~s",
         [node(), HandlerLogName, Scope, RemoteScopeNode]
     ),
-    %% send local data to remote
+    %% send local data to remote (ordered to maintain FIFO with broadcasts)
     {ok, LocalData} = Handler:get_local_data(State),
-    send_to_node(RemoteScopeNode, {'3.0', ack_sync, self(), LocalData}, State),
+    send_to_node_ordered(RemoteScopeNode, {'3.0', ack_sync, self(), LocalData}, State),
     %% is this a new node?
     case maps:is_key(RemoteScopeNode, NodesMap) of
         true ->
@@ -244,9 +249,9 @@ handle_info({'3.0', ack_sync, RemoteScopePid, Data}, #state{
         false ->
             %% monitor
             _MRef = monitor(process, RemoteScopePid),
-            %% send local to remote
+            %% send local to remote (ordered to maintain FIFO with broadcasts)
             {ok, LocalData} = Handler:get_local_data(State),
-            send_to_node(RemoteScopeNode, {'3.0', ack_sync, self(), LocalData}, State),
+            send_to_node_ordered(RemoteScopeNode, {'3.0', ack_sync, self(), LocalData}, State),
             %% return
             {noreply, State#state{nodes_map = NodesMap#{RemoteScopeNode => RemoteScopePid}}}
     end;
@@ -337,6 +342,10 @@ multicast_loop() ->
             lists:foreach(fun(RemoteNode) ->
                 {ProcessName, RemoteNode} ! Message
             end, maps:keys(NodesMap) -- ExcludedNodes),
+            multicast_loop();
+
+        {send_single, RemoteNode, Message, ProcessName} ->
+            {ProcessName, RemoteNode} ! Message,
             multicast_loop();
 
         terminate ->
