@@ -70,13 +70,13 @@ start() ->
 
     %% start nodes
     NodesInfo = lists:foldl(fun(I, Acc) ->
-        %% start slave
+        %% start peer
         CountBin = integer_to_binary(I),
         NodeShortName = list_to_atom(binary_to_list(<<"slave_", CountBin/binary>>)),
-        {ok, Node} = ct_slave:start(NodeShortName, [
-            {boot_timeout, 10},
-            {monitor_master, true}
-        ]),
+        {ok, _PeerPid, Node} = peer:start(#{
+            name => NodeShortName,
+            connection => 0
+        }),
         %% add code path
         CodePath = code:get_path(),
         true = rpc:call(Node, code, set_path, [CodePath]),

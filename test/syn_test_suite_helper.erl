@@ -57,15 +57,16 @@ init_cluster(NodesCount) ->
     {Nodes, NodesConfig} = lists:foldl(fun(I, {AccNodes, AccNodesConfig}) ->
         IBin = integer_to_binary(I),
         NodeShortName = list_to_atom(binary_to_list(<<"syn_slave_", IBin/binary>>)),
-        {ok, SlaveNode} = start_slave(NodeShortName),
+        {ok, SlaveNode, PeerPid} = start_slave(NodeShortName),
         %% connect
         lists:foreach(fun(N) ->
             rpc:call(SlaveNode, syn_test_suite_helper, connect_node, [N])
         end, AccNodes),
         %% config
+        PeerKey = list_to_atom(binary_to_list(<<"syn_slave_", IBin/binary, "_peer">>)),
         {
             [SlaveNode | AccNodes],
-            [{NodeShortName, SlaveNode} | AccNodesConfig]
+            [{NodeShortName, SlaveNode}, {PeerKey, PeerPid} | AccNodesConfig]
         }
     end, {[], []}, lists:seq(1, SlavesCount)),
     %% wait full cluster
@@ -83,33 +84,45 @@ end_cluster(NodesCount, Config) ->
     SlavesCount = NodesCount - 1,
     %% clean
     clean_after_test(),
-    %% shutdown
+    %% shutdown (reconnect first since peer:stop needs distribution with connection => 0)
     lists:foreach(fun(I) ->
         IBin = integer_to_binary(I),
         NodeShortName = list_to_atom(binary_to_list(<<"syn_slave_", IBin/binary>>)),
-        SlaveNode = proplists:get_value(NodeShortName, Config),
-        connect_node(SlaveNode),
-        stop_slave(NodeShortName)
+        PeerKey = list_to_atom(binary_to_list(<<"syn_slave_", IBin/binary, "_peer">>)),
+        case proplists:get_value(PeerKey, Config) of
+            undefined -> ok;
+            PeerPid ->
+                SlaveNode = proplists:get_value(NodeShortName, Config),
+                connect_node(SlaveNode),
+                stop_slave(PeerPid)
+        end
     end, lists:seq(1, SlavesCount)),
     %% wait
     timer:sleep(1000).
 
 start_slave(NodeShortName) ->
-    %% start slave
-    {ok, Node} = ct_slave:start(NodeShortName, [
-        {boot_timeout, 10},
-        {erl_flags, "-connect_all false -kernel dist_auto_connect never"}
-    ]),
+    %% Start peer node. Using peer:start (not start_link) creates an unlinked
+    %% controller process that is independent of the calling process and
+    %% survives CT process lifecycle changes.
+    %%
+    %% connection => 0 starts a detached peer that uses distribution for the
+    %% control channel. This allows passing -kernel dist_auto_connect never
+    %% which would otherwise prevent the standard_io boot handshake.
+    {ok, PeerPid, Node} = peer:start(#{
+        name => NodeShortName,
+        args => ["-connect_all", "false", "-kernel", "dist_auto_connect", "never"],
+        connection => 0
+    }),
     %% add syn code path to slaves
     CodePath = lists:filter(fun(Path) ->
         nomatch =/= string:find(Path, "/syn/")
     end, code:get_path()),
-    true = rpc:call(Node, code, set_path, [CodePath]),
+    ok = rpc:call(Node, code, add_pathsa, [CodePath]),
     %% return
-    {ok, Node}.
+    {ok, Node, PeerPid}.
 
-stop_slave(NodeShortName) ->
-    {ok, _} = ct_slave:stop(NodeShortName).
+stop_slave(PeerPid) when is_pid(PeerPid) ->
+    peer:stop(PeerPid).
 
 connect_node(Node) ->
     net_kernel:connect_node(Node).
@@ -224,7 +237,7 @@ wait_message_queue_empty() ->
         ok,
         fun() ->
             flush_inbox(),
-            syn_test_suite_helper:assert_empty_queue(self())
+            syn_test_suite_helper:assert_empty_queue()
         end
     ).
 
