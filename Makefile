@@ -30,11 +30,11 @@ endif
 test: compile_test
 ifdef suite
 	@# 'make test suite=syn_registry_SUITE'
-	ct_run -dir $(PROJECT_DIR)/test -logdir $(PROJECT_DIR)/test/results \
+	ct_run -noinput -dir $(PROJECT_DIR)/test -logdir $(PROJECT_DIR)/test/results \
 	-suite $(suite) \
 	-pa `rebar3 as test path`
 else
-	ct_run -dir $(PROJECT_DIR)/test -logdir $(PROJECT_DIR)/test/results \
+	ct_run -noinput -dir $(PROJECT_DIR)/test -logdir $(PROJECT_DIR)/test/results \
 	-pa `rebar3 as test path`
 endif
 
