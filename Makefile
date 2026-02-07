@@ -30,12 +30,13 @@ endif
 test: compile_test
 ifdef suite
 	@# 'make test suite=syn_registry_SUITE'
-	ct_run -dir $(PROJECT_DIR)/test -logdir $(PROJECT_DIR)/test/results \
-	-suite $(suite) \
-	-pa `rebar3 as test path`
+	erl -noshell -sname ct_master \
+	-pa `rebar3 as test path` \
+	-eval 'Result = ct:run_test([{dir, "$(PROJECT_DIR)/test"}, {logdir, "$(PROJECT_DIR)/test/results"}, {suite, $(suite)}]), erlang:halt(case Result of {_,0,{0,0}} -> 0; error -> 1; _ -> 1 end).'
 else
-	ct_run -dir $(PROJECT_DIR)/test -logdir $(PROJECT_DIR)/test/results \
-	-pa `rebar3 as test path`
+	erl -noshell -sname ct_master \
+	-pa `rebar3 as test path` \
+	-eval 'Result = ct:run_test([{dir, "$(PROJECT_DIR)/test"}, {logdir, "$(PROJECT_DIR)/test/results"}]), erlang:halt(case Result of {_,0,{0,0}} -> 0; error -> 1; _ -> 1 end).'
 endif
 
 bench: compile_test
