@@ -45,7 +45,8 @@
     three_nodes_cluster_conflicts/1,
     three_nodes_custom_event_handler_reg_unreg/1,
     three_nodes_custom_event_handler_conflict_resolution/1,
-    three_nodes_update/1
+    three_nodes_update/1,
+    three_nodes_ack_sync_ordered_delivery/1
 ]).
 -export([
     four_nodes_concurrency/1
@@ -100,7 +101,8 @@ groups() ->
             three_nodes_cluster_conflicts,
             three_nodes_custom_event_handler_reg_unreg,
             three_nodes_custom_event_handler_conflict_resolution,
-            three_nodes_update
+            three_nodes_update,
+            three_nodes_ack_sync_ordered_delivery
         ]},
         {four_nodes_registry, [shuffle], [
             four_nodes_concurrency
@@ -1662,6 +1664,59 @@ three_nodes_update(Config) ->
         {on_registry_process_updated, SlaveNode2, scope_all, "my-proc-on-1", PidOn1, 1000, 1001, normal}
     ]).
 
+three_nodes_ack_sync_ordered_delivery(Config) ->
+    %% Issue #87: Race condition causing stale pids in syn lookup.
+    %%
+    %% Root cause: ack_sync was sent directly from gen_server while sync_register/
+    %% sync_unregister was sent via multicast_loop. Since these are different sender
+    %% processes, Erlang does not guarantee message ordering between them. This means
+    %% sync_register can arrive at a remote node BEFORE ack_sync, causing it to be
+    %% dropped (remote node not yet in nodes_map), leaving stale data.
+    %%
+    %% Fix: Route ack_sync through multicast_loop (via send_to_node_ordered/3) so all
+    %% messages to remote nodes flow through the same sender, guaranteeing FIFO delivery.
+    %%
+    %% This test verifies the fix by tracing the local multicast_loop process during
+    %% node discovery. With the fix, ack_sync is routed through multicast_loop and the
+    %% trace captures {send_single, ...} messages. Without the fix, ack_sync is sent
+    %% directly from gen_server and multicast_loop never receives send_single.
+
+    %% get slave
+    SlaveNode1 = proplists:get_value(syn_slave_1, Config),
+
+    %% start syn on both nodes
+    ok = syn:start(),
+    ok = rpc:call(SlaveNode1, syn, start, []),
+    ok = syn:add_node_to_scopes([scope_order]),
+    ok = rpc:call(SlaveNode1, syn, add_node_to_scopes, [[scope_order]]),
+
+    %% wait for initial discovery
+    syn_test_suite_helper:assert_registry_scope_subcluster(node(), scope_order, [SlaveNode1]),
+    syn_test_suite_helper:assert_registry_scope_subcluster(SlaveNode1, scope_order, [node()]),
+
+    %% disconnect
+    syn_test_suite_helper:disconnect_node(SlaveNode1),
+    syn_test_suite_helper:assert_registry_scope_subcluster(node(), scope_order, []),
+
+    %% get our local multicast_pid from scope state
+    State = sys:get_state(syn_registry_scope_order),
+    MulticastPid = State#state.multicast_pid,
+
+    %% trace receives on our multicast_loop
+    erlang:trace(MulticastPid, true, ['receive']),
+
+    %% reconnect - triggers discover/ack_sync exchange
+    syn_test_suite_helper:connect_node(SlaveNode1),
+    syn_test_suite_helper:assert_registry_scope_subcluster(node(), scope_order, [SlaveNode1]),
+
+    %% stop tracing
+    erlang:trace(MulticastPid, false, ['receive']),
+
+    %% verify that multicast_loop received a {send_single, ...} message containing ack_sync.
+    %% this proves ack_sync is routed through multicast_loop (the fix), ensuring FIFO
+    %% ordering with sync_register/sync_unregister broadcasts.
+    true = check_trace_for_ack_sync_via_multicast().
+
 four_nodes_concurrency(Config) ->
     %% get slaves
     SlaveNode1 = proplists:get_value(syn_slave_1, Config),
@@ -1750,6 +1805,24 @@ four_nodes_concurrency(Config) ->
 %% ===================================================================
 %% Internal
 %% ===================================================================
+check_trace_for_ack_sync_via_multicast() ->
+    receive
+        {trace, _, 'receive', {send_single, _, {'3.0', ack_sync, _, _}, _}} ->
+            flush_trace_messages(),
+            true;
+        {trace, _, 'receive', _} ->
+            check_trace_for_ack_sync_via_multicast()
+    after 2000 ->
+        false
+    end.
+
+flush_trace_messages() ->
+    receive
+        {trace, _, _, _} -> flush_trace_messages()
+    after 100 ->
+        ok
+    end.
+
 add_to_local_table(Scope, Name, Pid, Meta, Time, MRef) ->
     TableByName = syn_backbone:get_table_name(syn_registry_by_name, Scope),
     TableByPid = syn_backbone:get_table_name(syn_registry_by_pid, Scope),
