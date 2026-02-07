@@ -38,6 +38,12 @@ else
 	-pa `rebar3 as test path`
 endif
 
+killzombies:
+	@pkill -9 -f beam 2>/dev/null; true
+	@sleep 1
+	@epmd -daemon
+	@echo "Zombie beam processes killed, epmd restarted."
+
 bench: compile_test
 	@erl -pa `rebar3 as test path` \
 	-pa `rebar3 as test path`/../test \
