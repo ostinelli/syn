@@ -1172,6 +1172,11 @@ three_nodes_custom_event_handler_joined_left(Config) ->
     ok = syn:add_node_to_scopes([scope_all]),
     ok = rpc:call(SlaveNode1, syn, add_node_to_scopes, [[scope_all]]),
 
+    %% wait for full scope discovery
+    syn_test_suite_helper:assert_pg_scope_subcluster(node(), scope_all, [SlaveNode1, SlaveNode2]),
+    syn_test_suite_helper:assert_pg_scope_subcluster(SlaveNode1, scope_all, [node(), SlaveNode2]),
+    syn_test_suite_helper:assert_pg_scope_subcluster(SlaveNode2, scope_all, [node(), SlaveNode1]),
+
     %% init
     TestPid = self(),
     LocalNode = node(),
