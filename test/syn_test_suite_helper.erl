@@ -104,7 +104,7 @@ start_slave(NodeShortName) ->
     CodePath = lists:filter(fun(Path) ->
         nomatch =/= string:find(Path, "/syn/")
     end, code:get_path()),
-    true = rpc:call(Node, code, set_path, [CodePath]),
+    ok = rpc:call(Node, code, add_paths, [CodePath]),
     %% return
     {ok, Node}.
 
