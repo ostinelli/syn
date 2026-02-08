@@ -33,10 +33,12 @@
 
 %% tests
 -export([
-    one_node_strict_mode/1
+    one_node_strict_mode/1,
+    one_node_members_with_guards/1
 ]).
 -export([
-    two_nodes_member_count/1
+    two_nodes_member_count/1,
+    two_nodes_members_with_guards/1
 ]).
 -export([
     three_nodes_discover/1,
@@ -97,10 +99,12 @@ all() ->
 groups() ->
     [
         {one_node_pg, [shuffle], [
-            one_node_strict_mode
+            one_node_strict_mode,
+            one_node_members_with_guards
         ]},
         {two_nodes_pg, [shuffle], [
-            two_nodes_member_count
+            two_nodes_member_count,
+            two_nodes_members_with_guards
         ]},
         {three_nodes_pg, [shuffle], [
             three_nodes_discover,
@@ -219,6 +223,115 @@ one_node_strict_mode(_Config) ->
     ok = syn:join(scope, "strict", Self),
     [{Self, undefined}] = syn:members(scope, "strict"),
     ok = syn:leave(scope, "strict", Self).
+
+one_node_members_with_guards(_Config) ->
+    %% start syn
+    ok = syn:start(),
+    syn:add_node_to_scopes([scope]),
+
+    %% start processes
+    PidA = syn_test_suite_helper:start_process(),
+    PidB = syn_test_suite_helper:start_process(),
+    PidC = syn_test_suite_helper:start_process(),
+    PidD = syn_test_suite_helper:start_process(),
+
+    %% join with different metadata
+    ok = syn:join(scope, "guarded", PidA, 10),
+    ok = syn:join(scope, "guarded", PidB, 20),
+    ok = syn:join(scope, "guarded", PidC, 30),
+    ok = syn:join(scope, "guarded", PidD, 5),
+
+    %% members/3 with guard filtering meta > 15
+    Result1 = lists:sort(syn:members(scope, "guarded", [{'>', '$3', 15}])),
+    [{PidB, 20}, {PidC, 30}] = Result1,
+
+    %% members/3 with guard filtering meta == 10
+    [{PidA, 10}] = syn:members(scope, "guarded", [{'==', '$3', 10}]),
+
+    %% members/3 with guard filtering meta >= 20
+    Result2 = lists:sort(syn:members(scope, "guarded", [{'>=', '$3', 20}])),
+    [{PidB, 20}, {PidC, 30}] = Result2,
+
+    %% members/3 with guard filtering meta =< 10
+    Result5 = lists:sort(syn:members(scope, "guarded", [{'=<', '$3', 10}])),
+    [{PidA, 10}, {PidD, 5}] = Result5,
+
+    %% members/3 with empty guards returns all (same as members/2)
+    Result3 = lists:sort(syn:members(scope, "guarded", [])),
+    AllMembers = lists:sort(syn:members(scope, "guarded")),
+    Result3 = AllMembers,
+
+    %% local_members/3 with guards (all local on single node)
+    Result4 = lists:sort(syn:local_members(scope, "guarded", [{'>', '$3', 15}])),
+    [{PidB, 20}, {PidC, 30}] = Result4,
+
+    %% local_members/3 with guard that matches nothing
+    [] = syn:local_members(scope, "guarded", [{'>', '$3', 100}]),
+
+    %% members/3 with guard on non-existent group
+    [] = syn:members(scope, "nonexistent", [{'>', '$3', 0}]),
+
+    %% members/3 with invalid scope
+    {'EXIT', {{invalid_scope, bad_scope}, _}} = (catch syn:members(bad_scope, "guarded", [{'>', '$3', 0}])),
+    {'EXIT', {{invalid_scope, bad_scope}, _}} = (catch syn:local_members(bad_scope, "guarded", [{'>', '$3', 0}])),
+    ok.
+
+two_nodes_members_with_guards(Config) ->
+    %% get slave
+    SlaveNode1 = proplists:get_value(syn_slave_1, Config),
+
+    %% start syn on nodes
+    ok = syn:start(),
+    ok = rpc:call(SlaveNode1, syn, start, []),
+
+    %% add scopes
+    ok = syn:add_node_to_scopes([scope_all]),
+    ok = rpc:call(SlaveNode1, syn, add_node_to_scopes, [[scope_all]]),
+
+    %% start processes on different nodes
+    PidLocal1 = syn_test_suite_helper:start_process(),
+    PidLocal2 = syn_test_suite_helper:start_process(),
+    PidRemote1 = syn_test_suite_helper:start_process(SlaveNode1),
+    PidRemote2 = syn_test_suite_helper:start_process(SlaveNode1),
+
+    %% join with different metadata
+    ok = syn:join(scope_all, "guarded", PidLocal1, 10),
+    ok = syn:join(scope_all, "guarded", PidLocal2, 20),
+    ok = syn:join(scope_all, "guarded", PidRemote1, 30),
+    ok = syn:join(scope_all, "guarded", PidRemote2, 40),
+
+    %% members/3 with guards returns from all nodes
+    syn_test_suite_helper:assert_wait(
+        lists:sort([{PidLocal2, 20}, {PidRemote1, 30}, {PidRemote2, 40}]),
+        fun() -> lists:sort(syn:members(scope_all, "guarded", [{'>', '$3', 15}])) end
+    ),
+
+    %% same result from remote node
+    syn_test_suite_helper:assert_wait(
+        lists:sort([{PidLocal2, 20}, {PidRemote1, 30}, {PidRemote2, 40}]),
+        fun() -> lists:sort(rpc:call(SlaveNode1, syn, members, [scope_all, "guarded", [{'>', '$3', 15}]])) end
+    ),
+
+    %% local_members/3 with guards returns only local matches
+    syn_test_suite_helper:assert_wait(
+        [{PidLocal2, 20}],
+        fun() -> lists:sort(syn:local_members(scope_all, "guarded", [{'>', '$3', 15}])) end
+    ),
+
+    %% local_members/3 on remote node returns only remote matches
+    syn_test_suite_helper:assert_wait(
+        lists:sort([{PidRemote1, 30}, {PidRemote2, 40}]),
+        fun() -> lists:sort(rpc:call(SlaveNode1, syn, local_members, [scope_all, "guarded", [{'>', '$3', 15}]])) end
+    ),
+
+    %% members/3 with guard matching only local
+    syn_test_suite_helper:assert_wait(
+        [{PidLocal1, 10}],
+        fun() -> lists:sort(syn:members(scope_all, "guarded", [{'==', '$3', 10}])) end
+    ),
+
+    %% local_members/3 with guard matching only remote returns empty locally
+    [] = syn:local_members(scope_all, "guarded", [{'==', '$3', 40}]).
 
 two_nodes_member_count(Config) ->
     %% get slave
