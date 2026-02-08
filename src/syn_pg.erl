@@ -32,7 +32,7 @@
 -export([subcluster_nodes/1]).
 -export([join/4]).
 -export([leave/3]).
--export([members/2]).
+-export([members/2, members/3]).
 -export([member/3]).
 -export([member_count/2, member_count/3]).
 -export([is_member/3]).
@@ -84,6 +84,10 @@ subcluster_nodes(Scope) ->
 -spec members(Scope :: atom(), GroupName :: term()) -> [{Pid :: pid(), Meta :: term()}].
 members(Scope, GroupName) ->
     do_get_members(Scope, GroupName, undefined, undefined).
+
+-spec members(Scope :: atom(), GroupName :: term(), Guards :: list()) -> [{Pid :: pid(), Meta :: term()}].
+members(Scope, GroupName, Guards) ->
+    do_get_members(Scope, GroupName, undefined, undefined, Guards).
 
 -spec member(Scope :: atom(), GroupName :: term(), pid()) -> {pid(), Meta :: term()} | undefined.
 member(Scope, GroupName, Pid) ->
@@ -149,6 +153,29 @@ do_get_members(Scope, GroupName, Pid, Node) ->
             ets:select(TableByName, [{
                 {{GroupName, PidParam}, '$3', '_', '_', NodeParam},
                 [],
+                [{{PidParam, '$3'}}]
+            }])
+    end.
+
+-spec do_get_members(Scope :: atom(), GroupName :: term(), pid() | undefined, Node :: node() | undefined, Guards :: list()) ->
+    [{pid(), Meta :: term()}].
+do_get_members(Scope, GroupName, Pid, Node, Guards) ->
+    PidParam = case Pid of
+        undefined -> '$2';
+        _ -> Pid
+    end,
+    NodeParam = case Node of
+        undefined -> '_';
+        _ -> Node
+    end,
+    case syn_backbone:get_table_name(syn_pg_by_name, Scope) of
+        undefined ->
+            error({invalid_scope, Scope});
+
+        TableByName ->
+            ets:select(TableByName, [{
+                {{GroupName, PidParam}, '$3', '_', '_', NodeParam},
+                Guards,
                 [{{PidParam, '$3'}}]
             }])
     end.
