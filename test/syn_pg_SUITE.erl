@@ -39,7 +39,8 @@
 -export([
     two_nodes_member_count/1,
     two_nodes_members_with_guards/1,
-    two_nodes_publish_with_guards/1
+    two_nodes_publish_with_guards/1,
+    two_nodes_multi_call_with_guards/1
 ]).
 -export([
     three_nodes_discover/1,
@@ -106,7 +107,8 @@ groups() ->
         {two_nodes_pg, [shuffle], [
             two_nodes_member_count,
             two_nodes_members_with_guards,
-            two_nodes_publish_with_guards
+            two_nodes_publish_with_guards,
+            two_nodes_multi_call_with_guards
         ]},
         {three_nodes_pg, [shuffle], [
             three_nodes_discover,
@@ -412,6 +414,54 @@ two_nodes_publish_with_guards(Config) ->
     syn_test_suite_helper:assert_received_messages([
         {done, PidRemote1}
     ]).
+
+two_nodes_multi_call_with_guards(Config) ->
+    %% get slave
+    SlaveNode1 = proplists:get_value(syn_slave_1, Config),
+
+    %% start syn on nodes
+    ok = syn:start(),
+    ok = rpc:call(SlaveNode1, syn, start, []),
+
+    %% add scopes
+    ok = syn:add_node_to_scopes([scope_all]),
+    ok = rpc:call(SlaveNode1, syn, add_node_to_scopes, [[scope_all]]),
+
+    %% start recipient processes on different nodes
+    PidLocal1 = syn_test_suite_helper:start_process(fun recipient_loop/0),
+    PidLocal2 = syn_test_suite_helper:start_process(fun recipient_loop/0),
+    PidRemote1 = syn_test_suite_helper:start_process(SlaveNode1, fun recipient_loop/0),
+    PidRemote2 = syn_test_suite_helper:start_process(SlaveNode1, fun recipient_loop/0),
+
+    %% join with different metadata
+    ok = syn:join(scope_all, "mc-group", PidLocal1, 10),
+    ok = syn:join(scope_all, "mc-group", PidLocal2, 20),
+    ok = syn:join(scope_all, "mc-group", PidRemote1, 30),
+    ok = syn:join(scope_all, "mc-group", PidRemote2, 40),
+
+    %% wait for cluster sync
+    syn_test_suite_helper:assert_wait(
+        4,
+        fun() -> length(syn:members(scope_all, "mc-group")) end
+    ),
+
+    %% multi_call/5 with guard matching meta > 15
+    {Replies1, BadReplies1} = syn:multi_call(scope_all, "mc-group", test_mc_msg, 5000, [{'>', '$3', 15}]),
+    Replies1Sorted = lists:sort(Replies1),
+    Replies1Sorted = lists:sort([
+        {{PidLocal2, 20}, {reply, test_mc_msg, PidLocal2, 20}},
+        {{PidRemote1, 30}, {reply, test_mc_msg, PidRemote1, 30}},
+        {{PidRemote2, 40}, {reply, test_mc_msg, PidRemote2, 40}}
+    ]),
+    [] = BadReplies1,
+
+    %% multi_call/5 with guard matching single member
+    {Replies2, BadReplies2} = syn:multi_call(scope_all, "mc-group", test_mc_msg2, 5000, [{'==', '$3', 10}]),
+    [{{PidLocal1, 10}, {reply, test_mc_msg2, PidLocal1, 10}}] = Replies2,
+    [] = BadReplies2,
+
+    %% multi_call/5 with guard matching nothing
+    {[], []} = syn:multi_call(scope_all, "mc-group", test_mc_msg3, 5000, [{'>', '$3', 100}]).
 
 two_nodes_member_count(Config) ->
     %% get slave

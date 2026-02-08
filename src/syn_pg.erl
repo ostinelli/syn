@@ -43,7 +43,7 @@
 -export([group_names/1, group_names/2]).
 -export([publish/3, publish/4]).
 -export([local_publish/3, local_publish/4]).
--export([multi_call/4, multi_call_reply/2]).
+-export([multi_call/4, multi_call/5, multi_call_reply/2]).
 
 %% syn_gen_scope callbacks
 -export([
@@ -338,6 +338,19 @@ do_publish(Members, Message) ->
 multi_call(Scope, GroupName, Message, Timeout) ->
     Self = self(),
     Members = members(Scope, GroupName),
+    lists:foreach(fun({Pid, Meta}) ->
+        spawn_link(?MODULE, multi_call_and_receive, [Self, Pid, Meta, Message, Timeout])
+    end, Members),
+    collect_replies(orddict:from_list(Members)).
+
+-spec multi_call(Scope :: atom(), GroupName :: term(), Message :: term(), Timeout :: non_neg_integer(), Guards :: list()) ->
+    {
+        Replies :: [{{pid(), Meta :: term()}, Reply :: term()}],
+        BadReplies :: [{pid(), Meta :: term()}]
+    }.
+multi_call(Scope, GroupName, Message, Timeout, Guards) ->
+    Self = self(),
+    Members = members(Scope, GroupName, Guards),
     lists:foreach(fun({Pid, Meta}) ->
         spawn_link(?MODULE, multi_call_and_receive, [Self, Pid, Meta, Message, Timeout])
     end, Members),

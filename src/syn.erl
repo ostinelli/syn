@@ -79,7 +79,7 @@
 -export([local_group_names/1]).
 -export([publish/3, publish/4]).
 -export([local_publish/3, local_publish/4]).
--export([multi_call/3, multi_call/4, multi_call_reply/2]).
+-export([multi_call/3, multi_call/4, multi_call/5, multi_call_reply/2]).
 
 %% macros
 -define(DEFAULT_MULTI_CALL_TIMEOUT_MS, 5000).
@@ -759,6 +759,30 @@ multi_call(Scope, GroupName, Message) ->
     }.
 multi_call(Scope, GroupName, Message, Timeout) ->
     syn_pg:multi_call(Scope, GroupName, Message, Timeout).
+
+%% @doc Calls group members matching Guards in the specified Scope and collects their replies.
+%%
+%% Works similarly to {@link multi_call/4} but only calls members whose metadata matches the given Guards.
+%% Guards are ETS match specification guards where `'$3'' is the metadata and `'$2'' is the pid.
+%%
+%% <h2>Examples</h2>
+%% <h3>Elixir</h3>
+%% ```
+%% iex> :syn.multi_call(:users, "area-1", :my_message, 5000, [{:>, :"$3", 10}])
+%% {[{{#PID<0.123.0>, 20}, :my_reply}], []}
+%% '''
+%% <h3>Erlang</h3>
+%% ```
+%% 1> syn:multi_call(users, "area-1", my_message, 5000, [{'>', '$3', 10}]).
+%% {[{{<0.123.0>, 20}, my_reply}], []}
+%% '''
+-spec multi_call(Scope :: atom(), GroupName :: term(), Message :: term(), Timeout :: non_neg_integer(), Guards :: list()) ->
+    {
+        Replies :: [{{pid(), Meta :: term()}, Reply :: term()}],
+        BadReplies :: [{pid(), Meta :: term()}]
+    }.
+multi_call(Scope, GroupName, Message, Timeout, Guards) ->
+    syn_pg:multi_call(Scope, GroupName, Message, Timeout, Guards).
 
 %% @doc Allows a group member to reply to a multi call.
 %%
