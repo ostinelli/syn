@@ -38,7 +38,8 @@
 ]).
 -export([
     two_nodes_member_count/1,
-    two_nodes_members_with_guards/1
+    two_nodes_members_with_guards/1,
+    two_nodes_publish_with_guards/1
 ]).
 -export([
     three_nodes_discover/1,
@@ -104,7 +105,8 @@ groups() ->
         ]},
         {two_nodes_pg, [shuffle], [
             two_nodes_member_count,
-            two_nodes_members_with_guards
+            two_nodes_members_with_guards,
+            two_nodes_publish_with_guards
         ]},
         {three_nodes_pg, [shuffle], [
             three_nodes_discover,
@@ -268,6 +270,12 @@ one_node_members_with_guards(_Config) ->
     %% local_members/3 with guard that matches nothing
     [] = syn:local_members(scope, "guarded", [{'>', '$3', 100}]),
 
+    %% members/3 with map metadata and map_get guard
+    PidE = syn_test_suite_helper:start_process(),
+    ok = syn:join(scope, "map-group", PidE, #{"foo" => "bar"}),
+    [{PidE, #{"foo" := "bar"}}] = syn:members(scope, "map-group", [{'==', {map_get, "foo", '$3'}, "bar"}]),
+    [] = syn:members(scope, "map-group", [{'==', {map_get, "foo", '$3'}, "baz"}]),
+
     %% members/3 with guard on non-existent group
     [] = syn:members(scope, "nonexistent", [{'>', '$3', 0}]),
 
@@ -332,6 +340,78 @@ two_nodes_members_with_guards(Config) ->
 
     %% local_members/3 with guard matching only remote returns empty locally
     [] = syn:local_members(scope_all, "guarded", [{'==', '$3', 40}]).
+
+two_nodes_publish_with_guards(Config) ->
+    %% get slave
+    SlaveNode1 = proplists:get_value(syn_slave_1, Config),
+
+    %% start syn on nodes
+    ok = syn:start(),
+    ok = rpc:call(SlaveNode1, syn, start, []),
+
+    %% add scopes
+    ok = syn:add_node_to_scopes([scope_all]),
+    ok = rpc:call(SlaveNode1, syn, add_node_to_scopes, [[scope_all]]),
+
+    %% start subscriber processes on different nodes
+    TestMessage = test_publish_guards,
+    TestPid = self(),
+    SubscriberLoop = fun() -> subscriber_loop(TestPid, TestMessage) end,
+
+    PidLocal1 = syn_test_suite_helper:start_process(SubscriberLoop),
+    PidLocal2 = syn_test_suite_helper:start_process(SubscriberLoop),
+    PidRemote1 = syn_test_suite_helper:start_process(SlaveNode1, SubscriberLoop),
+    PidRemote2 = syn_test_suite_helper:start_process(SlaveNode1, SubscriberLoop),
+
+    %% join with different metadata
+    ok = syn:join(scope_all, "pub-group", PidLocal1, 10),
+    ok = syn:join(scope_all, "pub-group", PidLocal2, 20),
+    ok = syn:join(scope_all, "pub-group", PidRemote1, 30),
+    ok = syn:join(scope_all, "pub-group", PidRemote2, 40),
+
+    %% wait for cluster sync
+    syn_test_suite_helper:assert_wait(
+        4,
+        fun() -> length(syn:members(scope_all, "pub-group")) end
+    ),
+
+    %% publish/4 with guards - only meta > 15
+    {ok, 3} = syn:publish(scope_all, "pub-group", TestMessage, [{'>', '$3', 15}]),
+
+    syn_test_suite_helper:assert_received_messages([
+        {done, PidLocal2},
+        {done, PidRemote1},
+        {done, PidRemote2}
+    ]),
+
+    %% publish/4 with guard matching single member
+    {ok, 1} = syn:publish(scope_all, "pub-group", TestMessage, [{'==', '$3', 10}]),
+
+    syn_test_suite_helper:assert_received_messages([
+        {done, PidLocal1}
+    ]),
+
+    %% publish/4 with guard matching nothing
+    {ok, 0} = syn:publish(scope_all, "pub-group", TestMessage, [{'>', '$3', 100}]),
+    syn_test_suite_helper:assert_empty_queue(),
+
+    %% local_publish/4 with guards - only local members with meta > 15
+    {ok, 1} = syn:local_publish(scope_all, "pub-group", TestMessage, [{'>', '$3', 15}]),
+
+    syn_test_suite_helper:assert_received_messages([
+        {done, PidLocal2}
+    ]),
+
+    %% local_publish/4 with guard matching only remote - returns 0 locally
+    {ok, 0} = syn:local_publish(scope_all, "pub-group", TestMessage, [{'>', '$3', 25}]),
+    syn_test_suite_helper:assert_empty_queue(),
+
+    %% local_publish/4 from remote node
+    {ok, 1} = rpc:call(SlaveNode1, syn, local_publish, [scope_all, "pub-group", TestMessage, [{'==', '$3', 30}]]),
+
+    syn_test_suite_helper:assert_received_messages([
+        {done, PidRemote1}
+    ]).
 
 two_nodes_member_count(Config) ->
     %% get slave

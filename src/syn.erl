@@ -77,8 +77,8 @@
 -export([local_group_count/1]).
 -export([group_names/1, group_names/2]).
 -export([local_group_names/1]).
--export([publish/3]).
--export([local_publish/3]).
+-export([publish/3, publish/4]).
+-export([local_publish/3, local_publish/4]).
 -export([multi_call/3, multi_call/4, multi_call_reply/2]).
 
 %% macros
@@ -678,12 +678,58 @@ local_group_names(Scope) ->
 publish(Scope, GroupName, Message) ->
     syn_pg:publish(Scope, GroupName, Message).
 
+%% @doc Publish a message to group members matching Guards in the specified Scope.
+%%
+%% Works similarly to {@link publish/3} but only sends to members whose metadata matches the given Guards.
+%% Guards are ETS match specification guards where `'$3'' is the metadata and `'$2'' is the pid.
+%%
+%% <h2>Examples</h2>
+%% <h3>Elixir</h3>
+%% ```
+%% iex> :syn.join(:users, "area-1", self(), %{"foo" => "bar"})
+%% :ok
+%% iex> :syn.publish(:users, "area-1", :my_message, [{:==, {:map_get, "foo", :"$3"}, "bar"}])
+%% {:ok,1}
+%% iex> flush()
+%% Shell got :my_message
+%% :ok
+%% '''
+%% <h3>Erlang</h3>
+%% ```
+%% 1> syn:join(users, "area-1", self(), #{"foo" => "bar"}).
+%% ok
+%% 2> syn:publish(users, "area-1", my_message, [{'==', {map_get, "foo", '$3'}, "bar"}]).
+%% {ok,1}
+%% 3> flush().
+%% Shell got my_message
+%% ok
+%% '''
+%% Guards can also target the pid with `'$2'':
+%% ```
+%% 1> Pid = self().
+%% <0.123.0>
+%% 2> syn:join(users, "area-1", Pid, my_meta).
+%% ok
+%% 3> syn:publish(users, "area-1", my_message, [{'==', '$2', Pid}]).
+%% {ok,1}
+%% 4> flush().
+%% Shell got my_message
+%% ok
+%% '''
+-spec publish(Scope :: atom(), GroupName :: term(), Message :: term(), Guards :: list()) -> {ok, RecipientCount :: non_neg_integer()}.
+publish(Scope, GroupName, Message, Guards) ->
+    syn_pg:publish(Scope, GroupName, Message, Guards).
+
 %% @doc Publish a message to all group members running on the local node in the specified Scope.
 %%
 %% Works similarly to {@link publish/3} for local processes.
 -spec local_publish(Scope :: atom(), GroupName :: term(), Message :: term()) -> {ok, RecipientCount :: non_neg_integer()}.
 local_publish(Scope, GroupName, Message) ->
     syn_pg:local_publish(Scope, GroupName, Message).
+
+-spec local_publish(Scope :: atom(), GroupName :: term(), Message :: term(), Guards :: list()) -> {ok, RecipientCount :: non_neg_integer()}.
+local_publish(Scope, GroupName, Message, Guards) ->
+    syn_pg:local_publish(Scope, GroupName, Message, Guards).
 
 %% @equiv multi_call(Scope, GroupName, Message, 5000)
 %% @end

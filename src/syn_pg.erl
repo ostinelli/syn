@@ -41,8 +41,8 @@
 -export([is_local_member/3]).
 -export([count/1, count/2]).
 -export([group_names/1, group_names/2]).
--export([publish/3]).
--export([local_publish/3]).
+-export([publish/3, publish/4]).
+-export([local_publish/3, local_publish/4]).
 -export([multi_call/4, multi_call_reply/2]).
 
 %% syn_gen_scope callbacks
@@ -307,9 +307,19 @@ publish(Scope, GroupName, Message) ->
     Members = members(Scope, GroupName),
     do_publish(Members, Message).
 
+-spec publish(Scope :: atom(), GroupName :: term(), Message :: term(), Guards :: list()) -> {ok, RecipientCount :: non_neg_integer()}.
+publish(Scope, GroupName, Message, Guards) ->
+    Members = members(Scope, GroupName, Guards),
+    do_publish(Members, Message).
+
 -spec local_publish(Scope :: atom(), GroupName :: term(), Message :: term()) -> {ok, RecipientCount :: non_neg_integer()}.
 local_publish(Scope, GroupName, Message) ->
     Members = local_members(Scope, GroupName),
+    do_publish(Members, Message).
+
+-spec local_publish(Scope :: atom(), GroupName :: term(), Message :: term(), Guards :: list()) -> {ok, RecipientCount :: non_neg_integer()}.
+local_publish(Scope, GroupName, Message, Guards) ->
+    Members = local_members(Scope, GroupName, Guards),
     do_publish(Members, Message).
 
 -spec do_publish(Members :: [{Pid :: pid(), Meta :: term()}], Message :: term()) ->
