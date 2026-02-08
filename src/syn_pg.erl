@@ -37,7 +37,7 @@
 -export([member_count/2, member_count/3]).
 -export([is_member/3]).
 -export([update_member/4]).
--export([local_members/2]).
+-export([local_members/2, local_members/3]).
 -export([is_local_member/3]).
 -export([count/1, count/2]).
 -export([group_names/1, group_names/2]).
@@ -133,6 +133,10 @@ is_member(Scope, GroupName, Pid) ->
 -spec local_members(Scope :: atom(), GroupName :: term()) -> [{pid(), Meta :: term()}].
 local_members(Scope, GroupName) ->
     do_get_members(Scope, GroupName, undefined, node()).
+
+-spec local_members(Scope :: atom(), GroupName :: term(), Guards :: list()) -> [{pid(), Meta :: term()}].
+local_members(Scope, GroupName, Guards) ->
+    do_get_members(Scope, GroupName, undefined, node(), Guards).
 
 -spec do_get_members(Scope :: atom(), GroupName :: term(), pid() | undefined, Node :: node() | undefined) ->
     [{pid(), Meta :: term()}].

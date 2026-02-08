@@ -67,9 +67,9 @@
 %% gen_server via interface
 -export([register_name/2, unregister_name/1, whereis_name/1, send/2]).
 %% groups
--export([members/2, member/3, is_member/3, update_member/4]).
+-export([members/2, members/3, member/3, is_member/3, update_member/4]).
 -export([member_count/2, member_count/3]).
--export([local_members/2, is_local_member/3]).
+-export([local_members/2, local_members/3, is_local_member/3]).
 -export([local_member_count/2]).
 -export([join/3, join/4]).
 -export([leave/3]).
@@ -431,6 +431,10 @@ send(Tuple, Message) ->
 members(Scope, GroupName) ->
     syn_pg:members(Scope, GroupName).
 
+-spec members(Scope :: atom(), GroupName :: term(), Guards :: list()) -> [{Pid :: pid(), Meta :: term()}].
+members(Scope, GroupName, Guards) ->
+    syn_pg:members(Scope, GroupName, Guards).
+
 %% @doc Returns the member for GroupName in the specified Scope.
 %%
 %% <h2>Examples</h2>
@@ -516,6 +520,10 @@ update_member(Scope, GroupName, Pid, Fun) ->
 -spec local_members(Scope :: atom(), GroupName :: term()) -> [{Pid :: pid(), Meta :: term()}].
 local_members(Scope, GroupName) ->
     syn_pg:local_members(Scope, GroupName).
+
+-spec local_members(Scope :: atom(), GroupName :: term(), Guards :: list()) -> [{Pid :: pid(), Meta :: term()}].
+local_members(Scope, GroupName, Guards) ->
+    syn_pg:local_members(Scope, GroupName, Guards).
 
 %% @doc Returns whether a `pid()' is a member of GroupName in the specified Scope running on the local node.
 -spec is_local_member(Scope :: atom(), GroupName :: term(), Pid :: pid()) -> boolean().
