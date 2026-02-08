@@ -189,6 +189,102 @@ Shell got "hello lombardy!"
 ok
 ```
 
+## Feature Additions in this Fork
+
+This fork adds **Guards support** to process group operations. Guards are [ETS match specification guards](https://www.erlang.org/doc/apps/erts/match_spec) that filter members by their metadata (`'$3'`) or pid (`'$2'`).
+
+### New Functions
+
+| Function | Description |
+|---|---|
+| `members/3` | Get group members matching guards |
+| `local_members/3` | Get local group members matching guards |
+| `publish/4` | Publish to group members matching guards |
+| `local_publish/4` | Publish to local group members matching guards |
+| `multi_call/5` | Multi call group members matching guards |
+
+### members/3 and local_members/3
+
+Filter group members using guards on metadata.
+
+#### Elixir
+```elixir
+iex> :syn.join(:users, "area-1", pid1, 10)
+:ok
+iex> :syn.join(:users, "area-1", pid2, 20)
+:ok
+iex> :syn.join(:users, "area-1", pid3, 30)
+:ok
+iex> :syn.members(:users, "area-1", [{:>, :"$3", 15}])
+[{pid2, 20}, {pid3, 30}]
+iex> :syn.local_members(:users, "area-1", [{:>, :"$3", 15}])
+[{pid2, 20}]
+```
+
+#### Erlang
+```erlang
+1> syn:join(users, "area-1", Pid1, 10).
+ok
+2> syn:join(users, "area-1", Pid2, 20).
+ok
+3> syn:join(users, "area-1", Pid3, 30).
+ok
+4> syn:members(users, "area-1", [{'>', '$3', 15}]).
+[{Pid2, 20}, {Pid3, 30}]
+5> syn:local_members(users, "area-1", [{'>', '$3', 15}]).
+[{Pid2, 20}]
+```
+
+### publish/4 and local_publish/4
+
+Publish messages only to members whose metadata matches the guards.
+
+#### Elixir
+```elixir
+iex> :syn.join(:users, "area-1", self(), %{"role" => "admin"})
+:ok
+iex> :syn.publish(:users, "area-1", :my_message, [{:==, {:map_get, "role", :"$3"}, "admin"}])
+{:ok, 1}
+iex> flush()
+Shell got :my_message
+:ok
+```
+
+#### Erlang
+```erlang
+1> syn:join(users, "area-1", self(), #{"role" => "admin"}).
+ok
+2> syn:publish(users, "area-1", my_message, [{'==', {map_get, "role", '$3'}, "admin"}]).
+{ok,1}
+3> flush().
+Shell got my_message
+ok
+```
+
+### multi_call/5
+
+Call only group members matching guards and collect their replies.
+
+#### Elixir
+```elixir
+iex> :syn.multi_call(:users, "area-1", :my_message, 5000, [{:>, :"$3", 15}])
+{[{{pid2, 20}, :my_reply}], []}
+```
+
+#### Erlang
+```erlang
+1> syn:multi_call(users, "area-1", my_message, 5000, [{'>', '$3', 15}]).
+{[{{Pid2, 20}, my_reply}], []}
+```
+
+### Guard Variables
+
+In all guard expressions:
+- `'$3'` refers to the member's **metadata**
+- `'$2'` refers to the member's **pid**
+
+Any valid [ETS match specification guard](https://www.erlang.org/doc/apps/erts/match_spec) can be used, including `map_get/2` for map metadata, `is_integer/1`, `andalso`, `orelse`, etc.
+
 ## Contributing
 So you want to contribute? That's great! Please follow the guidelines below. It will make it easier to get merged in.
 
