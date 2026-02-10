@@ -399,7 +399,7 @@ whereis_name(Scope, Name) ->
     end.
 
 %% @private
--spec send(Name :: term(), Message :: term()) -> pid().
+-spec send(Name :: term(), Message :: term()) -> pid() | {badarg, term()}.
 send(Tuple, Message) ->
     case whereis_name(Tuple) of
         undefined ->
