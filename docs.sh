@@ -2,14 +2,19 @@
 set -e
 
 # Setup:
-#
 #     mix escript.install github elixir-lang/ex_doc
-#     asdf install erlang 24.0.2
-#     asdf local erlang 24.0.2
 
 rebar3 compile
 rebar3 as docs edoc
 version=3.4.0
-ex_doc "syn" $version "_build/default/lib/syn/ebin" \
+
+# Resolve ex_doc escript path (installed via: mix escript.install hex ex_doc)
+EX_DOC_PATH=$(mix escript 2>&1 | awk '/installed at:/{print $NF}')/ex_doc
+if [ ! -x "$EX_DOC_PATH" ]; then
+  echo "ex_doc not found. Install with: mix escript.install hex ex_doc"
+  exit 1
+fi
+
+"$EX_DOC_PATH" "syn" $version "_build/default/lib/syn/ebin" \
   --source-ref ${version} \
   --config docs.config $@
