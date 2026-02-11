@@ -37,6 +37,8 @@
 %% includes
 -include("syn.hrl").
 
+-include_lib("kernel/include/logger.hrl").
+
 %% ===================================================================
 %% API
 %% ===================================================================
@@ -50,7 +52,6 @@ node_scopes() ->
 
 -spec add_node_to_scope(Scope :: atom()) -> ok.
 add_node_to_scope(Scope) when is_atom(Scope) ->
-    error_logger:info_msg("SYN[~s] Adding node to scope <~s>", [node(), Scope]),
     Scopes0 = node_scopes(),
     case lists:member(Scope, Scopes0) of
         true ->
@@ -64,6 +65,8 @@ add_node_to_scope(Scope) when is_atom(Scope) ->
             application:set_env(syn, scopes, Scopes),
             %% start child
             supervisor:start_child(?MODULE, child_spec(Scope)),
+
+            ?LOG_NOTICE(#{node => node(), event => scope_added, scope => Scope}),
             ok
     end.
 

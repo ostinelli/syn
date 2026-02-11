@@ -57,6 +57,8 @@
 %% includes
 -include("syn.hrl").
 
+-include_lib("kernel/include/logger.hrl").
+
 %% callbacks
 -callback init(#state{}) ->
     {ok, HandlerState :: term()}.
@@ -210,9 +212,8 @@ handle_info({'3.0', discover, RemoteScopePid}, #state{
     nodes_map = NodesMap
 } = State) ->
     RemoteScopeNode = node(RemoteScopePid),
-    error_logger:info_msg("SYN[~s|~s<~s>] Received DISCOVER request from node ~s",
-        [node(), HandlerLogName, Scope, RemoteScopeNode]
-    ),
+    ?LOG_NOTICE(#{node => node(), handler => HandlerLogName, scope => Scope,
+                 event => discover_request, from => RemoteScopeNode}),
     %% send local data to remote (ordered to maintain FIFO with broadcasts)
     {ok, LocalData} = Handler:get_local_data(State),
     send_to_node_ordered(RemoteScopeNode, {'3.0', ack_sync, self(), LocalData}, State),
@@ -235,9 +236,8 @@ handle_info({'3.0', ack_sync, RemoteScopePid, Data}, #state{
     scope = Scope
 } = State) ->
     RemoteScopeNode = node(RemoteScopePid),
-    error_logger:info_msg("SYN[~s|~s<~s>] Received ACK SYNC (~w entries) from node ~s",
-        [node(), HandlerLogName, Scope, length(Data), RemoteScopeNode]
-    ),
+    ?LOG_NOTICE(#{node => node(), handler => HandlerLogName, scope => Scope,
+                 event => ack_sync, from => RemoteScopeNode, entries => length(Data)}),
     %% save remote data
     Handler:save_remote_data(Data, State),
     %% is this a new node?
@@ -266,9 +266,8 @@ handle_info({'DOWN', MRef, process, Pid, Reason}, #state{
     RemoteNode = node(Pid),
     case maps:take(RemoteNode, NodesMap) of
         {Pid, NodesMap1} ->
-            error_logger:info_msg("SYN[~s|~s<~s>] Scope Process is DOWN on node ~s: ~p",
-                [node(), HandlerLogName, Scope, RemoteNode, Reason]
-            ),
+            ?LOG_NOTICE(#{node => node(), handler => HandlerLogName, scope => Scope,
+                         event => scope_down, from => RemoteNode, reason => Reason}),
             Handler:purge_local_data_for_node(RemoteNode, State),
             {noreply, State#state{nodes_map = NodesMap1}};
 
@@ -285,9 +284,8 @@ handle_info({nodeup, RemoteNode}, #state{
     handler_log_name = HandlerLogName,
     scope = Scope
 } = State) ->
-    error_logger:info_msg("SYN[~s|~s<~s>] Node ~s has joined the cluster, sending discover message",
-        [node(), HandlerLogName, Scope, RemoteNode]
-    ),
+    ?LOG_NOTICE(#{node => node(), handler => HandlerLogName, scope => Scope,
+                 event => nodeup, from => RemoteNode}),
     send_to_node(RemoteNode, {'3.0', discover, self()}, State),
     {noreply, State};
 
@@ -306,7 +304,8 @@ handle_continue(after_init, #state{
     scope = Scope,
     process_name = ProcessName
 } = State) ->
-    error_logger:info_msg("SYN[~s|~s<~s>] Discovering the cluster", [node(), HandlerLogName, Scope]),
+    ?LOG_NOTICE(#{node => node(), handler => HandlerLogName, scope => Scope,
+                 event => discovering_cluster}),
     %% broadcasting is done in the scope process to avoid issues with ordering guarantees
     lists:foreach(fun(RemoteNode) ->
         {ProcessName, RemoteNode} ! {'3.0', discover, self()}
@@ -318,7 +317,8 @@ handle_continue(after_init, #state{
 %% ----------------------------------------------------------------------------------------------------------
 -spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()), #state{}) -> any().
 terminate(Reason, #state{handler_log_name = HandlerLogName, scope = Scope}) ->
-    error_logger:info_msg("SYN[~s|~s<~s>] Terminating with reason: ~p", [node(), HandlerLogName, Scope, Reason]).
+    ?LOG_NOTICE(#{node => node(), handler => HandlerLogName, scope => Scope,
+                 event => terminate, reason => Reason}).
 
 %% ----------------------------------------------------------------------------------------------------------
 %% Convert process state when code is changed.

@@ -46,6 +46,8 @@
 %% includes
 -include("syn.hrl").
 
+-include_lib("kernel/include/logger.hrl").
+
 %% ===================================================================
 %% API
 %% ===================================================================
@@ -110,15 +112,15 @@ init([]) ->
     {stop, Reason :: term(), Reply :: term(), State :: map()} |
     {stop, Reason :: term(), State :: map()}.
 handle_call({create_tables_for_scope, Scope}, _From, State) ->
-    error_logger:info_msg("SYN[~s] Creating tables for scope <~s>", [node(), Scope]),
     ensure_table_existence(set, syn_registry_by_name, Scope),
     ensure_table_existence(bag, syn_registry_by_pid, Scope),
     ensure_table_existence(ordered_set, syn_pg_by_name, Scope),
     ensure_table_existence(ordered_set, syn_pg_by_pid, Scope),
+    ?LOG_NOTICE(#{node => node(), event => tables_created, scope => Scope}),
     {reply, ok, State};
 
 handle_call(Request, From, State) ->
-    error_logger:warning_msg("SYN[~s] Received from ~p an unknown call message: ~p", [node(), From, Request]),
+    ?LOG_WARNING(#{node => node(), event => unknown_call, from => From, msg => Request}),
     {reply, undefined, State}.
 
 %% ----------------------------------------------------------------------------------------------------------
@@ -129,7 +131,7 @@ handle_call(Request, From, State) ->
     {noreply, State :: map(), Timeout :: non_neg_integer()} |
     {stop, Reason :: term(), State :: map()}.
 handle_cast(Msg, State) ->
-    error_logger:warning_msg("SYN[~s] Received an unknown cast message: ~p", [node(), Msg]),
+    ?LOG_WARNING(#{node => node(), event => unknown_cast, msg => Msg}),
     {noreply, State}.
 
 %% ----------------------------------------------------------------------------------------------------------
@@ -140,7 +142,7 @@ handle_cast(Msg, State) ->
     {noreply, State :: map(), Timeout :: non_neg_integer()} |
     {stop, Reason :: term(), State :: map()}.
 handle_info(Info, State) ->
-    error_logger:warning_msg("SYN[~s] Received an unknown info message: ~p", [node(), Info]),
+    ?LOG_WARNING(#{node => node(), event => unknown_info, msg => Info}),
     {noreply, State}.
 
 %% ----------------------------------------------------------------------------------------------------------
@@ -148,7 +150,7 @@ handle_info(Info, State) ->
 %% ----------------------------------------------------------------------------------------------------------
 -spec terminate(Reason :: term(), State :: map()) -> terminated.
 terminate(Reason, _State) ->
-    error_logger:info_msg("SYN[~s] Terminating with reason: ~p", [node(), Reason]),
+    ?LOG_NOTICE(#{node => node(), event => terminate, reason => Reason}),
     %% return
     terminated.
 

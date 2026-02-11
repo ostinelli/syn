@@ -40,7 +40,6 @@
 -export([assert_received_messages/1]).
 -export([assert_empty_queue/0]).
 -export([assert_wait/2]).
--export([send_error_logger_to_disk/0]).
 
 %% internal
 -export([process_main/0]).
@@ -320,9 +319,6 @@ assert_wait(ExpectedResult, Fun, StartAt) ->
                     assert_wait(ExpectedResult, Fun, StartAt)
             end
     end.
-
-send_error_logger_to_disk() ->
-    error_logger:logfile({open, atom_to_list(node())}).
 
 %% ===================================================================
 %% Internal

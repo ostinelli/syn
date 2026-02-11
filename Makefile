@@ -17,9 +17,9 @@ dialyzer:
 
 run: all
 ifdef node
-	@# 'make test node=syn2@127.0.0.1
+	@# make run node=syn2
 	@erl -pa `rebar3 path` \
-	-name $(sname)@127.0.0.1 \
+	-name $(node)@127.0.0.1 \
 	-eval 'syn:start().'
 else
 	@erl -pa `rebar3 path` \
@@ -32,10 +32,12 @@ ifdef suite
 	@# 'make test suite=syn_registry_SUITE'
 	ct_run -noinput -dir $(PROJECT_DIR)/test -logdir $(PROJECT_DIR)/test/results \
 	-suite $(suite) \
-	-pa `rebar3 as test path`
+	-pa `rebar3 as test path` \
+	-erl_args -config $(PROJECT_DIR)/test/sys
 else
 	ct_run -noinput -dir $(PROJECT_DIR)/test -logdir $(PROJECT_DIR)/test/results \
-	-pa `rebar3 as test path`
+	-pa `rebar3 as test path` \
+	-erl_args -config $(PROJECT_DIR)/test/sys
 endif
 
 killzombies:
