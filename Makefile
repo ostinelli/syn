@@ -40,6 +40,18 @@ else
 	-erl_args -config $(PROJECT_DIR)/test/sys
 endif
 
+proper: compile_test
+ifdef suite
+	ct_run -noinput -dir $(PROJECT_DIR)/test/property -logdir $(PROJECT_DIR)/test/results \
+	-suite $(suite) \
+	-pa `rebar3 as test path` \
+	-erl_args -config $(PROJECT_DIR)/test/sys
+else
+	ct_run -noinput -dir $(PROJECT_DIR)/test/property -logdir $(PROJECT_DIR)/test/results \
+	-pa `rebar3 as test path` \
+	-erl_args -config $(PROJECT_DIR)/test/sys
+endif
+
 killzombies:
 	@pkill -9 -f beam 2>/dev/null; true
 	@sleep 1
