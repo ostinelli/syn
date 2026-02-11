@@ -212,7 +212,7 @@ handle_info({'3.0', discover, RemoteScopePid}, #state{
     nodes_map = NodesMap
 } = State) ->
     RemoteScopeNode = node(RemoteScopePid),
-    ?LOG_NOTICE(#{node => node(), handler => HandlerLogName, scope => Scope,
+    ?LOG_NOTICE(#{handler => HandlerLogName, scope => Scope,
                  event => discover_request, from => RemoteScopeNode}),
     %% send local data to remote (ordered to maintain FIFO with broadcasts)
     {ok, LocalData} = Handler:get_local_data(State),
@@ -236,7 +236,7 @@ handle_info({'3.0', ack_sync, RemoteScopePid, Data}, #state{
     scope = Scope
 } = State) ->
     RemoteScopeNode = node(RemoteScopePid),
-    ?LOG_NOTICE(#{node => node(), handler => HandlerLogName, scope => Scope,
+    ?LOG_NOTICE(#{handler => HandlerLogName, scope => Scope,
                  event => ack_sync, from => RemoteScopeNode, entries => length(Data)}),
     %% save remote data
     Handler:save_remote_data(Data, State),
@@ -266,7 +266,7 @@ handle_info({'DOWN', MRef, process, Pid, Reason}, #state{
     RemoteNode = node(Pid),
     case maps:take(RemoteNode, NodesMap) of
         {Pid, NodesMap1} ->
-            ?LOG_NOTICE(#{node => node(), handler => HandlerLogName, scope => Scope,
+            ?LOG_NOTICE(#{handler => HandlerLogName, scope => Scope,
                          event => scope_down, from => RemoteNode, reason => Reason}),
             Handler:purge_local_data_for_node(RemoteNode, State),
             {noreply, State#state{nodes_map = NodesMap1}};
@@ -284,7 +284,7 @@ handle_info({nodeup, RemoteNode}, #state{
     handler_log_name = HandlerLogName,
     scope = Scope
 } = State) ->
-    ?LOG_NOTICE(#{node => node(), handler => HandlerLogName, scope => Scope,
+    ?LOG_NOTICE(#{handler => HandlerLogName, scope => Scope,
                  event => nodeup, from => RemoteNode}),
     send_to_node(RemoteNode, {'3.0', discover, self()}, State),
     {noreply, State};
@@ -304,7 +304,7 @@ handle_continue(after_init, #state{
     scope = Scope,
     process_name = ProcessName
 } = State) ->
-    ?LOG_NOTICE(#{node => node(), handler => HandlerLogName, scope => Scope,
+    ?LOG_NOTICE(#{handler => HandlerLogName, scope => Scope,
                  event => discovering_cluster}),
     %% broadcasting is done in the scope process to avoid issues with ordering guarantees
     lists:foreach(fun(RemoteNode) ->
@@ -317,7 +317,7 @@ handle_continue(after_init, #state{
 %% ----------------------------------------------------------------------------------------------------------
 -spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()), #state{}) -> any().
 terminate(Reason, #state{handler_log_name = HandlerLogName, scope = Scope}) ->
-    ?LOG_NOTICE(#{node => node(), handler => HandlerLogName, scope => Scope,
+    ?LOG_NOTICE(#{handler => HandlerLogName, scope => Scope,
                  event => terminate, reason => Reason}).
 
 %% ----------------------------------------------------------------------------------------------------------

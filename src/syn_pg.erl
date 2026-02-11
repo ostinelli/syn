@@ -366,7 +366,7 @@ handle_call({'3.0', join_or_update_on_node, RequesterNode, GroupName, Pid, MetaO
                             do_join_on_node(GroupName, Pid, TableMeta, Meta, MRef, normal, RequesterNode, on_group_process_updated, State)
 
                     catch Class:Reason:Stacktrace ->
-                      ?LOG_ERROR(#{node => node(), event => callback_error,
+                      ?LOG_ERROR(#{event => callback_error,
                                    class => Class, reason => Reason,
                                    callback => {pg_update, [TableMeta]},
                                    stacktrace => Stacktrace}),
@@ -409,7 +409,7 @@ handle_call({'3.0', leave_on_node, RequesterNode, GroupName, Pid}, _From, #state
     end;
 
 handle_call(Request, From, #state{scope = Scope} = State) ->
-    ?LOG_WARNING(#{node => node(), handler => ?MODULE_LOG_NAME, scope => Scope,
+    ?LOG_WARNING(#{handler => ?MODULE_LOG_NAME, scope => Scope,
                    event => unknown_call, from => From, msg => Request}),
     {reply, undefined, State}.
 
@@ -457,7 +457,7 @@ handle_info({'DOWN', _MRef, process, Pid, Reason}, #state{
 } = State) ->
     case find_pg_entries_by_pid(Pid, TableByPid) of
         [] ->
-            ?LOG_WARNING(#{node => node(), handler => ?MODULE_LOG_NAME, scope => Scope,
+            ?LOG_WARNING(#{handler => ?MODULE_LOG_NAME, scope => Scope,
                            event => unknown_down, pid => Pid, reason => Reason});
 
         Entries ->
@@ -474,7 +474,7 @@ handle_info({'DOWN', _MRef, process, Pid, Reason}, #state{
     {noreply, State};
 
 handle_info(Info, #state{scope = Scope} = State) ->
-    ?LOG_WARNING(#{node => node(), handler => ?MODULE_LOG_NAME, scope => Scope,
+    ?LOG_WARNING(#{handler => ?MODULE_LOG_NAME, scope => Scope,
                    event => unknown_info, msg => Info}),
     {noreply, State}.
 

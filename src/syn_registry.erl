@@ -267,7 +267,7 @@ handle_call({'3.0', register_or_update_on_node, RequesterNode, Name, Pid, MetaOr
                             do_register_on_node(Name, Pid, TableMeta, Meta, MRef, normal, RequesterNode, on_registry_process_updated, State)
 
                     catch Class:Reason:Stacktrace ->
-                              ?LOG_ERROR(#{node => node(), event => callback_error,
+                              ?LOG_ERROR(#{event => callback_error,
                                            class => Class, reason => Reason,
                                            callback => {registry_update, [Pid, TableMeta]},
                                            stacktrace => Stacktrace}),
@@ -317,7 +317,7 @@ handle_call({'3.0', unregister_on_node, RequesterNode, Name, Pid}, _From, #state
     end;
 
 handle_call(Request, From, #state{scope = Scope} = State) ->
-    ?LOG_WARNING(#{node => node(), handler => ?MODULE_LOG_NAME, scope => Scope,
+    ?LOG_WARNING(#{handler => ?MODULE_LOG_NAME, scope => Scope,
                    event => unknown_call, from => From, msg => Request}),
     {reply, undefined, State}.
 
@@ -364,7 +364,7 @@ handle_info({'DOWN', _MRef, process, Pid, Reason}, #state{
 } = State) ->
     case find_registry_entries_by_pid(Pid, TableByPid) of
         [] ->
-            ?LOG_WARNING(#{node => node(), handler => ?MODULE_LOG_NAME, scope => Scope,
+            ?LOG_WARNING(#{handler => ?MODULE_LOG_NAME, scope => Scope,
                            event => unknown_down, pid => Pid, reason => Reason});
 
         Entries ->
@@ -381,7 +381,7 @@ handle_info({'DOWN', _MRef, process, Pid, Reason}, #state{
     {noreply, State};
 
 handle_info(Info, #state{scope = Scope} = State) ->
-    ?LOG_WARNING(#{node => node(), handler => ?MODULE_LOG_NAME, scope => Scope,
+    ?LOG_WARNING(#{handler => ?MODULE_LOG_NAME, scope => Scope,
                    event => unknown_info, msg => Info}),
     {noreply, State}.
 
@@ -680,7 +680,7 @@ resolve_conflict(Scope, Name, {Pid, Meta, Time}, {TablePid, TableMeta, TableTime
     case PidToKeep of
         Pid ->
             %% -> we keep the remote pid
-            ?LOG_NOTICE(#{node => node(), handler => ?MODULE_LOG_NAME, scope => Scope,
+            ?LOG_NOTICE(#{handler => ?MODULE_LOG_NAME, scope => Scope,
                         event => registry_conflict, name => Name,
                         remote => {Pid, Meta}, local => {TablePid, TableMeta}, keep => remote}),
             %% update locally, the incoming sync_register will update with the time coming from remote node
@@ -696,7 +696,7 @@ resolve_conflict(Scope, Name, {Pid, Meta, Time}, {TablePid, TableMeta, TableTime
 
         TablePid ->
             %% -> we keep the local pid, remote pid will be killed by the other node in the conflict
-            ?LOG_NOTICE(#{node => node(), handler => ?MODULE_LOG_NAME, scope => Scope,
+            ?LOG_NOTICE(#{handler => ?MODULE_LOG_NAME, scope => Scope,
                         event => registry_conflict, name => Name,
                         remote => {Pid, Meta}, local => {TablePid, TableMeta}, keep => local}),
             %% overwrite with updated time
@@ -706,7 +706,7 @@ resolve_conflict(Scope, Name, {Pid, Meta, Time}, {TablePid, TableMeta, TableTime
             syn_gen_scope:broadcast({'3.0', sync_register, Name, TablePid, TableMeta, ResolveTime, syn_conflict_resolution}, State);
 
         Invalid ->
-            ?LOG_NOTICE(#{node => node(), handler => ?MODULE_LOG_NAME, scope => Scope,
+            ?LOG_NOTICE(#{handler => ?MODULE_LOG_NAME, scope => Scope,
                         event => registry_conflict, name => Name,
                         remote => {Pid, Meta}, local => {TablePid, TableMeta},
                         keep => {none, Invalid}}),

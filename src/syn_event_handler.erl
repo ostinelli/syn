@@ -232,7 +232,7 @@ call_event_handler(CallbackMethod, Args) ->
         true ->
             try apply(CustomEventHandler, CallbackMethod, Args)
             catch Class:Reason:Stacktrace ->
-                      ?LOG_ERROR(#{node => node(), event => callback_error,
+                      ?LOG_ERROR(#{event => callback_error,
                                    class => Class, reason => Reason,
                                    callback => {CustomEventHandler, CallbackMethod, Args},
                                    stacktrace => Stacktrace})
@@ -258,7 +258,7 @@ do_resolve_registry_conflict(Scope, Name, {Pid1, Meta1, Time1}, {Pid2, Meta2, Ti
                 _ -> {undefined, false}
 
             catch Class:Reason:Stacktrace ->
-                      ?LOG_ERROR(#{node => node(), event => callback_error,
+                      ?LOG_ERROR(#{event => callback_error,
                                    class => Class, reason => Reason,
                                    callback => {CustomEventHandler,
                                                 resolve_registry_conflict,

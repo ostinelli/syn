@@ -66,7 +66,7 @@ add_node_to_scope(Scope) when is_atom(Scope) ->
             %% start child
             supervisor:start_child(?MODULE, child_spec(Scope)),
 
-            ?LOG_NOTICE(#{node => node(), event => scope_added, scope => Scope}),
+            ?LOG_NOTICE(#{event => scope_added, scope => Scope}),
             ok
     end.
 

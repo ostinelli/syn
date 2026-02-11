@@ -116,11 +116,11 @@ handle_call({create_tables_for_scope, Scope}, _From, State) ->
     ensure_table_existence(bag, syn_registry_by_pid, Scope),
     ensure_table_existence(ordered_set, syn_pg_by_name, Scope),
     ensure_table_existence(ordered_set, syn_pg_by_pid, Scope),
-    ?LOG_NOTICE(#{node => node(), event => tables_created, scope => Scope}),
+    ?LOG_NOTICE(#{event => tables_created, scope => Scope}),
     {reply, ok, State};
 
 handle_call(Request, From, State) ->
-    ?LOG_WARNING(#{node => node(), event => unknown_call, from => From, msg => Request}),
+    ?LOG_WARNING(#{event => unknown_call, from => From, msg => Request}),
     {reply, undefined, State}.
 
 %% ----------------------------------------------------------------------------------------------------------
@@ -131,7 +131,7 @@ handle_call(Request, From, State) ->
     {noreply, State :: map(), Timeout :: non_neg_integer()} |
     {stop, Reason :: term(), State :: map()}.
 handle_cast(Msg, State) ->
-    ?LOG_WARNING(#{node => node(), event => unknown_cast, msg => Msg}),
+    ?LOG_WARNING(#{event => unknown_cast, msg => Msg}),
     {noreply, State}.
 
 %% ----------------------------------------------------------------------------------------------------------
@@ -142,7 +142,7 @@ handle_cast(Msg, State) ->
     {noreply, State :: map(), Timeout :: non_neg_integer()} |
     {stop, Reason :: term(), State :: map()}.
 handle_info(Info, State) ->
-    ?LOG_WARNING(#{node => node(), event => unknown_info, msg => Info}),
+    ?LOG_WARNING(#{event => unknown_info, msg => Info}),
     {noreply, State}.
 
 %% ----------------------------------------------------------------------------------------------------------
@@ -150,7 +150,7 @@ handle_info(Info, State) ->
 %% ----------------------------------------------------------------------------------------------------------
 -spec terminate(Reason :: term(), State :: map()) -> terminated.
 terminate(Reason, _State) ->
-    ?LOG_NOTICE(#{node => node(), event => terminate, reason => Reason}),
+    ?LOG_NOTICE(#{event => terminate, reason => Reason}),
     %% return
     terminated.
 
