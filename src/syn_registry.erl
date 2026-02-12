@@ -692,7 +692,9 @@ resolve_conflict(Scope, Name, {Pid, Meta, Time}, {TablePid, TableMeta, TableTime
             end,
             %% callbacks
             syn_event_handler:call_event_handler(on_process_unregistered, [Scope, Name, TablePid, TableMeta, syn_conflict_resolution]),
-            syn_event_handler:call_event_handler(on_process_registered, [Scope, Name, Pid, Meta, syn_conflict_resolution]);
+            syn_event_handler:call_event_handler(on_process_registered, [Scope, Name, Pid, Meta, syn_conflict_resolution]),
+            %% broadcast unregister for the losing local pid so other nodes clean up stale ack_sync data
+            syn_gen_scope:broadcast({'3.0', sync_unregister, Name, TablePid, TableMeta, syn_conflict_resolution}, State);
 
         TablePid ->
             %% -> we keep the local pid, remote pid will be killed by the other node in the conflict
