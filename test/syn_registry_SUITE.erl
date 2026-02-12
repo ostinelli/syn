@@ -1691,13 +1691,12 @@ three_nodes_ack_sync_ordered_delivery(Config) ->
     %% sync_register can arrive at a remote node BEFORE ack_sync, causing it to be
     %% dropped (remote node not yet in nodes_map), leaving stale data.
     %%
-    %% Fix: Route ack_sync through sender_loop (via send_to_node_ordered/3) so all
-    %% messages to remote nodes flow through the same sender, guaranteeing FIFO delivery.
+    %% Fix: All messages to remote nodes are now routed through sender_loop,
+    %% guaranteeing FIFO delivery.
     %%
     %% This test verifies the fix by tracing the local sender_loop process during
     %% node discovery. With the fix, ack_sync is routed through sender_loop and the
-    %% trace captures {send_single, ...} messages. Without the fix, ack_sync is sent
-    %% directly from gen_server and sender_loop never receives send_single.
+    %% trace captures {send_single, ...} messages.
 
     %% get slave
     SlaveNode1 = proplists:get_value(syn_slave_1, Config),

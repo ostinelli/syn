@@ -36,8 +36,7 @@
 -export([
     broadcast/2,
     broadcast/3,
-    send_to_node/3,
-    send_to_node_ordered/3
+    send_to_node/3
 ]).
 
 %% gen_server callbacks
@@ -127,11 +126,7 @@ broadcast(Message, ExcludedNodes, #state{sender_pid = SenderPid} = State) ->
     SenderPid ! {broadcast, Message, ExcludedNodes, State}.
 
 -spec send_to_node(RemoteNode :: node(), Message :: term(), #state{}) -> any().
-send_to_node(RemoteNode, Message, #state{process_name = ProcessName}) ->
-    {ProcessName, RemoteNode} ! Message.
-
--spec send_to_node_ordered(RemoteNode :: node(), Message :: term(), #state{}) -> any().
-send_to_node_ordered(RemoteNode, Message, #state{sender_pid = SenderPid, process_name = ProcessName}) ->
+send_to_node(RemoteNode, Message, #state{sender_pid = SenderPid, process_name = ProcessName}) ->
     SenderPid ! {send_single, RemoteNode, Message, ProcessName}.
 
 %% ===================================================================
@@ -216,7 +211,7 @@ handle_info({'3.0', discover, RemoteScopePid}, #state{
                  event => discover_request, from => RemoteScopeNode}),
     %% send local data to remote (ordered to maintain FIFO with broadcasts)
     {ok, LocalData} = Handler:get_local_data(State),
-    send_to_node_ordered(RemoteScopeNode, {'3.0', ack_sync, self(), LocalData}, State),
+    send_to_node(RemoteScopeNode, {'3.0', ack_sync, self(), LocalData}, State),
     %% is this a new node?
     case maps:is_key(RemoteScopeNode, NodesMap) of
         true ->
@@ -251,7 +246,7 @@ handle_info({'3.0', ack_sync, RemoteScopePid, Data}, #state{
             _MRef = monitor(process, RemoteScopePid),
             %% send local to remote (ordered to maintain FIFO with broadcasts)
             {ok, LocalData} = Handler:get_local_data(State),
-            send_to_node_ordered(RemoteScopeNode, {'3.0', ack_sync, self(), LocalData}, State),
+            send_to_node(RemoteScopeNode, {'3.0', ack_sync, self(), LocalData}, State),
             %% return
             {noreply, State#state{nodes_map = NodesMap#{RemoteScopeNode => RemoteScopePid}}}
     end;
