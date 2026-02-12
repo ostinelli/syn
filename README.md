@@ -69,7 +69,7 @@ Add it to your deps:
 
 ```elixir
 defp deps do
-  [{:syn, "~> 3.3"}]
+  [{:syn, "~> 3.4"}]
 end
 ```
 
