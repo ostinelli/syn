@@ -1686,18 +1686,18 @@ three_nodes_ack_sync_ordered_delivery(Config) ->
     %% Issue #87: Race condition causing stale pids in syn lookup.
     %%
     %% Root cause: ack_sync was sent directly from gen_server while sync_register/
-    %% sync_unregister was sent via multicast_loop. Since these are different sender
+    %% sync_unregister was sent via sender_loop. Since these are different sender
     %% processes, Erlang does not guarantee message ordering between them. This means
     %% sync_register can arrive at a remote node BEFORE ack_sync, causing it to be
     %% dropped (remote node not yet in nodes_map), leaving stale data.
     %%
-    %% Fix: Route ack_sync through multicast_loop (via send_to_node_ordered/3) so all
+    %% Fix: Route ack_sync through sender_loop (via send_to_node_ordered/3) so all
     %% messages to remote nodes flow through the same sender, guaranteeing FIFO delivery.
     %%
-    %% This test verifies the fix by tracing the local multicast_loop process during
-    %% node discovery. With the fix, ack_sync is routed through multicast_loop and the
+    %% This test verifies the fix by tracing the local sender_loop process during
+    %% node discovery. With the fix, ack_sync is routed through sender_loop and the
     %% trace captures {send_single, ...} messages. Without the fix, ack_sync is sent
-    %% directly from gen_server and multicast_loop never receives send_single.
+    %% directly from gen_server and sender_loop never receives send_single.
 
     %% get slave
     SlaveNode1 = proplists:get_value(syn_slave_1, Config),
@@ -1716,24 +1716,24 @@ three_nodes_ack_sync_ordered_delivery(Config) ->
     syn_test_suite_helper:disconnect_node(SlaveNode1),
     syn_test_suite_helper:assert_registry_scope_subcluster(node(), scope_order, []),
 
-    %% get our local multicast_pid from scope state
+    %% get our local sender_pid from scope state
     State = sys:get_state(syn_registry_scope_order),
-    MulticastPid = State#state.multicast_pid,
+    SenderPid = State#state.sender_pid,
 
-    %% trace receives on our multicast_loop
-    erlang:trace(MulticastPid, true, ['receive']),
+    %% trace receives on our sender_loop
+    erlang:trace(SenderPid, true, ['receive']),
 
     %% reconnect - triggers discover/ack_sync exchange
     syn_test_suite_helper:connect_node(SlaveNode1),
     syn_test_suite_helper:assert_registry_scope_subcluster(node(), scope_order, [SlaveNode1]),
 
     %% stop tracing
-    erlang:trace(MulticastPid, false, ['receive']),
+    erlang:trace(SenderPid, false, ['receive']),
 
-    %% verify that multicast_loop received a {send_single, ...} message containing ack_sync.
-    %% this proves ack_sync is routed through multicast_loop (the fix), ensuring FIFO
+    %% verify that sender_loop received a {send_single, ...} message containing ack_sync.
+    %% this proves ack_sync is routed through sender_loop (the fix), ensuring FIFO
     %% ordering with sync_register/sync_unregister broadcasts.
-    true = check_trace_for_ack_sync_via_multicast().
+    true = check_trace_for_ack_sync_via_sender().
 
 four_nodes_concurrency(Config) ->
     %% get slaves
@@ -1823,13 +1823,13 @@ four_nodes_concurrency(Config) ->
 %% ===================================================================
 %% Internal
 %% ===================================================================
-check_trace_for_ack_sync_via_multicast() ->
+check_trace_for_ack_sync_via_sender() ->
     receive
         {trace, _, 'receive', {send_single, _, {'3.0', ack_sync, _, _}, _}} ->
             flush_trace_messages(),
             true;
         {trace, _, 'receive', _} ->
-            check_trace_for_ack_sync_via_multicast()
+            check_trace_for_ack_sync_via_sender()
     after 2000 ->
         false
     end.

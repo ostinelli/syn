@@ -52,7 +52,7 @@
 ]).
 
 %% internal
--export([multicast_loop/0]).
+-export([sender_loop/0]).
 
 %% includes
 -include("syn.hrl").
@@ -123,16 +123,16 @@ broadcast(Message, State) ->
     broadcast(Message, [], State).
 
 -spec broadcast(Message :: term(), ExcludedNodes :: [node()], #state{}) -> any().
-broadcast(Message, ExcludedNodes, #state{multicast_pid = MulticastPid} = State) ->
-    MulticastPid ! {broadcast, Message, ExcludedNodes, State}.
+broadcast(Message, ExcludedNodes, #state{sender_pid = SenderPid} = State) ->
+    SenderPid ! {broadcast, Message, ExcludedNodes, State}.
 
 -spec send_to_node(RemoteNode :: node(), Message :: term(), #state{}) -> any().
 send_to_node(RemoteNode, Message, #state{process_name = ProcessName}) ->
     {ProcessName, RemoteNode} ! Message.
 
 -spec send_to_node_ordered(RemoteNode :: node(), Message :: term(), #state{}) -> any().
-send_to_node_ordered(RemoteNode, Message, #state{multicast_pid = MulticastPid, process_name = ProcessName}) ->
-    MulticastPid ! {send_single, RemoteNode, Message, ProcessName}.
+send_to_node_ordered(RemoteNode, Message, #state{sender_pid = SenderPid, process_name = ProcessName}) ->
+    SenderPid ! {send_single, RemoteNode, Message, ProcessName}.
 
 %% ===================================================================
 %% Callbacks
@@ -148,8 +148,8 @@ send_to_node_ordered(RemoteNode, Message, #state{multicast_pid = MulticastPid, p
 init([Handler, HandlerLogName, Scope, ProcessName]) ->
     %% monitor nodes
     ok = net_kernel:monitor_nodes(true),
-    %% start multicast process
-    MulticastPid = spawn_link(?MODULE, multicast_loop, []),
+    %% start sender process
+    SenderPid = spawn_link(?MODULE, sender_loop, []),
     %% table names
     HandlerBin = list_to_binary(atom_to_list(Handler)),
     TableByName = syn_backbone:get_table_name(list_to_atom(binary_to_list(<<HandlerBin/binary, "_by_name">>)), Scope),
@@ -160,7 +160,7 @@ init([Handler, HandlerLogName, Scope, ProcessName]) ->
         handler_log_name = HandlerLogName,
         scope = Scope,
         process_name = ProcessName,
-        multicast_pid = MulticastPid,
+        sender_pid = SenderPid,
         table_by_name = TableByName,
         table_by_pid = TableByPid
     },
@@ -335,18 +335,18 @@ code_change(_OldVsn, State, _Extra) ->
 get_process_name_for_scope(Handler, Scope) ->
     syn_backbone:get_process_name({Handler, Scope}).
 
--spec multicast_loop() -> terminated.
-multicast_loop() ->
+-spec sender_loop() -> terminated.
+sender_loop() ->
     receive
         {broadcast, Message, ExcludedNodes, #state{process_name = ProcessName, nodes_map = NodesMap}} ->
             lists:foreach(fun(RemoteNode) ->
                 {ProcessName, RemoteNode} ! Message
             end, maps:keys(NodesMap) -- ExcludedNodes),
-            multicast_loop();
+            sender_loop();
 
         {send_single, RemoteNode, Message, ProcessName} ->
             {ProcessName, RemoteNode} ! Message,
-            multicast_loop();
+            sender_loop();
 
         terminate ->
             terminated
