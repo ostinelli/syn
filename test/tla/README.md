@@ -62,6 +62,8 @@ This works because of the FIFO guarantee established by PR #87 (routing `ack_syn
 the same node's `multicast_loop`, so the receiver always processes the stale data first and the
 cleanup second. The zombie is created momentarily but immediately removed.
 
+Fix applied in [this commit](https://github.com/ostinelli/syn/commit/7716a9885924643ce84bb47cbc36b5efb891e577).
+
 ## Running the Model Checker
 
 Requires Java 8+:
