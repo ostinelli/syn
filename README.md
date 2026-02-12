@@ -208,7 +208,7 @@ $ make test
 
 ## License
 
-Copyright (c) 2015-2022 Roberto Ostinelli and Neato Robotics, Inc.
+Copyright (c) 2015-2026 Roberto Ostinelli and Neato Robotics, Inc.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
