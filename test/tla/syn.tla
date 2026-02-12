@@ -94,6 +94,19 @@ Flatten(keys, struct, acc) ==
         LET k == CHOOSE k \in keys: TRUE
         IN Flatten(keys \ {k}, struct, acc @@ struct[k])
 
+\* Helper: append sync_unregister messages for each name in the set
+RECURSIVE AppendSyncUnregisters(_, _, _)
+
+AppendSyncUnregisters(names_to_unregister, queue, from_node) ==
+    IF names_to_unregister = {} THEN queue
+    ELSE
+        LET name == CHOOSE name \in names_to_unregister: TRUE
+        IN AppendSyncUnregisters(
+            names_to_unregister \ {name},
+            Append(queue, [action |-> "sync_unregister", name |-> name, from |-> from_node]),
+            from_node
+        )
+
 MergeRegistries(local, remote, remote_node) ==
     LET all_registered == Flatten(DOMAIN local, local, << >>)
     IN [r \in DOMAIN local |-> CASE
@@ -106,10 +119,16 @@ SyncRegister(n) ==
     /\ Head(inbox[n]).action = "sync_register"
     /\ LET message == Head(inbox[n])
         conflict == message.name \in DOMAIN locally_registered[n][n]
+        remote_wins == conflict /\ message.time > locally_registered[n][n][message.name]
+        losers == IF remote_wins THEN {message.name} ELSE {}
         l == MergeRegistries(locally_registered[n], [r \in {message.name} |-> message.time], message.from)
         IN locally_registered' = [locally_registered EXCEPT![n] = l]
-        /\ registered' = IF conflict /\ message.time > locally_registered[n][n][message.name] THEN [registered EXCEPT![message.name] = @ - 1] ELSE registered
-    /\ inbox' = [inbox EXCEPT![n] = Tail(inbox[n])]
+        /\ registered' = (IF remote_wins THEN [registered EXCEPT![message.name] = @ - 1] ELSE registered)
+        /\ inbox' = [o \in Nodes |-> CASE
+            (o = n) -> Tail(inbox[n])
+            [] (o \in visible_nodes[n]) -> AppendSyncUnregisters(losers, inbox[o], n)
+            [] OTHER -> inbox[o]
+        ]
     /\ time' = time + 1
     /\ states' = Append(states, <<"SyncRegister", n, Head(inbox[n]).name>>)
     /\ UNCHANGED <<names, visible_nodes, disconnections>>
@@ -214,14 +233,19 @@ Discover(n) ==
 AckSync(n) ==
     /\ Len(inbox[n]) > 0
     /\ Head(inbox[n]).action = "ack_sync"
-    /\ inbox' = [inbox EXCEPT![n] = Tail(inbox[n])]
     /\ LET message == Head(inbox[n])
         l == MergeRegistries(locally_registered[n], message.local_data, message.from)
         conflicts == DOMAIN locally_registered[n][n] \intersect DOMAIN message.local_data
-        c1 == [c \in { r \in conflicts : message.local_data[r] > locally_registered[n][n][r] } |-> registered[c] - 1]
+        losers == { r \in conflicts : message.local_data[r] > locally_registered[n][n][r] }
+        c1 == [c \in losers |-> registered[c] - 1]
         c2 == [c \in { r \in conflicts : locally_registered[n][n][r] > message.local_data[r] } |-> registered[c]]
         IN locally_registered' = [locally_registered EXCEPT![n] = l]
         /\ registered' = c1 @@ c2 @@ [r \in (DOMAIN registered \ conflicts) |-> registered[r]]
+        /\ inbox' = [o \in Nodes |-> CASE
+            (o = n) -> Tail(inbox[n])
+            [] (o \in visible_nodes[n]) -> AppendSyncUnregisters(losers, inbox[o], n)
+            [] OTHER -> inbox[o]
+        ]
         /\ states' = Append(states, <<"AckSync", n, message.from>>)
     /\ time' = time + 1
     /\ UNCHANGED <<names, visible_nodes, disconnections>>

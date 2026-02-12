@@ -35,6 +35,33 @@ Consequences:
 - Registering "a" on n2 returns `{error, taken}`.
 - The zombie persists until the next disconnect/reconnect cycle purges n1's entries on n2.
 
+## The Fix
+
+In `syn_registry.erl`, in the `resolve_conflict/5` function, the "keep remote" path
+(where the remote process wins the conflict) updates the local table and kills the losing
+process, but does not broadcast a `sync_unregister` for the loser. The "keep neither" path
+already does this. The fix adds the missing broadcast:
+
+```erlang
+Pid ->
+    %% -> we keep the remote pid
+    ...
+    %% callbacks
+    syn_event_handler:call_event_handler(on_process_unregistered, ...),
+    syn_event_handler:call_event_handler(on_process_registered, ...),
+    %% broadcast unregister for the losing local pid
+    %% so other nodes clean up stale ack_sync data
+    syn_gen_scope:broadcast(
+        {'3.0', sync_unregister, Name, TablePid, TableMeta, syn_conflict_resolution},
+        State
+    );
+```
+
+This works because of the FIFO guarantee established by PR #87 (routing `ack_sync` through
+`multicast_loop`). Both the stale `ack_sync` and the corrective `sync_unregister` flow through
+the same node's `multicast_loop`, so the receiver always processes the stale data first and the
+cleanup second. The zombie is created momentarily but immediately removed.
+
 ## Running the Model Checker
 
 Requires Java 8+:
