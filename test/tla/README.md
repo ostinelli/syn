@@ -1,7 +1,7 @@
 # TLA+ Model for Syn Registry
 
-The TLA+ specification in this directory is based on [Graham Hay's syn_tla](https://github.com/grahamrhay/syn_tla),
-a formal model of Syn's distributed registry conflict resolution protocol.
+The TLA+ specifications in this directory were authored by [Graham Hay](https://github.com/grahamrhay/syn_tla)
+as a formal model of Syn's distributed registry conflict resolution protocol.
 
 ## The Bug
 
@@ -90,3 +90,11 @@ The model checks three properties:
 ```
 java -cp tla2tools.jar tlc2.TLC -config syn_tests.cfg syn_tests.tla
 ```
+
+## Copyright
+
+The TLA+ specifications in this directory were authored by
+[Graham Hay](https://github.com/grahamrhay) and are included here with minor modifications
+(the bug fix described above). The original model is available at
+https://github.com/grahamrhay/syn_tla. All rights to the original work remain with
+the author.
