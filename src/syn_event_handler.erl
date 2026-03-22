@@ -271,9 +271,10 @@ do_resolve_registry_conflict(Scope, Name, {Pid1, Meta1, Time1}, {Pid2, Meta2, Ti
             %% by default, keep pid registered more recently
             %% this is a simple mechanism that can be imprecise, as system clocks are not perfectly aligned in a cluster
             %% if something more elaborate is desired (such as vector clocks) use Meta to store data and a custom event handler
-            PidToKeep = case Time1 > Time2 of
-                true -> Pid1;
-                _ -> Pid2
+            PidToKeep = if
+                Time1 > Time2 -> Pid1;
+                Time1 < Time2 -> Pid2;
+                true -> max(Pid1, Pid2)  %% deterministic tiebreaker both nodes agree on
             end,
             {PidToKeep, true}
     end.
