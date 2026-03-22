@@ -122,8 +122,8 @@ broadcast(Message, State) ->
     broadcast(Message, [], State).
 
 -spec broadcast(Message :: term(), ExcludedNodes :: [node()], #state{}) -> any().
-broadcast(Message, ExcludedNodes, #state{sender_pid = SenderPid} = State) ->
-    SenderPid ! {broadcast, Message, ExcludedNodes, State}.
+broadcast(Message, ExcludedNodes, #state{sender_pid = SenderPid, process_name = ProcessName, nodes_map = NodesMap}) ->
+    SenderPid ! {broadcast, Message, ExcludedNodes, ProcessName, NodesMap}.
 
 -spec send_to_node(RemoteNode :: node(), Message :: term(), #state{}) -> any().
 send_to_node(RemoteNode, Message, #state{sender_pid = SenderPid, process_name = ProcessName}) ->
@@ -334,7 +334,7 @@ get_process_name_for_scope(Handler, Scope) ->
 -spec sender_loop() -> terminated.
 sender_loop() ->
     receive
-        {broadcast, Message, ExcludedNodes, #state{process_name = ProcessName, nodes_map = NodesMap}} ->
+        {broadcast, Message, ExcludedNodes, ProcessName, NodesMap} ->
             lists:foreach(fun(RemoteNode) ->
                 {ProcessName, RemoteNode} ! Message
             end, maps:keys(NodesMap) -- ExcludedNodes),
