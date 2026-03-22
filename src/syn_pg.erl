@@ -673,7 +673,7 @@ purge_pg_for_remote_nodes(Scope, TableByName, TableByPid) ->
 
 -spec purge_pg_for_remote_node(Scope :: atom(), Node :: atom(), TableByName :: atom(), TableByPid :: atom()) -> true.
 purge_pg_for_remote_node(Scope, Node, TableByName, TableByPid) when Node =/= node() ->
-    %% loop elements for callback in a separate process to free scope process
+    %% loop elements for callback
     PgTuples = get_pg_tuples_for_node(Node, TableByName),
     lists:foreach(fun({GroupName, Pid, Meta, _Time}) ->
         syn_event_handler:call_event_handler(on_process_left,
