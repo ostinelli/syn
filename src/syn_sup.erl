@@ -95,7 +95,7 @@ init([]) ->
         end, [], node_scopes()),
 
     %% return
-    {ok, {{one_for_one, 10, 10}, Children}}.
+    {ok, {{rest_for_one, 10, 10}, Children}}.
 
 %% ===================================================================
 %% Internals
