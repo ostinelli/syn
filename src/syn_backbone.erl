@@ -170,7 +170,7 @@ ensure_table_existence(Type, TableId, Scope) ->
     TableIdBin = list_to_binary(atom_to_list(TableId)),
     ScopeBin = list_to_binary(atom_to_list(Scope)),
     TableName = list_to_atom(binary_to_list(<<TableIdBin/binary, "_", ScopeBin/binary>>)),
-    %% save to loopkup table
+    %% save to lookup table
     true = ets:insert(syn_table_names, {{TableId, Scope}, TableName}),
     %% check or create
     case ets:whereis(TableName) of
