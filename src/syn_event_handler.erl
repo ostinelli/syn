@@ -282,6 +282,6 @@ do_resolve_registry_conflict(Scope, Name, {Pid1, Meta1, Time1}, {Pid2, Meta2, Ti
 %% ===================================================================
 %% Internal
 %% ===================================================================
--spec get_custom_event_handler() -> undefined | {ok, CustomEventHandler :: atom()}.
+-spec get_custom_event_handler() -> undefined | module().
 get_custom_event_handler() ->
     application:get_env(syn, event_handler, undefined).
