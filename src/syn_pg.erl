@@ -223,7 +223,7 @@ leave(Scope, GroupName, Pid) ->
             Node = node(Pid),
             case syn_gen_scope:call(?MODULE, Node, Scope, {'3.0', leave_on_node, node(), GroupName, Pid}) of
                 {ok, {Meta, TableByPid}} when Node =/= node() ->
-                    %% remove table on caller node immediately so that subsequent calls have an updated registry
+                    %% remove table on caller node immediately so that subsequent calls have an updated process group
                     remove_from_local_table(GroupName, Pid, TableByName, TableByPid),
                     %% callback
                     syn_event_handler:call_event_handler(on_process_left, [Scope, GroupName, Pid, Meta, normal]),
@@ -649,7 +649,7 @@ add_to_local_table(GroupName, Pid, Meta, Time, MRef, TableByName, TableByPid) ->
     ets:insert(TableByPid, {{Pid, GroupName}, Meta, Time, MRef, node(Pid)}).
 
 -spec remove_from_local_table(
-    Name :: term(),
+    GroupName :: term(),
     Pid :: pid(),
     TableByName :: atom(),
     TableByPid :: atom()

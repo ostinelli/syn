@@ -77,7 +77,7 @@
 %% regardless of the node it is run on, or you will experience unexpected results.
 %%
 %% <h3>Examples</h3>
-%% The following callback module implements the `on_process_unregistered/4' and the `on_process_left/4' callbacks.
+%% The following callback module implements the `on_process_unregistered/5' and the `on_process_left/5' callbacks.
 %% <h4>Elixir</h4>
 %% ```
 %% defmodule MyCustomEventHandler do
@@ -96,8 +96,8 @@
 %% ```
 %% -module(my_custom_event_handler).
 %% -behaviour(syn_event_handler).
-%% -export([on_process_unregistered/4]).
-%% -export([on_group_process_exit/4]).
+%% -export([on_process_unregistered/5]).
+%% -export([on_process_left/5]).
 %%
 %% -spec on_process_unregistered(
 %%     Scope :: atom(),

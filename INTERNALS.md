@@ -11,7 +11,7 @@ them to the other nodes.
 This serializes per node operations and allows keeping per node consistency.
 
 ## Scope Subclusters
-Syn implement Scopes, which are a way to create namespaced, logical overlay networks running on top of the Erlang
+Syn implements Scopes, which are a way to create namespaced, logical overlay networks running on top of the Erlang
 distribution cluster. Nodes that belong to the same Scope will form a "subcluster": they will synchronize data
 between themselves, and themselves only.
 

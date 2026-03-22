@@ -54,7 +54,7 @@ Otherwise, two different processes updating simultaneously the value of a key wi
 with the last successful write being the data ultimately kept.
 
 Similarly, simultaneous requests coming from different processes to update a specific process' metadata will
-result in the last write received by the  [authority node](internals.html#node-authority) being propagated
+result in the last write received by the [authority node](internals.html#node-authority) being propagated
 to the whole cluster.
 
 This can be circumvented by proper application design, for instance by ensuring that a single process

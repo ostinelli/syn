@@ -27,7 +27,7 @@
 %% ===================================================================
 %% @doc Exposes all of the global Process Registry and Process Group APIs.
 %%
-%% Syn implement Scopes. You may think of Scopes such as database tables, so a set of data elements,
+%% Syn implements Scopes. You may think of Scopes such as database tables, so a set of data elements,
 %% but that's where the analogy ends.
 %%
 %% A Scope is a way to create a namespaced, logical overlay network running on top of the Erlang distribution cluster.
@@ -208,7 +208,7 @@ lookup(Scope, Name) ->
 
 %% @equiv register(Scope, Name, Pid, undefined)
 %% @end
--spec register(Scope :: atom(), Name :: term(), Pid :: term()) -> ok | {error, Reason :: term()}.
+-spec register(Scope :: atom(), Name :: term(), Pid :: pid()) -> ok | {error, Reason :: term()}.
 register(Scope, Name, Pid) ->
     register(Scope, Name, Pid, undefined).
 
@@ -530,7 +530,7 @@ local_member_count(Scope, GroupName) ->
 
 %% @equiv join(Scope, GroupName, Pid, undefined)
 %% @end
--spec join(Scope :: term(), Name :: term(), Pid :: term()) -> ok | {error, Reason :: term()}.
+-spec join(Scope :: atom(), GroupName :: term(), Pid :: pid()) -> ok | {error, Reason :: term()}.
 join(Scope, GroupName, Pid) ->
     join(Scope, GroupName, Pid, undefined).
 
@@ -691,7 +691,7 @@ multi_call(Scope, GroupName, Message) ->
 %%
 %% When this call is issued, all members will receive a tuple in the format:
 %%
-%% `{syn_multi_call, TestMessage, Caller, Meta}'
+%% `{syn_multi_call, Message, Caller, Meta}'
 %%
 %% To reply, every member MUST use the method {@link multi_call_reply/2}.
 %%
