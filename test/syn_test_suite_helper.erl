@@ -138,6 +138,7 @@ clean_after_test() ->
         %% clean env
         rpc:call(Node, application, unset_env, [syn, event_handler]),
         rpc:call(Node, application, unset_env, [syn, strict_mode]),
+        rpc:call(Node, application, unset_env, [syn, scopes]),
         %% messages
         flush_inbox()
     end, Nodes).
