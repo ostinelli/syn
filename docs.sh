@@ -6,7 +6,7 @@ set -e
 
 rebar3 compile
 rebar3 as docs edoc
-version=3.4.0
+version=3.4.1
 
 # Resolve ex_doc escript path (installed via: mix escript.install hex ex_doc)
 EX_DOC_PATH=$(mix escript 2>&1 | awk '/installed at:/{print $NF}')/ex_doc
