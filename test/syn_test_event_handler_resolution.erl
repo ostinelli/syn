@@ -40,7 +40,7 @@ resolve_registry_conflict(_Scope, _Name, {Pid1, {recipient, _, keepthis}, _Time1
     Pid1;
 resolve_registry_conflict(_Scope, _Name, {_Pid1, _Meta1, _Time1}, {Pid2, {recipient, _, keepthis}, _Time2}) ->
     Pid2;
-resolve_registry_conflict(default, _Name, {Pid1, _Meta1, _Time1}, {_Pid2, _Meta2, _Time2}) ->
-    syn_test_suite_helper:start_process(node(Pid1));
-resolve_registry_conflict(default, _Name, {_Pid1, {recipient, _, crash}, _Time1}, {_Pid2, {recipient, _, crash}, _Time2}) ->
-    exit(self(), syn_test_crash).
+resolve_registry_conflict(_Scope, _Name, {_Pid1, {recipient, _, crash}, _Time1}, {_Pid2, {recipient, _, crash}, _Time2}) ->
+    exit(syn_test_crash);
+resolve_registry_conflict(_Scope, _Name, {Pid1, _Meta1, _Time1}, {_Pid2, _Meta2, _Time2}) ->
+    syn_test_suite_helper:start_process(node(Pid1)).
