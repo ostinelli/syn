@@ -247,7 +247,7 @@ handle_call({'3.0', register_or_update_on_node, RequesterNode, Name, Pid, MetaOr
         true ->
             case find_registry_entry_by_name(Name, TableByName) of
                 undefined when is_function(MetaOrFun) ->
-                    {reply, {{error, undefined}, undefined}, State};
+                    {reply, {error, undefined}, State};
 
                 undefined ->
                     %% available
