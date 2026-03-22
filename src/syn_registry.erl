@@ -189,10 +189,12 @@ unregister(Scope, Name) ->
 
 -spec count(Scope :: atom()) -> non_neg_integer().
 count(Scope) ->
-    TableByName = syn_backbone:get_table_name(syn_registry_by_name, Scope),
-    case ets:info(TableByName, size) of
-        undefined -> error({invalid_scope, Scope});
-        Value -> Value
+    case syn_backbone:get_table_name(syn_registry_by_name, Scope) of
+        undefined ->
+            error({invalid_scope, Scope});
+
+        TableByName ->
+            ets:info(TableByName, size)
     end.
 
 -spec count(Scope :: atom(), Node :: node()) -> non_neg_integer().
