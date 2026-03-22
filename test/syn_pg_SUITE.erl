@@ -334,8 +334,8 @@ three_nodes_discover(Config) ->
     syn_test_suite_helper:assert_scope_subcluster(pg,SlaveNode2, scope_c, []),
     syn_test_suite_helper:assert_scope_subcluster(pg,SlaveNode2, scope_all, [node(), SlaveNode1]),
 
-    %% crash scopes supervisor on local
-    syn_test_suite_helper:kill_process(syn_scopes_sup),
+    %% crash scope supervisors on local
+    syn_test_suite_helper:kill_scope_supervisors(),
     syn_test_suite_helper:wait_process_name_ready(syn_registry_scope_all),
 
     %% check

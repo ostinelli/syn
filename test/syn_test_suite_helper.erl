@@ -31,7 +31,7 @@
 -export([connect_node/1, disconnect_node/1]).
 -export([clean_after_test/0]).
 -export([start_process/0, start_process/1, start_process/2]).
--export([kill_process/1]).
+-export([kill_process/1, kill_scope_supervisors/0]).
 -export([wait_cluster_mesh_connected/1]).
 -export([wait_process_name_ready/1, wait_process_name_ready/2]).
 -export([wait_message_queue_empty/0]).
@@ -155,6 +155,14 @@ start_process(Loop) when is_function(Loop) ->
 start_process(Node, Loop) ->
     Pid = spawn(Node, Loop),
     Pid.
+
+kill_scope_supervisors() ->
+    lists:foreach(fun
+        ({{syn_scope_sup, _}, Pid, supervisor, _}) when is_pid(Pid) ->
+            kill_process(Pid);
+        (_) ->
+            ok
+    end, supervisor:which_children(syn_sup)).
 
 kill_process(RegisteredName) when is_atom(RegisteredName) ->
     case whereis(RegisteredName) of
