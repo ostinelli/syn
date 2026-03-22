@@ -190,8 +190,9 @@ handle_call(Request, From, #state{handler = Handler} = State) ->
     {noreply, #state{}} |
     {noreply, #state{}, timeout() | hibernate | {continue, term()}} |
     {stop, Reason :: term(), #state{}}.
-handle_cast(Msg, #state{handler = Handler} = State) ->
-    Handler:handle_cast(Msg, State).
+handle_cast(Msg, #state{handler_log_name = HandlerLogName, scope = Scope} = State) ->
+    ?LOG_WARNING(#{handler => HandlerLogName, scope => Scope, event => unknown_cast, msg => Msg}),
+    {noreply, State}.
 
 %% ----------------------------------------------------------------------------------------------------------
 %% Info messages
