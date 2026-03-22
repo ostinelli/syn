@@ -64,7 +64,7 @@
     GroupName :: term(),
     Pid :: pid(),
     Meta :: term(),
-    Time :: non_neg_integer()
+    Time :: integer()
 }.
 
 %% records
