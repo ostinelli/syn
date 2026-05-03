@@ -50,7 +50,7 @@
     init/1,
     handle_call/3,
     handle_info/2,
-    save_remote_data/2,
+    save_remote_data/3,
     get_local_data/1,
     purge_local_data_for_node/2
 ]).
@@ -485,11 +485,12 @@ handle_info(Info, #state{scope = Scope} = State) ->
 get_local_data(#state{table_by_name = TableByName}) ->
     {ok, get_pg_tuples_for_node(node(), TableByName)}.
 
--spec save_remote_data(RemoteData :: term(), State :: term()) -> any().
-save_remote_data(PgTuplesOfRemoteNode, #state{scope = Scope} = State) ->
-    %% insert tuples
+-spec save_remote_data(RemoteNode :: node(), RemoteData :: term(), State :: term()) -> any().
+save_remote_data(RemoteNode, PgTuplesOfRemoteNode, #state{scope = Scope} = State) ->
+    reconcile_remote_pg_snapshot(RemoteNode, PgTuplesOfRemoteNode, State),
+    %% insert/update tuples
     lists:foreach(fun({GroupName, Pid, Meta, Time}) ->
-        handle_pg_sync(GroupName, Pid, Meta, Time, {syn_remote_scope_node_up, Scope, node(Pid)}, State)
+        handle_pg_sync(GroupName, Pid, Meta, Time, {syn_remote_scope_node_up, Scope, RemoteNode}, State)
     end, PgTuplesOfRemoteNode).
 
 -spec purge_local_data_for_node(Node :: node(), State :: term()) -> any().
@@ -682,6 +683,27 @@ purge_pg_for_remote_node(Scope, Node, TableByName, TableByPid) when Node =/= nod
     end, PgTuples),
     ets:match_delete(TableByName, {{'_', '_'}, '_', '_', '_', Node}),
     ets:match_delete(TableByPid, {{'_', '_'}, '_', '_', '_', Node}).
+
+-spec reconcile_remote_pg_snapshot(Node :: node(), [syn_pg_tuple()], #state{}) -> ok.
+reconcile_remote_pg_snapshot(Node, PgTuplesOfRemoteNode, #state{
+    scope = Scope,
+    table_by_name = TableByName,
+    table_by_pid = TableByPid
+}) ->
+    SnapshotKeys = ordsets:from_list([{GroupName, Pid} || {GroupName, Pid, _Meta, _Time} <- PgTuplesOfRemoteNode]),
+    ExistingTuples = get_pg_tuples_for_node(Node, TableByName),
+    lists:foreach(fun({GroupName, Pid, Meta, _Time}) ->
+        case ordsets:is_element({GroupName, Pid}, SnapshotKeys) of
+            true ->
+                ok;
+
+            false ->
+                remove_from_local_table(GroupName, Pid, TableByName, TableByPid),
+                syn_event_handler:call_event_handler(on_process_left,
+                    [Scope, GroupName, Pid, Meta, {syn_remote_scope_node_up, Scope, Node}]
+                )
+        end
+    end, ExistingTuples).
 
 -spec handle_pg_sync(
     GroupName :: term(),

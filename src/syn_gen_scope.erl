@@ -73,7 +73,7 @@
     {noreply, #state{}} |
     {noreply, #state{}, timeout() | hibernate | {continue, term()}} |
     {stop, Reason :: term(), #state{}}.
--callback save_remote_data(RemoteData :: term(), #state{}) -> any().
+-callback save_remote_data(RemoteNode :: node(), RemoteData :: term(), #state{}) -> any().
 -callback get_local_data(#state{}) -> {ok, Data :: term()} | undefined.
 -callback purge_local_data_for_node(Node :: node(), #state{}) -> any().
 
@@ -235,7 +235,7 @@ handle_info({'3.0', ack_sync, RemoteScopePid, Data}, #state{
     ?LOG_NOTICE(#{handler => HandlerLogName, scope => Scope,
                  event => ack_sync, from => RemoteScopeNode, entries => length(Data)}),
     %% save remote data
-    Handler:save_remote_data(Data, State),
+    Handler:save_remote_data(RemoteScopeNode, Data, State),
     %% is this a new node?
     case maps:is_key(RemoteScopeNode, NodesMap) of
         true ->

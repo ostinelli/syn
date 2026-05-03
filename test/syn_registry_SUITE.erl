@@ -47,6 +47,7 @@
     three_nodes_custom_event_handler_reg_unreg/1,
     three_nodes_custom_event_handler_conflict_resolution/1,
     three_nodes_update/1,
+    three_nodes_ack_sync_reconciles_registry_snapshot/1,
     three_nodes_ack_sync_ordered_delivery/1
 ]).
 -export([
@@ -104,6 +105,7 @@ groups() ->
             three_nodes_custom_event_handler_reg_unreg,
             three_nodes_custom_event_handler_conflict_resolution,
             three_nodes_update,
+            three_nodes_ack_sync_reconciles_registry_snapshot,
             three_nodes_ack_sync_ordered_delivery
         ]},
         {four_nodes_registry, [shuffle], [
@@ -1727,6 +1729,34 @@ three_nodes_ack_sync_ordered_delivery(Config) ->
     %% this proves ack_sync is routed through sender_loop (the fix), ensuring FIFO
     %% ordering with sync_register/sync_unregister broadcasts.
     true = check_trace_for_ack_sync_via_sender().
+
+three_nodes_ack_sync_reconciles_registry_snapshot(Config) ->
+    %% ack_sync contains a full snapshot for the remote node at its FIFO point.
+    %% Entries for that remote node that are absent from the snapshot must be
+    %% removed, otherwise a sync_register that raced with scope DOWN can leave
+    %% a stale remote pid behind.
+
+    SlaveNode1 = proplists:get_value(syn_slave_1, Config),
+
+    ok = syn:start(),
+    ok = rpc:call(SlaveNode1, syn, start, []),
+    ok = syn:add_node_to_scopes([scope_reconcile]),
+    ok = rpc:call(SlaveNode1, syn, add_node_to_scopes, [[scope_reconcile]]),
+
+    syn_test_suite_helper:assert_scope_subcluster(registry, node(), scope_reconcile, [SlaveNode1]),
+
+    Pid = syn_test_suite_helper:start_process(SlaveNode1),
+    add_to_local_table(scope_reconcile, "stale-remote", Pid, stale_meta, 1, undefined),
+    {Pid, stale_meta} = syn:lookup(scope_reconcile, "stale-remote"),
+
+    TableByName = syn_backbone:get_table_name(syn_registry_by_name, scope_reconcile),
+    TableByPid = syn_backbone:get_table_name(syn_registry_by_pid, scope_reconcile),
+    State = #state{scope = scope_reconcile, table_by_name = TableByName, table_by_pid = TableByPid},
+
+    syn_registry:save_remote_data(SlaveNode1, [], State),
+
+    undefined = syn:lookup(scope_reconcile, "stale-remote"),
+    0 = syn:registry_count(scope_reconcile, SlaveNode1).
 
 four_nodes_concurrency(Config) ->
     %% get slaves

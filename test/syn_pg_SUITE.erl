@@ -47,7 +47,8 @@
     three_nodes_publish/1,
     three_nodes_multi_call/1,
     three_nodes_group_names/1,
-    three_nodes_member_and_update/1
+    three_nodes_member_and_update/1,
+    three_nodes_ack_sync_reconciles_pg_snapshot/1
 ]).
 -export([
     four_nodes_concurrency/1
@@ -111,7 +112,8 @@ groups() ->
             three_nodes_publish,
             three_nodes_multi_call,
             three_nodes_group_names,
-            three_nodes_member_and_update
+            three_nodes_member_and_update,
+            three_nodes_ack_sync_reconciles_pg_snapshot
         ]},
         {four_nodes_pg, [shuffle], [
             four_nodes_concurrency
@@ -1920,6 +1922,33 @@ four_nodes_concurrency(Config) ->
             ordsets:size(Ordset)
         end
     ).
+
+three_nodes_ack_sync_reconciles_pg_snapshot(Config) ->
+    %% ack_sync is authoritative for a remote node at its FIFO point. Process
+    %% group entries absent from that snapshot must be removed, mirroring the
+    %% registry reconciliation path.
+
+    SlaveNode1 = proplists:get_value(syn_slave_1, Config),
+
+    ok = syn:start(),
+    ok = rpc:call(SlaveNode1, syn, start, []),
+    ok = syn:add_node_to_scopes([scope_reconcile]),
+    ok = rpc:call(SlaveNode1, syn, add_node_to_scopes, [[scope_reconcile]]),
+
+    syn_test_suite_helper:assert_scope_subcluster(pg, node(), scope_reconcile, [SlaveNode1]),
+
+    Pid = syn_test_suite_helper:start_process(SlaveNode1),
+    add_to_local_table(scope_reconcile, "stale-group", Pid, stale_meta, 1, undefined),
+    [{Pid, stale_meta}] = syn:members(scope_reconcile, "stale-group"),
+
+    TableByName = syn_backbone:get_table_name(syn_pg_by_name, scope_reconcile),
+    TableByPid = syn_backbone:get_table_name(syn_pg_by_pid, scope_reconcile),
+    State = #state{scope = scope_reconcile, table_by_name = TableByName, table_by_pid = TableByPid},
+
+    syn_pg:save_remote_data(SlaveNode1, [], State),
+
+    [] = syn:members(scope_reconcile, "stale-group"),
+    0 = syn:member_count(scope_reconcile, "stale-group", SlaveNode1).
 
 %% ===================================================================
 %% Internal

@@ -41,7 +41,7 @@
     init/1,
     handle_call/3,
     handle_info/2,
-    save_remote_data/2,
+    save_remote_data/3,
     get_local_data/1,
     purge_local_data_for_node/2
 ]).
@@ -394,11 +394,12 @@ handle_info(Info, #state{scope = Scope} = State) ->
 get_local_data(#state{table_by_name = TableByName}) ->
     {ok, get_registry_tuples_for_node(node(), TableByName)}.
 
--spec save_remote_data(RemoteData :: term(), #state{}) -> any().
-save_remote_data(RegistryTuplesOfRemoteNode, #state{scope = Scope} = State) ->
-    %% insert tuples
+-spec save_remote_data(RemoteNode :: node(), RemoteData :: term(), #state{}) -> any().
+save_remote_data(RemoteNode, RegistryTuplesOfRemoteNode, #state{scope = Scope} = State) ->
+    reconcile_remote_registry_snapshot(RemoteNode, RegistryTuplesOfRemoteNode, State),
+    %% insert/update tuples
     lists:foreach(fun({Name, Pid, Meta, Time}) ->
-        handle_registry_sync(Name, Pid, Meta, Time, {syn_remote_scope_node_up, Scope, node(Pid)}, State)
+        handle_registry_sync(Name, Pid, Meta, Time, {syn_remote_scope_node_up, Scope, RemoteNode}, State)
     end, RegistryTuplesOfRemoteNode).
 
 -spec purge_local_data_for_node(Node :: node(), #state{}) -> any().
@@ -607,6 +608,27 @@ purge_registry_for_remote_node(Scope, Node, TableByName, TableByPid) when Node =
     %% remove all from pid table
     true = ets:match_delete(TableByName, {'_', '_', '_', '_', '_', Node}),
     true = ets:match_delete(TableByPid, {'_', '_', '_', '_', '_', Node}).
+
+-spec reconcile_remote_registry_snapshot(Node :: node(), [syn_registry_tuple()], #state{}) -> ok.
+reconcile_remote_registry_snapshot(Node, RegistryTuplesOfRemoteNode, #state{
+    scope = Scope,
+    table_by_name = TableByName,
+    table_by_pid = TableByPid
+}) ->
+    SnapshotNames = ordsets:from_list([Name || {Name, _Pid, _Meta, _Time} <- RegistryTuplesOfRemoteNode]),
+    ExistingTuples = get_registry_tuples_for_node(Node, TableByName),
+    lists:foreach(fun({Name, Pid, Meta, _Time}) ->
+        case ordsets:is_element(Name, SnapshotNames) of
+            true ->
+                ok;
+
+            false ->
+                remove_from_local_table(Name, Pid, TableByName, TableByPid),
+                syn_event_handler:call_event_handler(on_process_unregistered,
+                    [Scope, Name, Pid, Meta, {syn_remote_scope_node_up, Scope, Node}]
+                )
+        end
+    end, ExistingTuples).
 
 -spec handle_registry_sync(
     Name :: term(),

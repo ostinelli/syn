@@ -41,8 +41,9 @@
 %% <ul>
 %% <li> `normal' for expected operations.</li>
 %% <li> Crash reasons when processes die (for `on_process_unregistered/5' and `on_process_left/5').</li>
-%% <li> `{syn_remote_scope_node_up, Scope, Node}' for `on_process_registered/5' and `on_process_joined/5'
-%%      when the callbacks are called due to nodes syncing.</li>
+%% <li> `{syn_remote_scope_node_up, Scope, Node}' when callbacks are called due to nodes syncing. This includes
+%%      registering/joining entries present in the remote snapshot and unregistering/leaving stale entries absent
+%%      from that authoritative snapshot.</li>
 %% <li> `{syn_remote_scope_node_down, Scope, Node}' for `on_process_unregistered/5' and `on_process_left/5'
 %%      when the callbacks are called due to nodes disconnecting.</li>
 %% <li> `syn_conflict_resolution' for `on_process_registered/5' and `on_process_unregistered/5'
@@ -137,7 +138,7 @@
     Name :: term(),
     Pid :: pid(),
     Meta :: term(),
-    Reason :: atom()
+    Reason :: term()
 ) -> any().
 
 -callback on_registry_process_updated(
@@ -145,7 +146,7 @@
     Name :: term(),
     Pid :: pid(),
     Meta :: term(),
-    Reason :: atom()
+    Reason :: term()
 ) -> any().
 
 -callback on_registry_process_updated(
@@ -170,7 +171,7 @@
     GroupName :: term(),
     Pid :: pid(),
     Meta :: term(),
-    Reason :: atom()
+    Reason :: term()
 ) -> any().
 
 -callback on_group_process_updated(
@@ -178,7 +179,7 @@
     GroupName :: term(),
     Pid :: pid(),
     Meta :: term(),
-    Reason :: atom()
+    Reason :: term()
 ) -> any().
 
 -callback on_group_process_updated(

@@ -71,6 +71,7 @@ Requires Java 8+:
 ```
 cd test/tla
 java -XX:+UseParallelGC -cp tla2tools.jar tlc2.TLC \
+    -metadir /tmp/syn-tla-states \
     -config syn.cfg -workers auto -cleanup syn.tla
 ```
 
@@ -82,14 +83,23 @@ The model checks three properties:
   on any single node's view.
 - **AllMessagesProcessed** (liveness): All message queues eventually drain.
 
+The model starts from an already discovered, fully connected subcluster. It then models
+membership loss and rediscovery through disconnect/reconnect cycles. This keeps startup
+discovery out of scope while covering the protocol races that happen after a known
+remote scope process goes down and later rejoins.
+
 ## Unit Tests
 
 `syn_tests.tla` contains unit tests for the TLA+ helper functions (`AllRegisteredForNode`,
-`AllRegisteredNames`, `Duplicates`, `MergeRegistries`). Run with:
+`AllRegisteredNames`, `Duplicates`, `MergeRegistries`, `MergeRegistrySnapshot`). Run with:
 
 ```
-java -cp tla2tools.jar tlc2.TLC -config syn_tests.cfg syn_tests.tla
+java -cp tla2tools.jar tlc2.TLC -metadir /tmp/syn-tla-unit-states \
+    -config syn_tests.cfg syn_tests.tla
 ```
+
+The `-metadir` arguments keep TLC's disk state outside the repository. This avoids
+interference with `make test`, which copies the `test/` directory during compilation.
 
 ## Copyright
 
