@@ -1928,27 +1928,52 @@ three_nodes_ack_sync_reconciles_pg_snapshot(Config) ->
     %% group entries absent from that snapshot must be removed, mirroring the
     %% registry reconciliation path.
 
+    LocalNode = node(),
     SlaveNode1 = proplists:get_value(syn_slave_1, Config),
 
     ok = syn:start(),
+    syn:set_event_handler(syn_test_event_handler_callbacks),
     ok = rpc:call(SlaveNode1, syn, start, []),
     ok = syn:add_node_to_scopes([scope_reconcile]),
     ok = rpc:call(SlaveNode1, syn, add_node_to_scopes, [[scope_reconcile]]),
 
     syn_test_suite_helper:assert_scope_subcluster(pg, node(), scope_reconcile, [SlaveNode1]),
 
-    Pid = syn_test_suite_helper:start_process(SlaveNode1),
-    add_to_local_table(scope_reconcile, "stale-group", Pid, stale_meta, 1, undefined),
-    [{Pid, stale_meta}] = syn:members(scope_reconcile, "stale-group"),
+    StalePid = syn_test_suite_helper:start_process(SlaveNode1),
+    StaleMeta = {recipient, self(), stale_meta},
+    add_to_local_table(scope_reconcile, "stale-group", StalePid, StaleMeta, 1, undefined),
+    [{StalePid, StaleMeta}] = syn:members(scope_reconcile, "stale-group"),
 
-    TableByName = syn_backbone:get_table_name(syn_pg_by_name, scope_reconcile),
-    TableByPid = syn_backbone:get_table_name(syn_pg_by_pid, scope_reconcile),
-    State = #state{scope = scope_reconcile, table_by_name = TableByName, table_by_pid = TableByPid},
+    FreshPid = syn_test_suite_helper:start_process(SlaveNode1),
+    FreshMeta = {recipient, self(), fresh_meta},
+    RemoteSnapshot = [{"fresh-group", FreshPid, FreshMeta, 2}],
 
-    syn_pg:save_remote_data(SlaveNode1, [], State),
+    RemoteScopePid = rpc:call(SlaveNode1, erlang, whereis, [syn_pg_scope_reconcile]),
+    true = is_pid(RemoteScopePid),
+    syn_pg_scope_reconcile ! {'3.0', ack_sync, RemoteScopePid, RemoteSnapshot},
 
-    [] = syn:members(scope_reconcile, "stale-group"),
-    0 = syn:member_count(scope_reconcile, "stale-group", SlaveNode1).
+    syn_test_suite_helper:assert_wait(
+        [],
+        fun() -> syn:members(scope_reconcile, "stale-group") end
+    ),
+    syn_test_suite_helper:assert_wait(
+        [{FreshPid, FreshMeta}],
+        fun() -> syn:members(scope_reconcile, "fresh-group") end
+    ),
+    syn_test_suite_helper:assert_wait(
+        0,
+        fun() -> syn:member_count(scope_reconcile, "stale-group", SlaveNode1) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        1,
+        fun() -> syn:member_count(scope_reconcile, "fresh-group", SlaveNode1) end
+    ),
+    syn_test_suite_helper:assert_received_messages([
+        {on_process_left, LocalNode, scope_reconcile, "stale-group", StalePid, stale_meta,
+            {syn_remote_scope_node_up, scope_reconcile, SlaveNode1}},
+        {on_process_joined, LocalNode, scope_reconcile, "fresh-group", FreshPid, fresh_meta,
+            {syn_remote_scope_node_up, scope_reconcile, SlaveNode1}}
+    ]).
 
 %% ===================================================================
 %% Internal
