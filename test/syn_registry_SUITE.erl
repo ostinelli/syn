@@ -48,7 +48,8 @@
     three_nodes_custom_event_handler_conflict_resolution/1,
     three_nodes_update/1,
     three_nodes_ack_sync_reconciles_registry_snapshot/1,
-    three_nodes_ack_sync_ordered_delivery/1
+    three_nodes_ack_sync_ordered_delivery/1,
+    three_nodes_ack_sync_reconciles_large_snapshot/1
 ]).
 -export([
     four_nodes_concurrency/1
@@ -106,7 +107,8 @@ groups() ->
             three_nodes_custom_event_handler_conflict_resolution,
             three_nodes_update,
             three_nodes_ack_sync_reconciles_registry_snapshot,
-            three_nodes_ack_sync_ordered_delivery
+            three_nodes_ack_sync_ordered_delivery,
+            three_nodes_ack_sync_reconciles_large_snapshot
         ]},
         {four_nodes_registry, [shuffle], [
             four_nodes_concurrency
@@ -1778,6 +1780,71 @@ three_nodes_ack_sync_reconciles_registry_snapshot(Config) ->
         {on_process_registered, LocalNode, scope_reconcile, "fresh-remote", FreshPid, fresh_meta,
             {syn_remote_scope_node_up, scope_reconcile, SlaveNode1}}
     ]).
+
+three_nodes_ack_sync_reconciles_large_snapshot(Config) ->
+    %% Reconciliation checks every entry already held for the remote node against the
+    %% names in the incoming snapshot. A list based membership test makes that check
+    %% quadratic, so a peer holding tens of thousands of names blocks the scope process
+    %% on every discovery, and every registration on this node waits behind it.
+    %% The cost is asserted in reductions so that the bound does not depend on the machine.
+
+    SlaveNode1 = proplists:get_value(syn_slave_1, Config),
+
+    ok = syn:start(),
+    ok = rpc:call(SlaveNode1, syn, start, []),
+    ok = syn:add_node_to_scopes([scope_reconcile_large]),
+    ok = rpc:call(SlaveNode1, syn, add_node_to_scopes, [[scope_reconcile_large]]),
+
+    syn_test_suite_helper:assert_scope_subcluster(registry, node(), scope_reconcile_large, [SlaveNode1]),
+
+    EntryCount = 10000,
+    %% every name is held by its own process, the way a registry of this size looks in practice.
+    %% Putting all the names on one pid would instead measure the per pid ets bag, which is a
+    %% different cost and not the one under test here.
+    Entries = [
+        {{name, I}, spawn(SlaveNode1, syn_test_suite_helper, process_main, [])}
+        || I <- lists:seq(1, EntryCount)
+    ],
+    lists:foreach(fun({Name, Pid}) ->
+        add_to_local_table(scope_reconcile_large, Name, Pid, meta, 1, undefined)
+    end, Entries),
+    %% an entry the snapshot does not carry, to keep checking that stale entries are removed
+    StalePid = syn_test_suite_helper:start_process(SlaveNode1),
+    add_to_local_table(scope_reconcile_large, "stale-remote", StalePid, stale_meta, 1, undefined),
+
+    %% the last entry carries a new meta, so that waiting for it means the whole snapshot was applied
+    {LastName, LastPid} = lists:last(Entries),
+    Snapshot = [{Name, Pid, meta, 2} || {Name, Pid} <- lists:droplast(Entries)]
+        ++ [{LastName, LastPid, applied_meta, 2}],
+
+    RemoteScopePid = rpc:call(SlaveNode1, erlang, whereis, [syn_registry_scope_reconcile_large]),
+    true = is_pid(RemoteScopePid),
+    ScopePid = whereis(syn_registry_scope_reconcile_large),
+    {reductions, ReductionsBefore} = erlang:process_info(ScopePid, reductions),
+
+    ScopePid ! {'3.0', ack_sync, RemoteScopePid, Snapshot},
+
+    syn_test_suite_helper:assert_wait(
+        {LastPid, applied_meta},
+        fun() -> syn:lookup(scope_reconcile_large, LastName) end
+    ),
+    {reductions, ReductionsAfter} = erlang:process_info(ScopePid, reductions),
+    Reductions = ReductionsAfter - ReductionsBefore,
+    ct:pal("reconciled and applied a snapshot of ~p entries in ~p reductions", [EntryCount, Reductions]),
+
+    %% the stale entry is gone and nothing else was dropped
+    undefined = syn:lookup(scope_reconcile_large, "stale-remote"),
+    EntryCount = syn:registry_count(scope_reconcile_large, SlaveNode1),
+
+    %% linear reconciliation stays far below one thousand reductions per entry,
+    %% a quadratic one needs thousands of times more
+    case Reductions < EntryCount * 1000 of
+        true -> ok;
+        false -> ct:fail("reconciliation took ~p reductions for ~p entries", [Reductions, EntryCount])
+    end,
+
+    %% the slave node outlives this case and the group is shuffled, so the entry processes go now
+    lists:foreach(fun(Pid) -> exit(Pid, kill) end, [StalePid | [Pid || {_Name, Pid} <- Entries]]).
 
 four_nodes_concurrency(Config) ->
     %% get slaves

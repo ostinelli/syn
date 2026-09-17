@@ -615,10 +615,10 @@ reconcile_remote_registry_snapshot(Node, RegistryTuplesOfRemoteNode, #state{
     table_by_name = TableByName,
     table_by_pid = TableByPid
 }) ->
-    SnapshotNames = ordsets:from_list([Name || {Name, _Pid, _Meta, _Time} <- RegistryTuplesOfRemoteNode]),
+    SnapshotNames = snapshot_names(RegistryTuplesOfRemoteNode),
     ExistingTuples = get_registry_tuples_for_node(Node, TableByName),
     lists:foreach(fun({Name, Pid, Meta, _Time}) ->
-        case ordsets:is_element(Name, SnapshotNames) of
+        case is_map_key(Name, SnapshotNames) of
             true ->
                 ok;
 
@@ -629,6 +629,15 @@ reconcile_remote_registry_snapshot(Node, RegistryTuplesOfRemoteNode, #state{
                 )
         end
     end, ExistingTuples).
+
+-spec snapshot_names([syn_registry_tuple()]) -> #{term() => true}.
+- if (?OTP_RELEASE >= 24).
+snapshot_names(RegistryTuples) ->
+    maps:from_keys([Name || {Name, _Pid, _Meta, _Time} <- RegistryTuples], true).
+-else.
+snapshot_names(RegistryTuples) ->
+    maps:from_list([{Name, true} || {Name, _Pid, _Meta, _Time} <- RegistryTuples]).
+-endif.
 
 -spec handle_registry_sync(
     Name :: term(),
