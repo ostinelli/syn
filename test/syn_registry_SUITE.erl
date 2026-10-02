@@ -40,7 +40,12 @@
     one_node_scope_event_handler_reg_unreg/1,
     one_node_scope_event_handler_loads_module/1,
     one_node_scope_event_handler_set_before_start/1,
-    one_node_scope_event_handler_invalid_args/1
+    one_node_scope_event_handler_invalid_args/1,
+    one_node_scope_event_handlers_config/1,
+    one_node_scope_event_handlers_config_loads_module/1,
+    one_node_scope_event_handlers_config_replaces_handler/1,
+    one_node_scope_event_handlers_config_invalid_entry/1,
+    one_node_scope_event_handlers_config_module_not_loaded/1
 ]).
 -export([
     three_nodes_discover/1,
@@ -51,6 +56,7 @@
     three_nodes_custom_event_handler_reg_unreg/1,
     three_nodes_custom_event_handler_conflict_resolution/1,
     three_nodes_scope_event_handler_conflict_resolution/1,
+    three_nodes_scope_event_handlers_config_boot_sync/1,
     three_nodes_update/1,
     three_nodes_ack_sync_reconciles_registry_snapshot/1,
     three_nodes_ack_sync_ordered_delivery/1
@@ -103,7 +109,12 @@ groups() ->
             one_node_scope_event_handler_reg_unreg,
             one_node_scope_event_handler_loads_module,
             one_node_scope_event_handler_set_before_start,
-            one_node_scope_event_handler_invalid_args
+            one_node_scope_event_handler_invalid_args,
+            one_node_scope_event_handlers_config,
+            one_node_scope_event_handlers_config_loads_module,
+            one_node_scope_event_handlers_config_replaces_handler,
+            one_node_scope_event_handlers_config_invalid_entry,
+            one_node_scope_event_handlers_config_module_not_loaded
         ]},
         {three_nodes_registry, [shuffle], [
             three_nodes_discover,
@@ -114,6 +125,7 @@ groups() ->
             three_nodes_custom_event_handler_reg_unreg,
             three_nodes_custom_event_handler_conflict_resolution,
             three_nodes_scope_event_handler_conflict_resolution,
+            three_nodes_scope_event_handlers_config_boot_sync,
             three_nodes_update,
             three_nodes_ack_sync_reconciles_registry_snapshot,
             three_nodes_ack_sync_ordered_delivery
@@ -390,6 +402,113 @@ one_node_scope_event_handler_invalid_args(_Config) ->
     {'EXIT', {function_clause, _}} = (catch syn:set_event_handler(scope_with_handler, undefined)),
     %% a test case that returns {'EXIT', _} counts as failed
     ok.
+
+one_node_scope_event_handlers_config(_Config) ->
+    %% configure scopes and handlers before syn starts
+    application:set_env(syn, event_handler, syn_test_event_handler_callbacks),
+    application:set_env(syn, scopes, [scope_with_handler, scope_without_handler]),
+    application:set_env(syn, scope_event_handlers, [{scope_with_handler, syn_test_event_handler_scope_callbacks}]),
+
+    %% start syn
+    ok = syn:start(),
+
+    %% init
+    LocalNode = node(),
+    Pid = syn_test_suite_helper:start_process(),
+
+    %% register & unregister in both scopes
+    ok = syn:register(scope_with_handler, "proc-handler", Pid, {recipient, self(), <<"meta">>}),
+    ok = syn:register(scope_without_handler, "proc-handler", Pid, {recipient, self(), <<"meta">>}),
+    ok = syn:unregister(scope_with_handler, "proc-handler"),
+    ok = syn:unregister(scope_without_handler, "proc-handler"),
+
+    %% check that each scope's callbacks reach only one handler
+    syn_test_suite_helper:assert_received_messages([
+        {on_process_registered, syn_test_event_handler_scope_callbacks, LocalNode, scope_with_handler, "proc-handler", Pid, <<"meta">>, normal},
+        {on_process_unregistered, syn_test_event_handler_scope_callbacks, LocalNode, scope_with_handler, "proc-handler", Pid, <<"meta">>, normal},
+        {on_process_registered, LocalNode, scope_without_handler, "proc-handler", Pid, <<"meta">>, normal},
+        {on_process_unregistered, LocalNode, scope_without_handler, "proc-handler", Pid, <<"meta">>, normal}
+    ]).
+
+one_node_scope_event_handlers_config_loads_module(_Config) ->
+    %% unload handler module
+    code:purge(syn_test_event_handler_scope_callbacks),
+    code:delete(syn_test_event_handler_scope_callbacks),
+    code:purge(syn_test_event_handler_scope_callbacks),
+    false = erlang:module_loaded(syn_test_event_handler_scope_callbacks),
+
+    %% configure handler
+    application:set_env(syn, scope_event_handlers, [{scope_with_handler, syn_test_event_handler_scope_callbacks}]),
+
+    %% start syn
+    ok = syn:start(),
+    true = erlang:module_loaded(syn_test_event_handler_scope_callbacks).
+
+one_node_scope_event_handlers_config_replaces_handler(_Config) ->
+    %% set handlers before syn starts, then configure another handler for one of the scopes
+    ok = syn:set_event_handler(scope_with_handler, syn_test_event_handler_callbacks),
+    ok = syn:set_event_handler(scope_with_runtime_handler, syn_test_event_handler_callbacks),
+    application:set_env(syn, scope_event_handlers, [{scope_with_handler, syn_test_event_handler_scope_callbacks}]),
+
+    %% start syn
+    ok = syn:start(),
+    ok = syn:add_node_to_scopes([scope_with_handler, scope_with_runtime_handler]),
+
+    %% register in both scopes
+    LocalNode = node(),
+    Pid = syn_test_suite_helper:start_process(),
+    ok = syn:register(scope_with_handler, "proc-handler", Pid, {recipient, self(), <<"meta">>}),
+    ok = syn:register(scope_with_runtime_handler, "proc-handler", Pid, {recipient, self(), <<"meta">>}),
+
+    %% the configured scope uses the configured handler, the other scope keeps its handler
+    syn_test_suite_helper:assert_received_messages([
+        {on_process_registered, syn_test_event_handler_scope_callbacks, LocalNode, scope_with_handler, "proc-handler", Pid, <<"meta">>, normal},
+        {on_process_registered, LocalNode, scope_with_runtime_handler, "proc-handler", Pid, <<"meta">>, normal}
+    ]).
+
+one_node_scope_event_handlers_config_invalid_entry(_Config) ->
+    lists:foreach(fun(BadEntry) ->
+        application:set_env(syn, scope_event_handlers, [BadEntry]),
+        {'EXIT', {{badmatch, {error, {syn, StartError}}}, _}} = (catch syn:start()),
+        %% the start fails on the bad entry itself
+        {bad_return, {_, {'EXIT', {function_clause, [{syn_event_handler, _, [BadEntry], _} | _]}}}} = StartError
+    end, [
+        {<<"scope">>, syn_test_event_handler_scope_callbacks},
+        {scope_with_handler, "syn_test_event_handler_scope_callbacks"},
+        {scope_with_handler, undefined},
+        scope_with_handler,
+        {scope_with_handler, syn_test_event_handler_scope_callbacks, extra}
+    ]),
+
+    %% a value that is not a list fails in syn as well, on the value itself
+    BadValue = #{scope_with_handler => syn_test_event_handler_scope_callbacks},
+    application:set_env(syn, scope_event_handlers, BadValue),
+    {'EXIT', {{badmatch, {error, {syn, StartError}}}, _}} = (catch syn:start()),
+    {bad_return, {_, {'EXIT', {function_clause, [{syn_event_handler, _, [BadValue], _} | _]}}}} = StartError.
+
+one_node_scope_event_handlers_config_module_not_loaded(_Config) ->
+    %% configure a node-wide handler, and a scope handler module that does not exist
+    application:set_env(syn, event_handler, syn_test_event_handler_callbacks),
+    application:set_env(syn, scope_event_handlers, [{scope_with_handler, syn_test_event_handler_missing}]),
+
+    %% the start fails on the module that cannot be loaded
+    {'EXIT', {{badmatch, {error, {syn, StartError}}}, _}} = (catch syn:start()),
+    {bad_return, {_, {'EXIT', {{scope_event_handler_not_loaded, scope_with_handler, syn_test_event_handler_missing}, _}}}} = StartError,
+
+    %% start syn without the entry
+    application:unset_env(syn, scope_event_handlers),
+    ok = syn:start(),
+    ok = syn:add_node_to_scopes([scope_with_handler]),
+
+    %% register
+    LocalNode = node(),
+    Pid = syn_test_suite_helper:start_process(),
+    ok = syn:register(scope_with_handler, "proc-handler", Pid, {recipient, self(), <<"meta">>}),
+
+    %% the failed entry left no handler behind, so the callback reaches the node-wide handler
+    syn_test_suite_helper:assert_received_messages([
+        {on_process_registered, LocalNode, scope_with_handler, "proc-handler", Pid, <<"meta">>, normal}
+    ]).
 
 three_nodes_discover(Config) ->
     %% get slaves
@@ -1730,6 +1849,34 @@ three_nodes_scope_event_handler_conflict_resolution(Config) ->
         {'DOWN', DefaultRulePidOn1MRef, process, DefaultRulePidOn1, {syn_resolve_kill, "proc-conflict", {recipient, TestPid, node_wide_keeps}}}
     ]),
     true = rpc:call(SlaveNode1, erlang, is_process_alive, [PidOn1]).
+
+three_nodes_scope_event_handlers_config_boot_sync(Config) ->
+    %% covers the boot-time sync of a scope that syn starts with a configured handler. A wrong start order (scopes
+    %% started before the handlers are stored) fails this test only when the sync lands before the handlers are stored,
+    %% so the test is not a deterministic guard of that order.
+
+    %% get slaves
+    SlaveNode1 = proplists:get_value(syn_slave_1, Config),
+
+    %% start syn on the local node and register a process
+    ok = syn:start(),
+    ok = syn:add_node_to_scopes([scope_with_handler]),
+    LocalNode = node(),
+    Pid = syn_test_suite_helper:start_process(),
+    ok = syn:register(scope_with_handler, "proc-handler", Pid, {recipient, self(), <<"meta">>}),
+
+    %% configure the scope, its own handler and a node-wide handler on node 1
+    ok = rpc:call(SlaveNode1, application, set_env, [syn, event_handler, syn_test_event_handler_callbacks]),
+    ok = rpc:call(SlaveNode1, application, set_env, [syn, scopes, [scope_with_handler]]),
+    ok = rpc:call(SlaveNode1, application, set_env, [syn, scope_event_handlers, [{scope_with_handler, syn_test_event_handler_scope_callbacks}]]),
+
+    %% start syn on node 1, its scope gets the registration from the local node when it syncs
+    ok = rpc:call(SlaveNode1, syn, start, []),
+
+    %% check that the callback reaches only the scope handler
+    syn_test_suite_helper:assert_received_messages([
+        {on_process_registered, syn_test_event_handler_scope_callbacks, SlaveNode1, scope_with_handler, "proc-handler", Pid, <<"meta">>, {syn_remote_scope_node_up, scope_with_handler, LocalNode}}
+    ]).
 
 three_nodes_update(Config) ->
     %% get slaves

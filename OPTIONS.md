@@ -7,6 +7,9 @@ Please see [`syn_event_handler`](syn_event_handler.html) for information on call
 The event handler module can be defined either by using the [`set_event_handler/1`](syn.html#set_event_handler/1) method, or
 by setting the `event_handler` configuration variable.
 
+Syn does not call this module for a Scope that has its own handler, set with
+[`set_event_handler/2`](syn.html#set_event_handler/2) or with the [`scope_event_handlers`](#scope_event_handlers) key.
+
 #### Elixir
 
 ```elixir
@@ -19,6 +22,39 @@ config :syn,
 ```erlang
 {syn, [
   {event_handler, my_custom_event_handler}
+]}
+```
+
+## scope_event_handlers
+Please see [`syn_event_handler`](syn_event_handler.html) for information on callbacks.
+
+The `scope_event_handlers` configuration variable sets the event handler modules of individual Scopes, as a list of
+`{Scope, Module}` tuples. It is meant for Scopes known before Syn starts, typically those listed under `scopes`.
+Syn starts those Scopes during its own startup, usually before your application code runs. It applies this list before
+it starts any Scope, so the handlers are in place for the first events of these Scopes. If an entry is malformed or
+names a module that cannot be loaded, Syn fails to start.
+
+Syn applies the list every time it starts, and an entry replaces a handler set earlier for that Scope with
+[`set_event_handler/2`](syn.html#set_event_handler/2). For a Scope added at runtime, call
+[`set_event_handler/2`](syn.html#set_event_handler/2) before [`add_node_to_scopes/1`](syn.html#add_node_to_scopes/1).
+
+Syn uses a Scope's own handler for all of the Scope's callbacks, otherwise the node-wide `event_handler`, and otherwise
+its defaults.
+
+#### Elixir
+
+```elixir
+config :syn,
+  scopes: [:devices, :users],
+  scope_event_handlers: [users: MyUsersEventHandler]
+```
+
+#### Erlang
+
+```erlang
+{syn, [
+  {scopes, [devices, users]},
+  {scope_event_handlers, [{users, my_users_event_handler}]}
 ]}
 ```
 

@@ -40,6 +40,8 @@
 start(_StartType, _StartArgs) ->
     %% ensure event handler is loaded
     syn_event_handler:ensure_event_handler_loaded(),
+    %% set scope event handlers from the configuration before any scope starts
+    syn_event_handler:set_configured_scope_event_handlers(),
     %% start main sup
     syn_sup:start_link().
 

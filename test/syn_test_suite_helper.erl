@@ -140,6 +140,7 @@ clean_after_test() ->
         rpc:call(Node, application, unset_env, [syn, event_handler]),
         rpc:call(Node, application, unset_env, [syn, strict_mode]),
         rpc:call(Node, application, unset_env, [syn, scopes]),
+        rpc:call(Node, application, unset_env, [syn, scope_event_handlers]),
         %% clean scope event handlers (persistent terms survive the application stop)
         rpc:call(Node, syn_test_suite_helper, erase_scope_event_handlers, []),
         %% messages

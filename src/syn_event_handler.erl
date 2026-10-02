@@ -31,7 +31,8 @@
 %% @doc Defines Syn's callbacks.
 %%
 %% You can specify a callback module for the whole node with {@link syn:set_event_handler/1}, and a callback module
-%% for a single Scope with {@link syn:set_event_handler/2}. Syn selects the module for each Scope as a whole:
+%% for a single Scope with {@link syn:set_event_handler/2} or with the `scope_event_handlers' key of the `syn'
+%% application environment. Syn selects the module for each Scope as a whole:
 %% <ul>
 %% <li>If the Scope has its own module, Syn uses only that module for all of the Scope's callbacks.
 %%     If the module does not export a callback, Syn skips that callback for the Scope and does not fall back to the
@@ -143,6 +144,7 @@
 %% API
 -export([ensure_event_handler_loaded/0]).
 -export([set_scope_event_handler/2]).
+-export([set_configured_scope_event_handlers/0]).
 -export([call_event_handler/2]).
 -export([do_resolve_registry_conflict/4]).
 
@@ -240,6 +242,28 @@ set_scope_event_handler(Scope, Module) ->
     %% in embedded mode the release has already loaded it, and nothing here can load it
     ensure_module_loaded(Module),
     persistent_term:put({syn_event_handler, Scope}, Module).
+
+%% @private
+-spec set_configured_scope_event_handlers() -> ok.
+set_configured_scope_event_handlers() ->
+    set_configured_scope_event_handlers(application:get_env(syn, scope_event_handlers, [])).
+
+-spec set_configured_scope_event_handlers(Entries :: [{Scope :: atom(), Module :: module()}]) -> ok.
+set_configured_scope_event_handlers(Entries) when is_list(Entries) ->
+    %% a malformed value or entry crashes with function_clause, so that syn fails to start
+    lists:foreach(fun({Scope, Module}) when is_atom(Scope), is_atom(Module), Module =/= undefined ->
+        %% in interactive mode this loads the module if it can;
+        %% in embedded mode the boot script has already loaded every module of the release
+        ensure_module_loaded(Module),
+        case erlang:module_loaded(Module) of
+            true ->
+                persistent_term:put({syn_event_handler, Scope}, Module);
+
+            false ->
+                %% fail the start: the scope would skip every callback and resolve its conflicts with the defaults
+                error({scope_event_handler_not_loaded, Scope, Module})
+        end
+    end, Entries).
 
 %% @private
 -spec call_event_handler(

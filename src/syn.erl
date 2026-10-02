@@ -152,7 +152,8 @@ subcluster_nodes(pg, Scope) ->
 %%
 %% Please see {@link syn_event_handler} for information on callbacks.
 %%
-%% Syn does not call this module for a Scope that has its own handler, set with {@link set_event_handler/2}.
+%% Syn does not call this module for a Scope that has its own handler, set with {@link set_event_handler/2} or with
+%% the `scope_event_handlers' key.
 %%
 %% There are 2 ways to set a handler module. One is by using this method, the other is to set the environment variable `syn'
 %% with the key `event_handler'. In this latter case, you're probably best off using an application configuration file:
@@ -204,6 +205,24 @@ set_event_handler(Module) ->
 %% You can call this method before Syn is started and before the node is added to the Scope.
 %% The handler stays set when the `syn' application stops and starts again.
 %% Calling it again for the same Scope replaces the handler.
+%%
+%% There are 2 ways to set the handler module of a Scope. One is by using this method, the other is to set the environment
+%% variable `syn' with the key `scope_event_handlers', a list of `{Scope, Module}' tuples. Syn applies this list every time
+%% it starts, before it starts any Scope, so use it for the Scopes listed under the `scopes' key: Syn starts them during its
+%% own startup, which usually happens before your code runs. An entry in the list replaces a handler set earlier with this
+%% method for the same Scope. If an entry is malformed or names a module that cannot be loaded, Syn fails to start.
+%%
+%% <h3>Elixir</h3>
+%% ```
+%% config :syn,
+%%   scope_event_handlers: [devices: MyDevicesEventHandler]
+%% '''
+%% <h3>Erlang</h3>
+%% ```
+%% {syn, [
+%%   {scope_event_handlers, [{devices, my_devices_event_handler}]}
+%% ]}
+%% '''
 %%
 %% <h2>Examples</h2>
 %% <h3>Elixir</h3>
