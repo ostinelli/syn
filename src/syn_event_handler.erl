@@ -30,7 +30,18 @@
 %% ===================================================================
 %% @doc Defines Syn's callbacks.
 %%
-%% You can specify the callback module with {@link syn:set_event_handler/1}.
+%% You can specify a callback module for the whole node with {@link syn:set_event_handler/1}, and a callback module
+%% for a single Scope with {@link syn:set_event_handler/2}. Syn selects the module for each Scope as a whole:
+%% <ul>
+%% <li>If the Scope has its own module, Syn uses only that module for all of the Scope's callbacks.
+%%     If the module does not export a callback, Syn skips that callback for the Scope and does not fall back to the
+%%     node-wide handler. Without `resolve_registry_conflict/4', Syn applies its default rule: it keeps the later
+%%     registration and kills the other process.</li>
+%% <li>Otherwise Syn uses the node-wide module.</li>
+%% <li>Without either, Syn uses its defaults.</li>
+%% </ul>
+%% A node-wide module therefore receives no callbacks from Scopes that have their own module.
+%%
 %% In your module you need to specify the behavior `syn_event_handler' and implement the callbacks.
 %% All callbacks are optional, so you just need to define the ones you need.
 %%
@@ -74,8 +85,9 @@
 %% one of the two Pids, or if the method crashes, none of the Pids will be killed and the conflicting name will be freed.
 %%
 %% Important Note: the conflict resolution method will be called on the two nodes where the conflicting processes are running on.
-%% Therefore, this method MUST be defined in the same way across all nodes of the cluster and have the same effect
-%% regardless of the node it is run on, or you will experience unexpected results.
+%% Therefore, every node must resolve a conflict in a Scope the same way, which in practice means the same module and
+%% version. This method MUST be defined in the same way across all nodes and have the same effect regardless of the
+%% node it is run on, or you will experience unexpected results.
 %%
 %% <h3>Examples</h3>
 %% The following callback module implements the `on_process_unregistered/5' and the `on_process_left/5' callbacks.
@@ -130,6 +142,7 @@
 
 %% API
 -export([ensure_event_handler_loaded/0]).
+-export([set_scope_event_handler/2]).
 -export([call_event_handler/2]).
 -export([do_resolve_registry_conflict/4]).
 
@@ -217,18 +230,24 @@
 -spec ensure_event_handler_loaded() -> ok.
 ensure_event_handler_loaded() ->
     %% get handler
-    CustomEventHandler = get_custom_event_handler(),
-    %% ensure that is it loaded (not using code:ensure_loaded/1 to support embedded mode)
-    catch CustomEventHandler:module_info(exports),
-    ok.
+    CustomEventHandler = get_node_wide_event_handler(),
+    ensure_module_loaded(CustomEventHandler).
+
+%% @private
+-spec set_scope_event_handler(Scope :: atom(), Module :: module()) -> ok.
+set_scope_event_handler(Scope, Module) ->
+    %% in interactive mode this loads the module before events can reach it;
+    %% in embedded mode the release has already loaded it, and nothing here can load it
+    ensure_module_loaded(Module),
+    persistent_term:put({syn_event_handler, Scope}, Module).
 
 %% @private
 -spec call_event_handler(
     CallbackMethod :: atom(),
-    Args :: [term()]
+    Args :: [term(), ...]
 ) -> any().
-call_event_handler(CallbackMethod, Args) ->
-    CustomEventHandler = get_custom_event_handler(),
+call_event_handler(CallbackMethod, [Scope | _] = Args) ->
+    CustomEventHandler = get_custom_event_handler(Scope),
     case erlang:function_exported(CustomEventHandler, CallbackMethod, length(Args)) of
         true ->
             try apply(CustomEventHandler, CallbackMethod, Args)
@@ -251,7 +270,7 @@ call_event_handler(CallbackMethod, Args) ->
     {Pid2 :: pid(), Meta2 :: term(), Time2 :: non_neg_integer()}
 ) -> {PidToKeep :: pid() | undefined, KillOtherPid :: boolean()}.
 do_resolve_registry_conflict(Scope, Name, {Pid1, Meta1, Time1}, {Pid2, Meta2, Time2}) ->
-    CustomEventHandler = get_custom_event_handler(),
+    CustomEventHandler = get_custom_event_handler(Scope),
     case erlang:function_exported(CustomEventHandler, resolve_registry_conflict, 4) of
         true ->
             try CustomEventHandler:resolve_registry_conflict(Scope, Name, {Pid1, Meta1, Time1}, {Pid2, Meta2, Time2}) of
@@ -283,6 +302,20 @@ do_resolve_registry_conflict(Scope, Name, {Pid1, Meta1, Time1}, {Pid2, Meta2, Ti
 %% ===================================================================
 %% Internal
 %% ===================================================================
--spec get_custom_event_handler() -> undefined | module().
-get_custom_event_handler() ->
+-spec get_custom_event_handler(Scope :: atom()) -> undefined | module().
+get_custom_event_handler(Scope) ->
+    %% a scope handler replaces the node-wide handler for all callbacks of its scope
+    case persistent_term:get({syn_event_handler, Scope}, undefined) of
+        undefined -> get_node_wide_event_handler();
+        Module -> Module
+    end.
+
+-spec get_node_wide_event_handler() -> undefined | module().
+get_node_wide_event_handler() ->
     application:get_env(syn, event_handler, undefined).
+
+-spec ensure_module_loaded(Module :: undefined | module()) -> ok.
+ensure_module_loaded(Module) ->
+    %% not using code:ensure_loaded/1 to support embedded mode
+    catch Module:module_info(exports),
+    ok.

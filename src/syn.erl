@@ -57,7 +57,7 @@
 %% scopes
 -export([node_scopes/0, add_node_to_scopes/1]).
 -export([subcluster_nodes/2]).
--export([set_event_handler/1]).
+-export([set_event_handler/1, set_event_handler/2]).
 %% registry
 -export([lookup/2]).
 -export([register/3, register/4, update_registry/3]).
@@ -152,6 +152,8 @@ subcluster_nodes(pg, Scope) ->
 %%
 %% Please see {@link syn_event_handler} for information on callbacks.
 %%
+%% Syn does not call this module for a Scope that has its own handler, set with {@link set_event_handler/2}.
+%%
 %% There are 2 ways to set a handler module. One is by using this method, the other is to set the environment variable `syn'
 %% with the key `event_handler'. In this latter case, you're probably best off using an application configuration file:
 %%
@@ -183,6 +185,40 @@ set_event_handler(Module) ->
     application:set_env(syn, event_handler, Module),
     %% ensure event handler is loaded
     syn_event_handler:ensure_event_handler_loaded().
+
+%% @doc Sets the handler module for the specified `Scope'.
+%%
+%% Please see {@link syn_event_handler} for information on callbacks.
+%%
+%% Syn selects the handler for a Scope as a whole, not per callback:
+%% <ul>
+%% <li>If the Scope has a handler set with this method, Syn uses only that module for all of the Scope's callbacks.
+%%     If the module does not export a callback, Syn skips that callback for the Scope and does not fall back to the
+%%     node-wide handler. Without `resolve_registry_conflict/4', Syn applies its default rule: it keeps the later
+%%     registration and kills the other process.</li>
+%% <li>Otherwise Syn uses the node-wide handler, set with {@link set_event_handler/1} or with the `event_handler' key
+%%     of the `syn' application environment.</li>
+%% <li>Without either, Syn uses its defaults.</li>
+%% </ul>
+%%
+%% You can call this method before Syn is started and before the node is added to the Scope.
+%% The handler stays set when the `syn' application stops and starts again.
+%% Calling it again for the same Scope replaces the handler.
+%%
+%% <h2>Examples</h2>
+%% <h3>Elixir</h3>
+%% ```
+%% iex> :syn.set_event_handler(:devices, MyDevicesEventHandler)
+%% :ok
+%% '''
+%% <h3>Erlang</h3>
+%% ```
+%% 1> syn:set_event_handler(devices, my_devices_event_handler).
+%% ok
+%% '''
+-spec set_event_handler(Scope :: atom(), Module :: module()) -> ok.
+set_event_handler(Scope, Module) when is_atom(Scope), is_atom(Module), Module =/= undefined ->
+    syn_event_handler:set_scope_event_handler(Scope, Module).
 
 %% ----- \/ registry -------------------------------------------------
 %% @doc Looks up a registry entry in the specified Scope.
