@@ -50,11 +50,11 @@ the following happens:
     * Starts monitoring the remote scope node process.
     * Adds the remote node to the list of the subcluster nodes.
   * The scope process that receives the `ack_sync` message:
-    * Stores the received data of the remote node.
-    * If it's an unknown node, it:
+    * If it's an unknown node, it first:
       * Starts monitoring the remote scope node process.
-      * Sends it its local data with another ack message.
       * Adds the remote node to the list of the subcluster nodes.
+      * Sends it its local data with another ack message, before a conflict resolution can change that data.
+    * Stores the received data of the remote node.
   
 #### Leaving
 

@@ -48,7 +48,11 @@
     three_nodes_custom_event_handler_conflict_resolution/1,
     three_nodes_update/1,
     three_nodes_ack_sync_reconciles_registry_snapshot/1,
-    three_nodes_ack_sync_ordered_delivery/1
+    three_nodes_ack_sync_ordered_delivery/1,
+    three_nodes_ack_sync_from_unknown_node_keeps_remote/1,
+    three_nodes_ack_sync_from_unknown_node_keeps_local/1,
+    three_nodes_ack_sync_from_unknown_node_default_resolution/1,
+    three_nodes_ack_sync_from_unknown_node_resolution_reaches_peer/1
 ]).
 -export([
     four_nodes_concurrency/1
@@ -106,7 +110,11 @@ groups() ->
             three_nodes_custom_event_handler_conflict_resolution,
             three_nodes_update,
             three_nodes_ack_sync_reconciles_registry_snapshot,
-            three_nodes_ack_sync_ordered_delivery
+            three_nodes_ack_sync_ordered_delivery,
+            three_nodes_ack_sync_from_unknown_node_keeps_remote,
+            three_nodes_ack_sync_from_unknown_node_keeps_local,
+            three_nodes_ack_sync_from_unknown_node_default_resolution,
+            three_nodes_ack_sync_from_unknown_node_resolution_reaches_peer
         ]},
         {four_nodes_registry, [shuffle], [
             four_nodes_concurrency
@@ -1779,6 +1787,206 @@ three_nodes_ack_sync_reconciles_registry_snapshot(Config) ->
             {syn_remote_scope_node_up, scope_reconcile, SlaveNode1}}
     ]).
 
+three_nodes_ack_sync_from_unknown_node_keeps_remote(Config) ->
+    %% The local node sees both slaves, which cannot see each other. The name is registered
+    %% on slave 1 first and on slave 2 later, so the local node holds the process on slave 2.
+    %% The resolver keeps the process on slave 1.
+    %%
+    %% When the slaves connect, slave 2 handles the ack_sync of slave 1 while slave 1 is not
+    %% in its nodes_map yet, and slave 1 handles the snapshot of slave 2 as a known node, as
+    %% in a join where slave 1 handles the discover of slave 2 before its own nodeup.
+    %% Slave 2 keeps the remote process and broadcasts the unregistration of its own process.
+    %% Slave 1 must get the conflicting entry in the snapshot of slave 2 and resolve the
+    %% conflict too: only slave 1 sends its process to the local node.
+
+    %% get slaves
+    SlaveNode1 = proplists:get_value(syn_slave_1, Config),
+    SlaveNode2 = proplists:get_value(syn_slave_2, Config),
+
+    %% start syn on nodes
+    ok = syn:start(),
+    ok = rpc:call(SlaveNode1, syn, start, []),
+    ok = rpc:call(SlaveNode2, syn, start, []),
+
+    %% add custom handler for resolution
+    syn:set_event_handler(syn_test_event_handler_resolution),
+    rpc:call(SlaveNode1, syn, set_event_handler, [syn_test_event_handler_resolution]),
+    rpc:call(SlaveNode2, syn, set_event_handler, [syn_test_event_handler_resolution]),
+
+    %% conflict in a partial netsplit, the process to keep is registered first
+    TestPid = self(),
+    Name = "proc-conflict-ack-sync-keep-remote",
+    {PidOn1, _PidOn2} = register_conflict_in_partial_netsplit(
+        SlaveNode1, SlaveNode2, Name, {recipient, TestPid, keepthis}, {recipient, TestPid, "meta-2"}
+    ),
+
+    %% re-join, slave 2 handles the ack_sync of slave 1 first
+    join_with_ack_sync_first(SlaveNode2, SlaveNode1, Name),
+
+    %% retrieve
+    syn_test_suite_helper:assert_wait(
+        {PidOn1, {recipient, TestPid, keepthis}},
+        fun() -> rpc:call(SlaveNode1, syn, lookup, [scope_all, Name]) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        {PidOn1, {recipient, TestPid, keepthis}},
+        fun() -> rpc:call(SlaveNode2, syn, lookup, [scope_all, Name]) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        {PidOn1, {recipient, TestPid, keepthis}},
+        fun() -> syn:lookup(scope_all, Name) end
+    ).
+
+three_nodes_ack_sync_from_unknown_node_keeps_local(Config) ->
+    %% The conflict of three_nodes_ack_sync_from_unknown_node_keeps_remote in the other order:
+    %% slave 1 handles the ack_sync of slave 2 while slave 2 is not in its nodes_map yet,
+    %% keeps its local process and broadcasts it with a new time.
+
+    %% get slaves
+    SlaveNode1 = proplists:get_value(syn_slave_1, Config),
+    SlaveNode2 = proplists:get_value(syn_slave_2, Config),
+
+    %% start syn on nodes
+    ok = syn:start(),
+    ok = rpc:call(SlaveNode1, syn, start, []),
+    ok = rpc:call(SlaveNode2, syn, start, []),
+
+    %% add custom handler for resolution
+    syn:set_event_handler(syn_test_event_handler_resolution),
+    rpc:call(SlaveNode1, syn, set_event_handler, [syn_test_event_handler_resolution]),
+    rpc:call(SlaveNode2, syn, set_event_handler, [syn_test_event_handler_resolution]),
+
+    %% conflict in a partial netsplit, the process to keep is registered first
+    TestPid = self(),
+    Name = "proc-conflict-ack-sync-keep-local",
+    {PidOn1, _PidOn2} = register_conflict_in_partial_netsplit(
+        SlaveNode1, SlaveNode2, Name, {recipient, TestPid, keepthis}, {recipient, TestPid, "meta-2"}
+    ),
+
+    %% re-join, slave 1 handles the ack_sync of slave 2 first
+    join_with_ack_sync_first(SlaveNode1, SlaveNode2, Name),
+
+    %% retrieve
+    syn_test_suite_helper:assert_wait(
+        {PidOn1, {recipient, TestPid, keepthis}},
+        fun() -> rpc:call(SlaveNode1, syn, lookup, [scope_all, Name]) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        {PidOn1, {recipient, TestPid, keepthis}},
+        fun() -> rpc:call(SlaveNode2, syn, lookup, [scope_all, Name]) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        {PidOn1, {recipient, TestPid, keepthis}},
+        fun() -> syn:lookup(scope_all, Name) end
+    ).
+
+three_nodes_ack_sync_from_unknown_node_default_resolution(Config) ->
+    %% The order of three_nodes_ack_sync_from_unknown_node_keeps_remote with the default
+    %% resolution: slave 2 keeps its local process, the later registration, and broadcasts
+    %% it with a new time. All nodes must end with the same process and the same time.
+
+    %% get slaves
+    SlaveNode1 = proplists:get_value(syn_slave_1, Config),
+    SlaveNode2 = proplists:get_value(syn_slave_2, Config),
+
+    %% start syn on nodes
+    ok = syn:start(),
+    ok = rpc:call(SlaveNode1, syn, start, []),
+    ok = rpc:call(SlaveNode2, syn, start, []),
+
+    %% conflict in a partial netsplit
+    Name = "proc-conflict-ack-sync-default",
+    {_PidOn1, PidOn2} = register_conflict_in_partial_netsplit(
+        SlaveNode1, SlaveNode2, Name, "meta-1", "meta-2"
+    ),
+
+    %% re-join, slave 2 handles the ack_sync of slave 1 first
+    join_with_ack_sync_first(SlaveNode2, SlaveNode1, Name),
+
+    %% retrieve
+    syn_test_suite_helper:assert_wait(
+        {PidOn2, "meta-2"},
+        fun() -> rpc:call(SlaveNode1, syn, lookup, [scope_all, Name]) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        {PidOn2, "meta-2"},
+        fun() -> rpc:call(SlaveNode2, syn, lookup, [scope_all, Name]) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        {PidOn2, "meta-2"},
+        fun() -> syn:lookup(scope_all, Name) end
+    ),
+
+    %% same entry on all nodes, time included
+    syn_test_suite_helper:assert_wait(
+        ok,
+        fun() ->
+            Entries = [get_registry_entry(Node, scope_all, Name) || Node <- [node(), SlaveNode1, SlaveNode2]],
+            case lists:usort(Entries) of
+                [{Name, PidOn2, "meta-2", _Time}] -> ok;
+                _ -> Entries
+            end
+        end
+    ).
+
+three_nodes_ack_sync_from_unknown_node_resolution_reaches_peer(Config) ->
+    %% Slave 1 adds a scope in which slave 2 already holds a name, and registers the same
+    %% name before slave 2 answers its discover. Slave 1 then handles the ack_sync of slave 2
+    %% while slave 2 is not in its nodes_map, keeps its local process, the later registration,
+    %% and broadcasts it with a new time. The slaves stay connected, so no nodeup follows and
+    %% slave 1 handles no other ack_sync: slave 2 gets the new time only through that
+    %% broadcast. Both slaves must end with the same process and the same time.
+
+    %% get slaves
+    SlaveNode1 = proplists:get_value(syn_slave_1, Config),
+    SlaveNode2 = proplists:get_value(syn_slave_2, Config),
+
+    %% start syn on slaves
+    ok = rpc:call(SlaveNode1, syn, start, []),
+    ok = rpc:call(SlaveNode2, syn, start, []),
+
+    %% register on slave 2, then suspend its scope process
+    Name = "proc-conflict-ack-sync-resolution",
+    ok = rpc:call(SlaveNode2, syn, add_node_to_scopes, [[scope_bc]]),
+    PidOn2 = syn_test_suite_helper:start_process(SlaveNode2),
+    ok = rpc:call(SlaveNode2, syn, register, [scope_bc, Name, PidOn2, "meta-2"]),
+    ScopePid2 = rpc:call(SlaveNode2, erlang, whereis, [syn_registry_scope_bc]),
+    ok = sys:suspend(ScopePid2),
+
+    %% add the scope on slave 1, its discover waits in the queue of slave 2
+    ok = rpc:call(SlaveNode1, syn, add_node_to_scopes, [[scope_bc]]),
+    syn_test_suite_helper:assert_wait(
+        {message_queue_len, 1},
+        fun() -> rpc:call(SlaveNode2, erlang, process_info, [ScopePid2, message_queue_len]) end
+    ),
+
+    %% register on slave 1 later, then let slave 2 answer the discover
+    PidOn1 = syn_test_suite_helper:start_process(SlaveNode1),
+    ok = rpc:call(SlaveNode1, syn, register, [scope_bc, Name, PidOn1, "meta-1"]),
+    ok = sys:resume(ScopePid2),
+
+    %% retrieve
+    syn_test_suite_helper:assert_wait(
+        {PidOn1, "meta-1"},
+        fun() -> rpc:call(SlaveNode1, syn, lookup, [scope_bc, Name]) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        {PidOn1, "meta-1"},
+        fun() -> rpc:call(SlaveNode2, syn, lookup, [scope_bc, Name]) end
+    ),
+
+    %% same entry on both slaves, time included
+    syn_test_suite_helper:assert_wait(
+        ok,
+        fun() ->
+            Entries = [get_registry_entry(Node, scope_bc, Name) || Node <- [SlaveNode1, SlaveNode2]],
+            case lists:usort(Entries) of
+                [{Name, PidOn1, "meta-1", _Time}] -> ok;
+                _ -> Entries
+            end
+        end
+    ).
+
 four_nodes_concurrency(Config) ->
     %% get slaves
     SlaveNode1 = proplists:get_value(syn_slave_1, Config),
@@ -1894,3 +2102,64 @@ remove_from_local_table(Scope, Name, Pid) ->
     TableByName = syn_backbone:get_table_name(syn_registry_by_name, Scope),
     TableByPid = syn_backbone:get_table_name(syn_registry_by_pid, Scope),
     syn_registry:remove_from_local_table(Name, Pid, TableByName, TableByPid).
+
+%% Entry of Name in the registry table of Node, in the format of an ack_sync snapshot.
+get_registry_entry(Node, Scope, Name) ->
+    TableByName = rpc:call(Node, syn_backbone, get_table_name, [syn_registry_by_name, Scope]),
+    case rpc:call(Node, ets, lookup, [TableByName, Name]) of
+        [{Name, Pid, Meta, Time, _MRef, _Node}] -> {Name, Pid, Meta, Time};
+        [] -> undefined
+    end.
+
+%% Add scope_all on the local node and both slaves, disconnect slave 1 from slave 2,
+%% then register Name on slave 1 and later on slave 2. The local node sees both
+%% registrations and holds the later one.
+register_conflict_in_partial_netsplit(SlaveNode1, SlaveNode2, Name, Meta1, Meta2) ->
+    %% add scopes
+    ok = syn:add_node_to_scopes([scope_all]),
+    ok = rpc:call(SlaveNode1, syn, add_node_to_scopes, [[scope_all]]),
+    ok = rpc:call(SlaveNode2, syn, add_node_to_scopes, [[scope_all]]),
+    syn_test_suite_helper:assert_scope_subcluster(registry, node(), scope_all, [SlaveNode1, SlaveNode2]),
+    syn_test_suite_helper:assert_scope_subcluster(registry, SlaveNode1, scope_all, [node(), SlaveNode2]),
+    syn_test_suite_helper:assert_scope_subcluster(registry, SlaveNode2, scope_all, [node(), SlaveNode1]),
+
+    %% partial netsplit (1 cannot see 2)
+    rpc:call(SlaveNode1, syn_test_suite_helper, disconnect_node, [SlaveNode2]),
+    syn_test_suite_helper:assert_scope_subcluster(registry, SlaveNode1, scope_all, [node()]),
+    syn_test_suite_helper:assert_scope_subcluster(registry, SlaveNode2, scope_all, [node()]),
+
+    %% register on slave 1, then on slave 2
+    PidOn1 = syn_test_suite_helper:start_process(SlaveNode1),
+    PidOn2 = syn_test_suite_helper:start_process(SlaveNode2),
+    ok = rpc:call(SlaveNode1, syn, register, [scope_all, Name, PidOn1, Meta1]),
+    syn_test_suite_helper:assert_wait(
+        {PidOn1, Meta1},
+        fun() -> syn:lookup(scope_all, Name) end
+    ),
+    ok = rpc:call(SlaveNode2, syn, register, [scope_all, Name, PidOn2, Meta2]),
+    syn_test_suite_helper:assert_wait(
+        {PidOn2, Meta2},
+        fun() -> syn:lookup(scope_all, Name) end
+    ),
+    {PidOn1, PidOn2}.
+
+%% Put the snapshot that PeerNode holds for Name in the queue of the suspended scope_all
+%% registry process of Node, connect the two nodes, then resume the process. Node handles
+%% that ack_sync while PeerNode is not in its nodes_map, before the nodeup and the
+%% discover of the join. Before the resume, PeerNode handles a discover of Node, so it
+%% handles the snapshot of Node as a known node.
+join_with_ack_sync_first(Node, PeerNode, Name) ->
+    ScopePid = rpc:call(Node, erlang, whereis, [syn_registry_scope_all]),
+    PeerScopePid = rpc:call(PeerNode, erlang, whereis, [syn_registry_scope_all]),
+    {Name, _, _, _} = PeerEntry = get_registry_entry(PeerNode, scope_all, Name),
+    ok = sys:suspend(ScopePid),
+    ScopePid ! {'3.0', ack_sync, PeerScopePid, [PeerEntry]},
+    syn_test_suite_helper:assert_wait(
+        {message_queue_len, 1},
+        fun() -> rpc:call(Node, erlang, process_info, [ScopePid, message_queue_len]) end
+    ),
+    true = rpc:call(PeerNode, syn_test_suite_helper, connect_node, [Node]),
+    syn_test_suite_helper:assert_cluster(Node, [node(), PeerNode]),
+    PeerScopePid ! {'3.0', discover, ScopePid},
+    syn_test_suite_helper:assert_scope_subcluster(registry, PeerNode, scope_all, [node(), Node]),
+    ok = sys:resume(ScopePid).
