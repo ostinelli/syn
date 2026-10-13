@@ -338,7 +338,7 @@ init(#state{
     {noreply, #state{}, timeout() | hibernate | {continue, term()}} |
     {stop, Reason :: term(), Reply :: term(), #state{}} |
     {stop, Reason :: term(), #state{}}.
-handle_call({'3.0', join_or_update_on_node, RequesterNode, GroupName, Pid, MetaOrFun}, _From, #state{
+handle_call({'3.0', join_or_update_on_node, _RequesterNode, GroupName, Pid, MetaOrFun}, _From, #state{
     table_by_name = TableByName,
     table_by_pid = TableByPid
 } = State) ->
@@ -354,7 +354,7 @@ handle_call({'3.0', join_or_update_on_node, RequesterNode, GroupName, Pid, MetaO
                         undefined -> erlang:monitor(process, Pid);  %% process is not monitored yet, create
                         MRef0 -> MRef0
                     end,
-                    do_join_on_node(GroupName, Pid, undefined, MetaOrFun, MRef, normal, RequesterNode, on_process_joined, State);
+                    do_join_on_node(GroupName, Pid, undefined, MetaOrFun, MRef, normal, on_process_joined, State);
 
                 {{_, _}, TableMeta, _, MRef, _} when is_function(MetaOrFun) ->
                     %% update with fun
@@ -363,7 +363,7 @@ handle_call({'3.0', join_or_update_on_node, RequesterNode, GroupName, Pid, MetaO
                             {reply, {noop, TableMeta}, State};
 
                         Meta ->
-                            do_join_on_node(GroupName, Pid, TableMeta, Meta, MRef, normal, RequesterNode, on_group_process_updated, State)
+                            do_join_on_node(GroupName, Pid, TableMeta, Meta, MRef, normal, on_group_process_updated, State)
 
                     catch Class:Reason:Stacktrace ->
                       ?LOG_ERROR(#{event => callback_error,
@@ -379,14 +379,14 @@ handle_call({'3.0', join_or_update_on_node, RequesterNode, GroupName, Pid, MetaO
 
                 {{_, _}, TableMeta, _, MRef, _} ->
                     %% re-joined with different meta
-                    do_join_on_node(GroupName, Pid, TableMeta, MetaOrFun, MRef, normal, RequesterNode, on_group_process_updated, State)
+                    do_join_on_node(GroupName, Pid, TableMeta, MetaOrFun, MRef, normal, on_group_process_updated, State)
             end;
 
         false ->
             {reply, {error, not_alive}, State}
     end;
 
-handle_call({'3.0', leave_on_node, RequesterNode, GroupName, Pid}, _From, #state{
+handle_call({'3.0', leave_on_node, _RequesterNode, GroupName, Pid}, _From, #state{
     scope = Scope,
     table_by_name = TableByName,
     table_by_pid = TableByPid
@@ -402,8 +402,9 @@ handle_call({'3.0', leave_on_node, RequesterNode, GroupName, Pid}, _From, #state
             remove_from_local_table(GroupName, Pid, TableByName, TableByPid),
             %% callback
             syn_event_handler:call_event_handler(on_process_left, [Scope, GroupName, Pid, Meta, normal]),
-            %% broadcast
-            syn_gen_scope:broadcast({'3.0', sync_leave, GroupName, Pid, Meta, normal}, [RequesterNode], State),
+            %% broadcast to the requester too: an older snapshot we sent it may still be sitting in its
+            %% scope's queue, and would undo the change it just made to its own table
+            syn_gen_scope:broadcast({'3.0', sync_leave, GroupName, Pid, Meta, normal}, State),
             %% return
             {reply, {ok, {Meta, TableByPid}}, State}
     end;
@@ -547,7 +548,6 @@ do_rebuild_monitors([{GroupName, Pid, Meta, Time} | T], NewMRefs, Scope, TableBy
     Meta :: term(),
     MRef :: reference() | undefined,
     Reason :: term(),
-    RequesterNode :: node(),
     CallbackMethod :: atom(),
     #state{}
 ) ->
@@ -563,7 +563,7 @@ do_rebuild_monitors([{GroupName, Pid, Meta, Time} | T], NewMRefs, Scope, TableBy
         }},
         #state{}
     }.
-do_join_on_node(GroupName, Pid, PreviousMeta, Meta, MRef, Reason, RequesterNode, CallbackMethod, #state{
+do_join_on_node(GroupName, Pid, PreviousMeta, Meta, MRef, Reason, CallbackMethod, #state{
     scope = Scope,
     table_by_name = TableByName,
     table_by_pid = TableByPid
@@ -574,8 +574,9 @@ do_join_on_node(GroupName, Pid, PreviousMeta, Meta, MRef, Reason, RequesterNode,
     %% callback
     syn_event_handler:call_event_handler(CallbackMethod, [Scope, GroupName, Pid, Meta, Reason]),
     syn_event_handler:call_event_handler(CallbackMethod, [Scope, GroupName, Pid, PreviousMeta, Meta, normal]),
-    %% broadcast
-    syn_gen_scope:broadcast({'3.0', sync_join, GroupName, Pid, Meta, Time, Reason}, [RequesterNode], State),
+    %% broadcast to the requester too: an older snapshot we sent it may still be sitting in its
+    %% scope's queue, and would undo the change it just made to its own table
+    syn_gen_scope:broadcast({'3.0', sync_join, GroupName, Pid, Meta, Time, Reason}, State),
     %% return
     {reply, {ok, {CallbackMethod, PreviousMeta, Meta, Time, TableByName, TableByPid}}, State}.
 

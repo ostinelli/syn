@@ -64,6 +64,36 @@ cleanup second. The zombie is created momentarily but immediately removed.
 
 Fix applied in [this commit](https://github.com/ostinelli/syn/commit/7716a9885924643ce84bb47cbc36b5efb891e577).
 
+## Calls Made From Another Node
+
+When a node registers or unregisters a process that lives on another node, the call goes to that
+other node. When the reply comes back, the calling node writes the result straight into its own
+table, so that a lookup right after the call already sees it. That write doesn't go through the
+calling node's scope process, so it isn't lined up with the messages the other node sends to it.
+
+The model used to only have nodes registering their own processes, so it never covered this path.
+With it added, TLC finds two problems in the code as it was:
+
+1. The node handling the call sent its `sync_register` / `sync_unregister` to everyone except the
+   caller, since the caller had already updated its own table. But an older `ack_sync` snapshot from
+   that node could still be waiting in the caller's scope queue, and when it got processed it undid
+   the caller's write: a name registered from another node got removed again, or a name unregistered
+   from another node came back. Nothing put it right until the next disconnect. The shortest trace TLC
+   finds is two nodes registering the same name on each other's processes at the same time: neither
+   hears about the other's registration, so the conflict is never resolved.
+   The fix is to send the sync message to the caller too. It goes out after any older snapshot, so it
+   always gets the last word.
+2. If the caller already had the name on a different process, the write from the reply replaced that
+   entry, so the conflict was never noticed. Now the caller leaves its table alone in that case, and
+   the `sync_register` it gets from the other node goes through conflict resolution like any other.
+
+The model assumes the caller writes the result as soon as the reply arrives, before its scope gets to
+anything the other node sent after the reply. In the code that's a couple of instructions in the
+calling process, while everything the other node sends after replying goes through its sender process
+first, so the window is tiny. The model doesn't cover it.
+
+Process groups work the same way and have the same fix. The model only covers the registry.
+
 ## Running the Model Checker
 
 Requires Java 8+:
@@ -87,6 +117,9 @@ The model starts from an already discovered, fully connected subcluster. It then
 membership loss and rediscovery through disconnect/reconnect cycles. This keeps startup
 discovery out of scope while covering the protocol races that happen after a known
 remote scope process goes down and later rejoins.
+
+A node can only have one unregister per name waiting in its inbox. More would just fail with
+`{error, undefined}`, and without that limit the inbox can grow forever, so the checker never finishes.
 
 ## Unit Tests
 

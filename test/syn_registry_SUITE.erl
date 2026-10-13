@@ -49,7 +49,10 @@
     three_nodes_update/1,
     three_nodes_ack_sync_reconciles_registry_snapshot/1,
     three_nodes_ack_sync_ordered_delivery/1,
-    three_nodes_ack_sync_reconciles_large_snapshot/1
+    three_nodes_ack_sync_reconciles_large_snapshot/1,
+    three_nodes_stale_snapshot_does_not_undo_remote_register/1,
+    three_nodes_stale_snapshot_does_not_undo_remote_unregister/1,
+    three_nodes_remote_register_of_a_name_this_node_already_has/1
 ]).
 -export([
     four_nodes_concurrency/1
@@ -108,7 +111,10 @@ groups() ->
             three_nodes_update,
             three_nodes_ack_sync_reconciles_registry_snapshot,
             three_nodes_ack_sync_ordered_delivery,
-            three_nodes_ack_sync_reconciles_large_snapshot
+            three_nodes_ack_sync_reconciles_large_snapshot,
+            three_nodes_stale_snapshot_does_not_undo_remote_register,
+            three_nodes_stale_snapshot_does_not_undo_remote_unregister,
+            three_nodes_remote_register_of_a_name_this_node_already_has
         ]},
         {four_nodes_registry, [shuffle], [
             four_nodes_concurrency
@@ -1868,6 +1874,118 @@ three_nodes_ack_sync_reconciles_large_snapshot(Config) ->
         syn_test_suite_helper:kill_process(OwnerPid)
     end.
 
+three_nodes_stale_snapshot_does_not_undo_remote_register(Config) ->
+    %% registering a process that lives on the slave updates our table right away, and an older
+    %% snapshot from the slave still sitting in our scope's queue must not undo that
+
+    SlaveNode1 = proplists:get_value(syn_slave_1, Config),
+
+    ok = syn:start(),
+    ok = rpc:call(SlaveNode1, syn, start, []),
+    ok = syn:add_node_to_scopes([scope_stale]),
+    ok = rpc:call(SlaveNode1, syn, add_node_to_scopes, [[scope_stale]]),
+    syn_test_suite_helper:assert_scope_subcluster(registry, node(), scope_stale, [SlaveNode1]),
+    syn_test_suite_helper:assert_scope_subcluster(registry, SlaveNode1, scope_stale, [node()]),
+
+    Pid = syn_test_suite_helper:start_process(SlaveNode1),
+
+    %% hold the slave's snapshot back in this node's scope mailbox, then register
+    ScopePid = whereis(syn_registry_scope_stale),
+    {RemoteScopePid, Snapshot} = get_remote_snapshot(SlaveNode1, syn_registry_scope_stale),
+    ok = sys:suspend(ScopePid),
+    ScopePid ! {'3.0', ack_sync, RemoteScopePid, Snapshot},
+    ok = syn:register(scope_stale, "proc", Pid, meta),
+    {Pid, meta} = syn:lookup(scope_stale, "proc"),
+    ok = sys:resume(ScopePid),
+    _ = sys:get_state(ScopePid),
+
+    syn_test_suite_helper:assert_wait(
+        {Pid, meta},
+        fun() -> syn:lookup(scope_stale, "proc") end
+    ),
+    {Pid, meta} = rpc:call(SlaveNode1, syn, lookup, [scope_stale, "proc"]).
+
+three_nodes_stale_snapshot_does_not_undo_remote_unregister(Config) ->
+    %% unregistering a process that lives on the slave updates our table right away, and an older
+    %% snapshot from the slave still sitting in our scope's queue must not bring the name back
+
+    SlaveNode1 = proplists:get_value(syn_slave_1, Config),
+
+    ok = syn:start(),
+    ok = rpc:call(SlaveNode1, syn, start, []),
+    ok = syn:add_node_to_scopes([scope_stale]),
+    ok = rpc:call(SlaveNode1, syn, add_node_to_scopes, [[scope_stale]]),
+    syn_test_suite_helper:assert_scope_subcluster(registry, node(), scope_stale, [SlaveNode1]),
+    syn_test_suite_helper:assert_scope_subcluster(registry, SlaveNode1, scope_stale, [node()]),
+
+    Pid = syn_test_suite_helper:start_process(SlaveNode1),
+    ok = syn:register(scope_stale, "proc", Pid, meta),
+    syn_test_suite_helper:assert_wait(
+        {Pid, meta},
+        fun() -> rpc:call(SlaveNode1, syn, lookup, [scope_stale, "proc"]) end
+    ),
+
+    %% hold the slave's snapshot back in this node's scope mailbox, then unregister
+    ScopePid = whereis(syn_registry_scope_stale),
+    {RemoteScopePid, Snapshot} = get_remote_snapshot(SlaveNode1, syn_registry_scope_stale),
+    [{"proc", Pid, meta, _}] = Snapshot,
+    ok = sys:suspend(ScopePid),
+    ScopePid ! {'3.0', ack_sync, RemoteScopePid, Snapshot},
+    ok = syn:unregister(scope_stale, "proc"),
+    undefined = syn:lookup(scope_stale, "proc"),
+    ok = sys:resume(ScopePid),
+    _ = sys:get_state(ScopePid),
+
+    syn_test_suite_helper:assert_wait(
+        undefined,
+        fun() -> syn:lookup(scope_stale, "proc") end
+    ),
+    undefined = rpc:call(SlaveNode1, syn, lookup, [scope_stale, "proc"]).
+
+three_nodes_remote_register_of_a_name_this_node_already_has(Config) ->
+    %% we register a name on one of our processes, and before the slave hears about it we register the
+    %% same name on a process of the slave. the two have to go through conflict resolution like any other
+    %% conflict, so when the slave replies we must not just write over our own entry
+
+    SlaveNode1 = proplists:get_value(syn_slave_1, Config),
+
+    ok = syn:start(),
+    ok = rpc:call(SlaveNode1, syn, start, []),
+    ok = syn:add_node_to_scopes([scope_caller_conflict]),
+    ok = rpc:call(SlaveNode1, syn, add_node_to_scopes, [[scope_caller_conflict]]),
+    syn_test_suite_helper:assert_scope_subcluster(registry, node(), scope_caller_conflict, [SlaveNode1]),
+    syn_test_suite_helper:assert_scope_subcluster(registry, SlaveNode1, scope_caller_conflict, [node()]),
+
+    LocalPid = syn_test_suite_helper:start_process(),
+    RemotePid = syn_test_suite_helper:start_process(SlaveNode1),
+
+    %% hold back what we send to the slave, so it doesn't know about our registration yet
+    State = sys:get_state(syn_registry_scope_caller_conflict),
+    SenderPid = State#state.sender_pid,
+    true = erlang:suspend_process(SenderPid),
+    ok = syn:register(scope_caller_conflict, "proc", LocalPid, local_meta),
+    ok = syn:register(scope_caller_conflict, "proc", RemotePid, remote_meta),
+    true = erlang:resume_process(SenderPid),
+
+    %% the default resolution keeps the most recent registration and kills the other process
+    syn_test_suite_helper:assert_wait(
+        {RemotePid, remote_meta},
+        fun() -> syn:lookup(scope_caller_conflict, "proc") end
+    ),
+    syn_test_suite_helper:assert_wait(
+        {RemotePid, remote_meta},
+        fun() -> rpc:call(SlaveNode1, syn, lookup, [scope_caller_conflict, "proc"]) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        false,
+        fun() -> is_process_alive(LocalPid) end
+    ),
+    TableByPid = syn_backbone:get_table_name(syn_registry_by_pid, scope_caller_conflict),
+    syn_test_suite_helper:assert_wait(
+        [],
+        fun() -> ets:lookup(TableByPid, LocalPid) end
+    ).
+
 four_nodes_concurrency(Config) ->
     %% get slaves
     SlaveNode1 = proplists:get_value(syn_slave_1, Config),
@@ -1983,3 +2101,10 @@ remove_from_local_table(Scope, Name, Pid) ->
     TableByName = syn_backbone:get_table_name(syn_registry_by_name, Scope),
     TableByPid = syn_backbone:get_table_name(syn_registry_by_pid, Scope),
     syn_registry:remove_from_local_table(Name, Pid, TableByName, TableByPid).
+
+%% the scope process on Node, and the data it would send in an ack_sync right now
+get_remote_snapshot(Node, ScopeProcessName) ->
+    RemoteScopePid = rpc:call(Node, erlang, whereis, [ScopeProcessName]),
+    State = rpc:call(Node, sys, get_state, [RemoteScopePid]),
+    {ok, Snapshot} = rpc:call(Node, syn_registry, get_local_data, [State]),
+    {RemoteScopePid, Snapshot}.
