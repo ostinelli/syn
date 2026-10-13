@@ -48,7 +48,8 @@
     three_nodes_multi_call/1,
     three_nodes_group_names/1,
     three_nodes_member_and_update/1,
-    three_nodes_ack_sync_reconciles_pg_snapshot/1
+    three_nodes_ack_sync_reconciles_pg_snapshot/1,
+    three_nodes_ack_sync_reconciles_large_pg_snapshot/1
 ]).
 -export([
     four_nodes_concurrency/1
@@ -113,7 +114,8 @@ groups() ->
             three_nodes_multi_call,
             three_nodes_group_names,
             three_nodes_member_and_update,
-            three_nodes_ack_sync_reconciles_pg_snapshot
+            three_nodes_ack_sync_reconciles_pg_snapshot,
+            three_nodes_ack_sync_reconciles_large_pg_snapshot
         ]},
         {four_nodes_pg, [shuffle], [
             four_nodes_concurrency
@@ -1974,6 +1976,76 @@ three_nodes_ack_sync_reconciles_pg_snapshot(Config) ->
         {on_process_joined, LocalNode, scope_reconcile, "fresh-group", FreshPid, fresh_meta,
             {syn_remote_scope_node_up, scope_reconcile, SlaveNode1}}
     ]).
+
+three_nodes_ack_sync_reconciles_large_pg_snapshot(Config) ->
+    %% Reconciliation checks every membership already held for the remote node against the
+    %% incoming snapshot. A list based membership test makes that check quadratic, which blocks
+    %% the scope process (and every join on this node) when an ack_sync comes in while we still
+    %% hold that peer's memberships, e.g. when a node that connects during scope startup gets
+    %% discovered twice.
+    %% The cost is asserted in reductions so that the bound does not depend on the machine.
+
+    SlaveNode1 = proplists:get_value(syn_slave_1, Config),
+
+    ok = syn:start(),
+    ok = rpc:call(SlaveNode1, syn, start, []),
+    ok = syn:add_node_to_scopes([scope_reconcile_large]),
+    ok = rpc:call(SlaveNode1, syn, add_node_to_scopes, [[scope_reconcile_large]]),
+
+    syn_test_suite_helper:assert_scope_subcluster(pg, node(), scope_reconcile_large, [SlaveNode1]),
+    syn_test_suite_helper:assert_scope_subcluster(pg, SlaveNode1, scope_reconcile_large, [node()]),
+
+    %% the slave replies to discovery with its own (empty) ack_sync, which would wipe the memberships
+    %% added below if it got here after them. A join on the slave goes out right behind it through
+    %% the same sender, so once we see it here we're good.
+    %% The snapshot below doesn't include this membership, so reconciliation has to remove it.
+    StalePid = syn_test_suite_helper:start_process(SlaveNode1),
+    ok = rpc:call(SlaveNode1, syn, join, [scope_reconcile_large, "stale-group", StalePid, stale_meta]),
+    syn_test_suite_helper:assert_wait(
+        [{StalePid, stale_meta}],
+        fun() -> syn:members(scope_reconcile_large, "stale-group") end
+    ),
+
+    %% a single process in every group is enough: the pid table is keyed on {Pid, GroupName},
+    %% so this costs the same as one process per group
+    Pid = syn_test_suite_helper:start_process(SlaveNode1),
+    EntryCount = 10000,
+    GroupNames = [{group, I} || I <- lists:seq(1, EntryCount)],
+    lists:foreach(fun(GroupName) ->
+        add_to_local_table(scope_reconcile_large, GroupName, Pid, meta, 1, undefined)
+    end, GroupNames),
+
+    %% the last membership carries a new meta, so that waiting for it means the whole snapshot was applied
+    LastGroupName = lists:last(GroupNames),
+    Snapshot = [{GroupName, Pid, meta, 2} || GroupName <- lists:droplast(GroupNames)]
+        ++ [{LastGroupName, Pid, applied_meta, 2}],
+
+    RemoteScopePid = rpc:call(SlaveNode1, erlang, whereis, [syn_pg_scope_reconcile_large]),
+    true = is_pid(RemoteScopePid),
+    ScopePid = whereis(syn_pg_scope_reconcile_large),
+    {reductions, ReductionsBefore} = erlang:process_info(ScopePid, reductions),
+
+    ScopePid ! {'3.0', ack_sync, RemoteScopePid, Snapshot},
+
+    syn_test_suite_helper:assert_wait(
+        [{Pid, applied_meta}],
+        fun() -> syn:members(scope_reconcile_large, LastGroupName) end
+    ),
+    {reductions, ReductionsAfter} = erlang:process_info(ScopePid, reductions),
+    Reductions = ReductionsAfter - ReductionsBefore,
+    ct:pal("reconciled and applied a snapshot of ~p memberships in ~p reductions", [EntryCount, Reductions]),
+
+    %% the stale membership is gone and nothing else was dropped
+    [] = syn:members(scope_reconcile_large, "stale-group"),
+    EntryCount = syn:group_count(scope_reconcile_large, SlaveNode1),
+
+    %% applying the snapshot is a few dozen reductions per membership, a quadratic reconciliation
+    %% adds about EntryCount / 2 per membership: keep EntryCount well above 2x the bound or this
+    %% stops catching it
+    case Reductions < EntryCount * 200 of
+        true -> ok;
+        false -> ct:fail("reconciliation took ~p reductions for ~p memberships", [Reductions, EntryCount])
+    end.
 
 %% ===================================================================
 %% Internal

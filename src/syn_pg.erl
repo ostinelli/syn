@@ -690,20 +690,26 @@ reconcile_remote_pg_snapshot(Node, PgTuplesOfRemoteNode, #state{
     table_by_name = TableByName,
     table_by_pid = TableByPid
 }) ->
-    SnapshotKeys = ordsets:from_list([{GroupName, Pid} || {GroupName, Pid, _Meta, _Time} <- PgTuplesOfRemoteNode]),
-    ExistingTuples = get_pg_tuples_for_node(Node, TableByName),
-    lists:foreach(fun({GroupName, Pid, Meta, _Time}) ->
-        case ordsets:is_element({GroupName, Pid}, SnapshotKeys) of
-            true ->
-                ok;
+    case get_pg_tuples_for_node(Node, TableByName) of
+        [] ->
+            ok;
 
-            false ->
-                remove_from_local_table(GroupName, Pid, TableByName, TableByPid),
-                syn_event_handler:call_event_handler(on_process_left,
-                    [Scope, GroupName, Pid, Meta, {syn_remote_scope_node_up, Scope, Node}]
-                )
-        end
-    end, ExistingTuples).
+        ExistingTuples ->
+            %% gb_sets compares with == like the ordered_set tables do, so 1 and 1.0 are the same group here too
+            SnapshotKeys = gb_sets:from_list([{GroupName, Pid} || {GroupName, Pid, _Meta, _Time} <- PgTuplesOfRemoteNode]),
+            lists:foreach(fun({GroupName, Pid, Meta, _Time}) ->
+                case gb_sets:is_element({GroupName, Pid}, SnapshotKeys) of
+                    true ->
+                        ok;
+
+                    false ->
+                        remove_from_local_table(GroupName, Pid, TableByName, TableByPid),
+                        syn_event_handler:call_event_handler(on_process_left,
+                            [Scope, GroupName, Pid, Meta, {syn_remote_scope_node_up, Scope, Node}]
+                        )
+                end
+            end, ExistingTuples)
+    end.
 
 -spec handle_pg_sync(
     GroupName :: term(),
