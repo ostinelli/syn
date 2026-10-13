@@ -191,8 +191,9 @@ join_or_update(Scope, GroupName, Pid, MetaOrFun) ->
             Node = node(Pid),
             case syn_gen_scope:call(?MODULE, Node, Scope, {'3.0', join_or_update_on_node, node(), GroupName, Pid, MetaOrFun}) of
                 {ok, {CallbackMethod, PreviousMeta, Meta, Time, TableByName, TableByPid}} when Node =/= node() ->
-                    %% update table on caller node immediately so that subsequent calls have an updated pg
-                    add_to_local_table(GroupName, Pid, Meta, Time, undefined, TableByName, TableByPid),
+                    %% update table on caller node immediately so that subsequent calls have an updated pg,
+                    %% marked so that a snapshot sent before this change doesn't remove it
+                    add_to_local_table(GroupName, Pid, Meta, Time, caller, TableByName, TableByPid),
                     %% callback
                     syn_event_handler:call_event_handler(CallbackMethod, [Scope, GroupName, Pid, Meta, normal]),
                     syn_event_handler:call_event_handler(CallbackMethod, [Scope, GroupName, Pid, PreviousMeta, Meta, normal]),
@@ -338,7 +339,7 @@ init(#state{
     {noreply, #state{}, timeout() | hibernate | {continue, term()}} |
     {stop, Reason :: term(), Reply :: term(), #state{}} |
     {stop, Reason :: term(), #state{}}.
-handle_call({'3.0', join_or_update_on_node, _RequesterNode, GroupName, Pid, MetaOrFun}, _From, #state{
+handle_call({'3.0', join_or_update_on_node, RequesterNode, GroupName, Pid, MetaOrFun}, _From, #state{
     table_by_name = TableByName,
     table_by_pid = TableByPid
 } = State) ->
@@ -354,7 +355,7 @@ handle_call({'3.0', join_or_update_on_node, _RequesterNode, GroupName, Pid, Meta
                         undefined -> erlang:monitor(process, Pid);  %% process is not monitored yet, create
                         MRef0 -> MRef0
                     end,
-                    do_join_on_node(GroupName, Pid, undefined, MetaOrFun, MRef, normal, on_process_joined, State);
+                    do_join_on_node(GroupName, Pid, undefined, MetaOrFun, MRef, normal, RequesterNode, on_process_joined, State);
 
                 {{_, _}, TableMeta, _, MRef, _} when is_function(MetaOrFun) ->
                     %% update with fun
@@ -363,7 +364,7 @@ handle_call({'3.0', join_or_update_on_node, _RequesterNode, GroupName, Pid, Meta
                             {reply, {noop, TableMeta}, State};
 
                         Meta ->
-                            do_join_on_node(GroupName, Pid, TableMeta, Meta, MRef, normal, on_group_process_updated, State)
+                            do_join_on_node(GroupName, Pid, TableMeta, Meta, MRef, normal, RequesterNode, on_group_process_updated, State)
 
                     catch Class:Reason:Stacktrace ->
                       ?LOG_ERROR(#{event => callback_error,
@@ -379,14 +380,14 @@ handle_call({'3.0', join_or_update_on_node, _RequesterNode, GroupName, Pid, Meta
 
                 {{_, _}, TableMeta, _, MRef, _} ->
                     %% re-joined with different meta
-                    do_join_on_node(GroupName, Pid, TableMeta, MetaOrFun, MRef, normal, on_group_process_updated, State)
+                    do_join_on_node(GroupName, Pid, TableMeta, MetaOrFun, MRef, normal, RequesterNode, on_group_process_updated, State)
             end;
 
         false ->
             {reply, {error, not_alive}, State}
     end;
 
-handle_call({'3.0', leave_on_node, _RequesterNode, GroupName, Pid}, _From, #state{
+handle_call({'3.0', leave_on_node, RequesterNode, GroupName, Pid}, _From, #state{
     scope = Scope,
     table_by_name = TableByName,
     table_by_pid = TableByPid
@@ -402,9 +403,8 @@ handle_call({'3.0', leave_on_node, _RequesterNode, GroupName, Pid}, _From, #stat
             remove_from_local_table(GroupName, Pid, TableByName, TableByPid),
             %% callback
             syn_event_handler:call_event_handler(on_process_left, [Scope, GroupName, Pid, Meta, normal]),
-            %% broadcast to the requester too: an older snapshot we sent it may still be sitting in its
-            %% scope's queue, and would undo the change it just made to its own table
-            syn_gen_scope:broadcast({'3.0', sync_leave, GroupName, Pid, Meta, normal}, State),
+            %% broadcast
+            syn_gen_scope:broadcast({'3.0', sync_leave, GroupName, Pid, Meta, normal}, [RequesterNode], State),
             %% return
             {reply, {ok, {Meta, TableByPid}}, State}
     end;
@@ -548,6 +548,7 @@ do_rebuild_monitors([{GroupName, Pid, Meta, Time} | T], NewMRefs, Scope, TableBy
     Meta :: term(),
     MRef :: reference() | undefined,
     Reason :: term(),
+    RequesterNode :: node(),
     CallbackMethod :: atom(),
     #state{}
 ) ->
@@ -563,7 +564,7 @@ do_rebuild_monitors([{GroupName, Pid, Meta, Time} | T], NewMRefs, Scope, TableBy
         }},
         #state{}
     }.
-do_join_on_node(GroupName, Pid, PreviousMeta, Meta, MRef, Reason, CallbackMethod, #state{
+do_join_on_node(GroupName, Pid, PreviousMeta, Meta, MRef, Reason, RequesterNode, CallbackMethod, #state{
     scope = Scope,
     table_by_name = TableByName,
     table_by_pid = TableByPid
@@ -574,9 +575,8 @@ do_join_on_node(GroupName, Pid, PreviousMeta, Meta, MRef, Reason, CallbackMethod
     %% callback
     syn_event_handler:call_event_handler(CallbackMethod, [Scope, GroupName, Pid, Meta, Reason]),
     syn_event_handler:call_event_handler(CallbackMethod, [Scope, GroupName, Pid, PreviousMeta, Meta, normal]),
-    %% broadcast to the requester too: an older snapshot we sent it may still be sitting in its
-    %% scope's queue, and would undo the change it just made to its own table
-    syn_gen_scope:broadcast({'3.0', sync_join, GroupName, Pid, Meta, Time, Reason}, State),
+    %% broadcast
+    syn_gen_scope:broadcast({'3.0', sync_join, GroupName, Pid, Meta, Time, Reason}, [RequesterNode], State),
     %% return
     {reply, {ok, {CallbackMethod, PreviousMeta, Meta, Time, TableByName, TableByPid}}, State}.
 
@@ -641,7 +641,7 @@ maybe_demonitor(Pid, TableByPid) ->
     Pid :: pid(),
     Meta :: term(),
     Time :: integer(),
-    MRef :: undefined | reference(),
+    MRef :: undefined | reference() | caller,
     TableByName :: atom(),
     TableByPid :: atom()
 ) -> true.
@@ -691,15 +691,21 @@ reconcile_remote_pg_snapshot(Node, PgTuplesOfRemoteNode, #state{
     table_by_name = TableByName,
     table_by_pid = TableByPid
 }) ->
-    case get_pg_tuples_for_node(Node, TableByName) of
+    ExistingEntries = ets:select(TableByName, [{
+        {{'$1', '$2'}, '$3', '$4', '$5', Node},
+        [],
+        [{{'$1', '$2', '$3', '$4', '$5'}}]
+    }]),
+    case ExistingEntries of
         [] ->
             ok;
 
-        ExistingTuples ->
+        _ ->
             %% gb_sets compares with == like the ordered_set tables do, so 1 and 1.0 are the same group here too
             SnapshotKeys = gb_sets:from_list([{GroupName, Pid} || {GroupName, Pid, _Meta, _Time} <- PgTuplesOfRemoteNode]),
-            lists:foreach(fun({GroupName, Pid, Meta, _Time}) ->
-                case gb_sets:is_element({GroupName, Pid}, SnapshotKeys) of
+            SnapshotTime = lists:foldl(fun({_, _, _, Time}, Acc) -> max(Time, Acc) end, 0, PgTuplesOfRemoteNode),
+            lists:foreach(fun({GroupName, Pid, Meta, Time, MRef}) ->
+                case gb_sets:is_element({GroupName, Pid}, SnapshotKeys) orelse is_newer_caller_entry(MRef, Time, SnapshotTime) of
                     true ->
                         ok;
 
@@ -709,8 +715,14 @@ reconcile_remote_pg_snapshot(Node, PgTuplesOfRemoteNode, #state{
                             [Scope, GroupName, Pid, Meta, {syn_remote_scope_node_up, Scope, Node}]
                         )
                 end
-            end, ExistingTuples)
+            end, ExistingEntries)
     end.
+
+%% an entry this node wrote itself from the reply to its own call, newer than anything in the snapshot:
+%% the snapshot may have been sent before the call was handled, so it can't know about it yet
+-spec is_newer_caller_entry(MRef :: undefined | reference() | caller, Time :: integer(), SnapshotTime :: integer()) -> boolean().
+is_newer_caller_entry(caller, Time, SnapshotTime) -> Time > SnapshotTime;
+is_newer_caller_entry(_, _, _) -> false.
 
 -spec handle_pg_sync(
     GroupName :: term(),

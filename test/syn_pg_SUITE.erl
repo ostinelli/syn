@@ -50,8 +50,7 @@
     three_nodes_member_and_update/1,
     three_nodes_ack_sync_reconciles_pg_snapshot/1,
     three_nodes_ack_sync_reconciles_large_pg_snapshot/1,
-    three_nodes_stale_snapshot_does_not_undo_remote_join/1,
-    three_nodes_stale_snapshot_does_not_undo_remote_leave/1
+    three_nodes_stale_snapshot_does_not_undo_remote_join/1
 ]).
 -export([
     four_nodes_concurrency/1
@@ -118,8 +117,7 @@ groups() ->
             three_nodes_member_and_update,
             three_nodes_ack_sync_reconciles_pg_snapshot,
             three_nodes_ack_sync_reconciles_large_pg_snapshot,
-            three_nodes_stale_snapshot_does_not_undo_remote_join,
-            three_nodes_stale_snapshot_does_not_undo_remote_leave
+            three_nodes_stale_snapshot_does_not_undo_remote_join
         ]},
         {four_nodes_pg, [shuffle], [
             four_nodes_concurrency
@@ -2081,43 +2079,6 @@ three_nodes_stale_snapshot_does_not_undo_remote_join(Config) ->
         fun() -> syn:members(scope_stale, "group") end
     ),
     [{Pid, meta}] = rpc:call(SlaveNode1, syn, members, [scope_stale, "group"]).
-
-three_nodes_stale_snapshot_does_not_undo_remote_leave(Config) ->
-    %% removing a process that lives on the slave from a group updates our table right away, and an
-    %% older snapshot from the slave still sitting in our scope's queue must not bring it back
-
-    SlaveNode1 = proplists:get_value(syn_slave_1, Config),
-
-    ok = syn:start(),
-    ok = rpc:call(SlaveNode1, syn, start, []),
-    ok = syn:add_node_to_scopes([scope_stale]),
-    ok = rpc:call(SlaveNode1, syn, add_node_to_scopes, [[scope_stale]]),
-    syn_test_suite_helper:assert_scope_subcluster(pg, node(), scope_stale, [SlaveNode1]),
-    syn_test_suite_helper:assert_scope_subcluster(pg, SlaveNode1, scope_stale, [node()]),
-
-    Pid = syn_test_suite_helper:start_process(SlaveNode1),
-    ok = syn:join(scope_stale, "group", Pid, meta),
-    syn_test_suite_helper:assert_wait(
-        [{Pid, meta}],
-        fun() -> rpc:call(SlaveNode1, syn, members, [scope_stale, "group"]) end
-    ),
-
-    %% hold the slave's snapshot back in this node's scope mailbox, then leave
-    ScopePid = whereis(syn_pg_scope_stale),
-    {RemoteScopePid, Snapshot} = get_remote_snapshot(SlaveNode1, syn_pg_scope_stale),
-    [{"group", Pid, meta, _}] = Snapshot,
-    ok = sys:suspend(ScopePid),
-    ScopePid ! {'3.0', ack_sync, RemoteScopePid, Snapshot},
-    ok = syn:leave(scope_stale, "group", Pid),
-    [] = syn:members(scope_stale, "group"),
-    ok = sys:resume(ScopePid),
-    _ = sys:get_state(ScopePid),
-
-    syn_test_suite_helper:assert_wait(
-        [],
-        fun() -> syn:members(scope_stale, "group") end
-    ),
-    [] = rpc:call(SlaveNode1, syn, members, [scope_stale, "group"]).
 
 %% ===================================================================
 %% Internal

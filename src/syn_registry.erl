@@ -133,19 +133,12 @@ register_or_update(Scope, Name, Pid, MetaOrFun) ->
             Node = node(Pid),
             case syn_gen_scope:call(?MODULE, Node, Scope, {'3.0', register_or_update_on_node, node(), Name, Pid, MetaOrFun}) of
                 {ok, {CallbackMethod, PreviousMeta, Meta, Time, TableByName, TableByPid}} when Node =/= node() ->
-                    case find_registry_entry_by_name(Name, TableByName) of
-                        {Name, TablePid, _, _, _, _} when TablePid =/= Pid ->
-                            %% this node has the name on another process, leave it to the sync_register
-                            %% the other node sends us too, which goes through conflict resolution
-                            ok;
-
-                        _ ->
-                            %% update table on caller node immediately so that subsequent calls have an updated registry
-                            add_to_local_table(Name, Pid, Meta, Time, undefined, TableByName, TableByPid),
-                            %% callback
-                            syn_event_handler:call_event_handler(CallbackMethod, [Scope, Name, Pid, Meta, normal]),
-                            syn_event_handler:call_event_handler(CallbackMethod, [Scope, Name, Pid, PreviousMeta, Meta, normal])
-                    end,
+                    %% update table on caller node immediately so that subsequent calls have an updated registry,
+                    %% marked so that a snapshot sent before this change doesn't remove it
+                    add_to_local_table(Name, Pid, Meta, Time, caller, TableByName, TableByPid),
+                    %% callback
+                    syn_event_handler:call_event_handler(CallbackMethod, [Scope, Name, Pid, Meta, normal]),
+                    syn_event_handler:call_event_handler(CallbackMethod, [Scope, Name, Pid, PreviousMeta, Meta, normal]),
                     %% return
                     {ok, {Pid, Meta}};
 
@@ -249,7 +242,7 @@ init(#state{
     {noreply, #state{}, timeout() | hibernate | {continue, term()}} |
     {stop, Reason :: term(), Reply :: term(), #state{}} |
     {stop, Reason :: term(), #state{}}.
-handle_call({'3.0', register_or_update_on_node, _RequesterNode, Name, Pid, MetaOrFun}, _From, #state{
+handle_call({'3.0', register_or_update_on_node, RequesterNode, Name, Pid, MetaOrFun}, _From, #state{
     table_by_name = TableByName,
     table_by_pid = TableByPid
 } = State) ->
@@ -265,7 +258,7 @@ handle_call({'3.0', register_or_update_on_node, _RequesterNode, Name, Pid, MetaO
                         undefined -> erlang:monitor(process, Pid);  %% process is not monitored yet, add
                         MRef0 -> MRef0
                     end,
-                    do_register_on_node(Name, Pid, undefined, MetaOrFun, MRef, normal, on_process_registered, State);
+                    do_register_on_node(Name, Pid, undefined, MetaOrFun, MRef, normal, RequesterNode, on_process_registered, State);
 
                 {Name, Pid, TableMeta, _, MRef, _} when is_function(MetaOrFun) ->
                     %% update with fun
@@ -274,7 +267,7 @@ handle_call({'3.0', register_or_update_on_node, _RequesterNode, Name, Pid, MetaO
                             {reply, {noop, TableMeta}, State};
 
                         Meta ->
-                            do_register_on_node(Name, Pid, TableMeta, Meta, MRef, normal, on_registry_process_updated, State)
+                            do_register_on_node(Name, Pid, TableMeta, Meta, MRef, normal, RequesterNode, on_registry_process_updated, State)
 
                     catch Class:Reason:Stacktrace ->
                               ?LOG_ERROR(#{event => callback_error,
@@ -290,7 +283,7 @@ handle_call({'3.0', register_or_update_on_node, _RequesterNode, Name, Pid, MetaO
 
                 {Name, Pid, TableMeta, _, MRef, _} ->
                     %% same pid, different meta
-                    do_register_on_node(Name, Pid, TableMeta, MetaOrFun, MRef, normal, on_registry_process_updated, State);
+                    do_register_on_node(Name, Pid, TableMeta, MetaOrFun, MRef, normal, RequesterNode, on_registry_process_updated, State);
 
                 _ ->
                     {reply, {error, taken}, State}
@@ -300,7 +293,7 @@ handle_call({'3.0', register_or_update_on_node, _RequesterNode, Name, Pid, MetaO
             {reply, {error, not_alive}, State}
     end;
 
-handle_call({'3.0', unregister_on_node, _RequesterNode, Name, Pid}, _From, #state{
+handle_call({'3.0', unregister_on_node, RequesterNode, Name, Pid}, _From, #state{
     scope = Scope,
     table_by_name = TableByName,
     table_by_pid = TableByPid
@@ -316,9 +309,8 @@ handle_call({'3.0', unregister_on_node, _RequesterNode, Name, Pid}, _From, #stat
             remove_from_local_table(Name, Pid, TableByName, TableByPid),
             %% callback
             syn_event_handler:call_event_handler(on_process_unregistered, [Scope, Name, Pid, Meta, normal]),
-            %% broadcast to the requester too: an older snapshot we sent it may still be sitting in its
-            %% scope's queue, and would undo the change it just made to its own table
-            syn_gen_scope:broadcast({'3.0', sync_unregister, Name, Pid, Meta, normal}, State),
+            %% broadcast
+            syn_gen_scope:broadcast({'3.0', sync_unregister, Name, Pid, Meta, normal}, [RequesterNode], State),
             %% return
             {reply, {ok, TableByPid}, State};
 
@@ -465,6 +457,7 @@ do_rebuild_monitors([{Name, Pid, Meta, Time} | T], NewMRefs, Scope, TableByName,
     Meta :: term(),
     MRef :: reference() | undefined,
     Reason :: term(),
+    RequesterNode :: node(),
     CallbackMethod :: atom(),
     #state{}
 ) ->
@@ -480,7 +473,7 @@ do_rebuild_monitors([{Name, Pid, Meta, Time} | T], NewMRefs, Scope, TableByName,
         }},
         #state{}
     }.
-do_register_on_node(Name, Pid, PreviousMeta, Meta, MRef, Reason, CallbackMethod, #state{
+do_register_on_node(Name, Pid, PreviousMeta, Meta, MRef, Reason, RequesterNode, CallbackMethod, #state{
     scope = Scope,
     table_by_name = TableByName,
     table_by_pid = TableByPid
@@ -491,9 +484,8 @@ do_register_on_node(Name, Pid, PreviousMeta, Meta, MRef, Reason, CallbackMethod,
     %% callback
     syn_event_handler:call_event_handler(CallbackMethod, [Scope, Name, Pid, Meta, Reason]),
     syn_event_handler:call_event_handler(CallbackMethod, [Scope, Name, Pid, PreviousMeta, Meta, normal]),
-    %% broadcast to the requester too: an older snapshot we sent it may still be sitting in its
-    %% scope's queue, and would undo the change it just made to its own table
-    syn_gen_scope:broadcast({'3.0', sync_register, Name, Pid, Meta, Time, Reason}, State),
+    %% broadcast
+    syn_gen_scope:broadcast({'3.0', sync_register, Name, Pid, Meta, Time, Reason}, [RequesterNode], State),
     %% return
     {reply, {ok, {CallbackMethod, PreviousMeta, Meta, Time, TableByName, TableByPid}}, State}.
 
@@ -554,7 +546,7 @@ maybe_demonitor(Pid, TableByPid) ->
     Pid :: pid(),
     Meta :: term(),
     Time :: integer(),
-    MRef :: undefined | reference(),
+    MRef :: undefined | reference() | caller,
     TableByName :: atom(),
     TableByPid :: atom()
 ) -> true.
@@ -624,14 +616,20 @@ reconcile_remote_registry_snapshot(Node, RegistryTuplesOfRemoteNode, #state{
     table_by_name = TableByName,
     table_by_pid = TableByPid
 }) ->
-    case get_registry_tuples_for_node(Node, TableByName) of
+    ExistingEntries = ets:select(TableByName, [{
+        {'$1', '$2', '$3', '$4', '$5', Node},
+        [],
+        [{{'$1', '$2', '$3', '$4', '$5'}}]
+    }]),
+    case ExistingEntries of
         [] ->
             ok;
 
-        ExistingTuples ->
+        _ ->
             SnapshotNames = maps:from_list([{Name, true} || {Name, _Pid, _Meta, _Time} <- RegistryTuplesOfRemoteNode]),
-            lists:foreach(fun({Name, Pid, Meta, _Time}) ->
-                case is_map_key(Name, SnapshotNames) of
+            SnapshotTime = lists:foldl(fun({_, _, _, Time}, Acc) -> max(Time, Acc) end, 0, RegistryTuplesOfRemoteNode),
+            lists:foreach(fun({Name, Pid, Meta, Time, MRef}) ->
+                case is_map_key(Name, SnapshotNames) orelse is_newer_caller_entry(MRef, Time, SnapshotTime) of
                     true ->
                         ok;
 
@@ -641,8 +639,14 @@ reconcile_remote_registry_snapshot(Node, RegistryTuplesOfRemoteNode, #state{
                             [Scope, Name, Pid, Meta, {syn_remote_scope_node_up, Scope, Node}]
                         )
                 end
-            end, ExistingTuples)
+            end, ExistingEntries)
     end.
+
+%% an entry this node wrote itself from the reply to its own call, newer than anything in the snapshot:
+%% the snapshot may have been sent before the call was handled, so it can't know about it yet
+-spec is_newer_caller_entry(MRef :: undefined | reference() | caller, Time :: integer(), SnapshotTime :: integer()) -> boolean().
+is_newer_caller_entry(caller, Time, SnapshotTime) -> Time > SnapshotTime;
+is_newer_caller_entry(_, _, _) -> false.
 
 -spec handle_registry_sync(
     Name :: term(),

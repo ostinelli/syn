@@ -33,7 +33,7 @@
     Pid :: pid(),
     Meta :: term(),
     Time :: integer(),
-    MRef :: undefined | reference(),
+    MRef :: undefined | reference() | caller,
     Node :: node()
 }.
 -type syn_registry_entry_by_pid() :: {
@@ -41,7 +41,7 @@
     Name :: term(),
     Meta :: term(),
     Time :: integer(),
-    MRef :: undefined | reference(),
+    MRef :: undefined | reference() | caller,
     Node :: node()
 }.
 -type syn_registry_tuple() :: {
@@ -57,7 +57,7 @@
     },
     Meta :: term(),
     Time :: integer(),
-    MRef :: undefined | reference(),
+    MRef :: undefined | reference() | caller,
     Node :: node()
 }.
 -type syn_pg_tuple() :: {

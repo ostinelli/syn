@@ -66,33 +66,28 @@ Fix applied in [this commit](https://github.com/ostinelli/syn/commit/7716a988592
 
 ## Calls Made From Another Node
 
-When a node registers or unregisters a process that lives on another node, the call goes to that
-other node. When the reply comes back, the calling node writes the result straight into its own
-table, so that a lookup right after the call already sees it. That write doesn't go through the
-calling node's scope process, so it isn't lined up with the messages the other node sends to it.
+The model only has nodes registering and unregistering their own processes. In the code, a node can
+also register or unregister a process that lives on another node: the call goes to that node, and when
+the reply comes back the calling node writes the result straight into its own table, so that a lookup
+right after the call already sees it. The node that handled the call doesn't send the calling node a
+`sync_register` / `sync_unregister`, since it already has the change.
 
-The model used to only have nodes registering their own processes, so it never covered this path.
-With it added, TLC finds two problems in the code as it was:
+That write doesn't go through the calling node's scope process, so it isn't lined up with what the
+other node sends to that scope. When this path was added to the model, TLC found that an older
+`ack_sync` snapshot still waiting in the calling node's scope queue could undo it:
 
-1. The node handling the call sent its `sync_register` / `sync_unregister` to everyone except the
-   caller, since the caller had already updated its own table. But an older `ack_sync` snapshot from
-   that node could still be waiting in the caller's scope queue, and when it got processed it undid
-   the caller's write: a name registered from another node got removed again, or a name unregistered
-   from another node came back. Nothing put it right until the next disconnect. The shortest trace TLC
-   finds is two nodes registering the same name on each other's processes at the same time: neither
-   hears about the other's registration, so the conflict is never resolved.
-   The fix is to send the sync message to the caller too. It goes out after any older snapshot, so it
-   always gets the last word.
-2. If the caller already had the name on a different process, the write from the reply replaced that
-   entry, so the conflict was never noticed. Now the caller leaves its table alone in that case, and
-   the `sync_register` it gets from the other node goes through conflict resolution like any other.
+- A name registered from another node got removed again when the older snapshot was reconciled.
+  This is fixed: the calling node marks what it writes from a reply, and reconciliation keeps a marked
+  entry that is newer than everything in the snapshot, since the snapshot can't know about it yet.
+  An older snapshot also can't put back an older meta for the same process anymore.
+- A name unregistered from another node can come back if the older snapshot still has it.
+- If the calling node processes a `DOWN` for the other node after writing, it drops the entry, and a
+  snapshot sent before the call won't bring it back.
+- If two nodes register the same name on each other's processes at the same time, each one writes
+  the other's process over its own entry, and the conflict is never resolved.
 
-The model assumes the caller writes the result as soon as the reply arrives, before its scope gets to
-anything the other node sent after the reply. In the code that's a couple of instructions in the
-calling process, while everything the other node sends after replying goes through its sender process
-first, so the window is tiny. The model doesn't cover it.
-
-Process groups work the same way and have the same fix. The model only covers the registry.
+The last three need the other node's updates to reach the calling node too, without the calling
+node firing its callbacks twice. They are not fixed yet, and the model doesn't cover this path.
 
 ## Running the Model Checker
 
