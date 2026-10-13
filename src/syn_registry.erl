@@ -133,8 +133,9 @@ register_or_update(Scope, Name, Pid, MetaOrFun) ->
             Node = node(Pid),
             case syn_gen_scope:call(?MODULE, Node, Scope, {'3.0', register_or_update_on_node, node(), Name, Pid, MetaOrFun}) of
                 {ok, {CallbackMethod, PreviousMeta, Meta, Time, TableByName, TableByPid}} when Node =/= node() ->
-                    %% update table on caller node immediately so that subsequent calls have an updated registry
-                    add_to_local_table(Name, Pid, Meta, Time, undefined, TableByName, TableByPid),
+                    %% update table on caller node immediately so that subsequent calls have an updated registry,
+                    %% marked so that a snapshot sent before this change doesn't remove it
+                    add_to_local_table(Name, Pid, Meta, Time, caller, TableByName, TableByPid),
                     %% callback
                     syn_event_handler:call_event_handler(CallbackMethod, [Scope, Name, Pid, Meta, normal]),
                     syn_event_handler:call_event_handler(CallbackMethod, [Scope, Name, Pid, PreviousMeta, Meta, normal]),
@@ -545,7 +546,7 @@ maybe_demonitor(Pid, TableByPid) ->
     Pid :: pid(),
     Meta :: term(),
     Time :: integer(),
-    MRef :: undefined | reference(),
+    MRef :: undefined | reference() | caller,
     TableByName :: atom(),
     TableByPid :: atom()
 ) -> true.
@@ -615,20 +616,37 @@ reconcile_remote_registry_snapshot(Node, RegistryTuplesOfRemoteNode, #state{
     table_by_name = TableByName,
     table_by_pid = TableByPid
 }) ->
-    SnapshotNames = ordsets:from_list([Name || {Name, _Pid, _Meta, _Time} <- RegistryTuplesOfRemoteNode]),
-    ExistingTuples = get_registry_tuples_for_node(Node, TableByName),
-    lists:foreach(fun({Name, Pid, Meta, _Time}) ->
-        case ordsets:is_element(Name, SnapshotNames) of
-            true ->
-                ok;
+    ExistingEntries = ets:select(TableByName, [{
+        {'$1', '$2', '$3', '$4', '$5', Node},
+        [],
+        [{{'$1', '$2', '$3', '$4', '$5'}}]
+    }]),
+    case ExistingEntries of
+        [] ->
+            ok;
 
-            false ->
-                remove_from_local_table(Name, Pid, TableByName, TableByPid),
-                syn_event_handler:call_event_handler(on_process_unregistered,
-                    [Scope, Name, Pid, Meta, {syn_remote_scope_node_up, Scope, Node}]
-                )
-        end
-    end, ExistingTuples).
+        _ ->
+            SnapshotNames = maps:from_list([{Name, true} || {Name, _Pid, _Meta, _Time} <- RegistryTuplesOfRemoteNode]),
+            SnapshotTime = lists:foldl(fun({_, _, _, Time}, Acc) -> max(Time, Acc) end, 0, RegistryTuplesOfRemoteNode),
+            lists:foreach(fun({Name, Pid, Meta, Time, MRef}) ->
+                case is_map_key(Name, SnapshotNames) orelse is_newer_caller_entry(MRef, Time, SnapshotTime) of
+                    true ->
+                        ok;
+
+                    false ->
+                        remove_from_local_table(Name, Pid, TableByName, TableByPid),
+                        syn_event_handler:call_event_handler(on_process_unregistered,
+                            [Scope, Name, Pid, Meta, {syn_remote_scope_node_up, Scope, Node}]
+                        )
+                end
+            end, ExistingEntries)
+    end.
+
+%% an entry this node wrote itself from the reply to its own call, newer than anything in the snapshot:
+%% the snapshot may have been sent before the call was handled, so it can't know about it yet
+-spec is_newer_caller_entry(MRef :: undefined | reference() | caller, Time :: integer(), SnapshotTime :: integer()) -> boolean().
+is_newer_caller_entry(caller, Time, SnapshotTime) -> Time > SnapshotTime;
+is_newer_caller_entry(_, _, _) -> false.
 
 -spec handle_registry_sync(
     Name :: term(),
@@ -650,8 +668,12 @@ handle_registry_sync(Name, Pid, Meta, Time, Reason, #state{
             %% callback
             syn_event_handler:call_event_handler(on_process_registered, [Scope, Name, Pid, Meta, Reason]);
 
+        {_, Pid, _, TableTime, _, _} when Time < TableTime ->
+            %% same pid, older data: ignore
+            ok;
+
         {_, Pid, TableMeta, _, MRef, _} ->
-            %% same pid, more recent (because it comes from the same node, which means that it's sequential)
+            %% same pid, same or more recent data
             %% maybe updated meta or time only
             add_to_local_table(Name, Pid, Meta, Time, MRef, TableByName, TableByPid),
             %% callback (call only if meta update)
@@ -746,6 +768,7 @@ resolve_conflict(Scope, Name, {Pid, Meta, Time}, {TablePid, TableMeta, TableTime
             end,
             %% callback
             syn_event_handler:call_event_handler(on_process_unregistered, [Scope, Name, TablePid, TableMeta, syn_conflict_resolution]),
-            %% broadcast to all but remote node, which will remove it during conflict resolution
-            syn_gen_scope:broadcast({'3.0', sync_unregister, Name, TablePid, TableMeta, syn_conflict_resolution}, [node(Pid)], State)
+            %% broadcast to all, remote node included: if its process died before it could see the conflict,
+            %% it has added ours from our snapshot and this removes it
+            syn_gen_scope:broadcast({'3.0', sync_unregister, Name, TablePid, TableMeta, syn_conflict_resolution}, State)
     end.

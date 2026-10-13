@@ -152,10 +152,13 @@ SyncRegister(n) ==
 ItemToRemove(n) ==
     CHOOSE r \in DOMAIN locally_registered[n][n]: TRUE
 
+\* only one unregister per name can be waiting: more would just fail with {error, undefined}, and
+\* without this limit the inbox can grow forever and the model checker never finishes
 Unregister(n) ==
     /\ Cardinality(DOMAIN locally_registered[n][n]) > 0
     /\ LET item_to_remove == ItemToRemove(n)
-        IN inbox' = [inbox EXCEPT![n] = Append(inbox[n], [action |-> "unregister_on_node", name |-> item_to_remove])]
+        IN (~\E i \in 1..Len(inbox[n]): inbox[n][i].action = "unregister_on_node" /\ inbox[n][i].name = item_to_remove)
+        /\ inbox' = [inbox EXCEPT![n] = Append(inbox[n], [action |-> "unregister_on_node", name |-> item_to_remove])]
     /\ time' = time
     /\ UNCHANGED <<registered, locally_registered, visible_nodes, known_nodes, disconnections, names>>
 

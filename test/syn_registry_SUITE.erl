@@ -49,10 +49,14 @@
     three_nodes_update/1,
     three_nodes_ack_sync_reconciles_registry_snapshot/1,
     three_nodes_ack_sync_ordered_delivery/1,
+    three_nodes_ack_sync_reconciles_large_snapshot/1,
+    three_nodes_stale_snapshot_does_not_undo_remote_register/1,
+    three_nodes_stale_snapshot_does_not_undo_remote_update/1,
     three_nodes_ack_sync_from_unknown_node_keeps_remote/1,
     three_nodes_ack_sync_from_unknown_node_keeps_local/1,
     three_nodes_ack_sync_from_unknown_node_default_resolution/1,
-    three_nodes_ack_sync_from_unknown_node_resolution_reaches_peer/1
+    three_nodes_ack_sync_from_unknown_node_resolution_reaches_peer/1,
+    three_nodes_resolver_keeps_neither_while_process_dies/1
 ]).
 -export([
     four_nodes_concurrency/1
@@ -111,10 +115,14 @@ groups() ->
             three_nodes_update,
             three_nodes_ack_sync_reconciles_registry_snapshot,
             three_nodes_ack_sync_ordered_delivery,
+            three_nodes_ack_sync_reconciles_large_snapshot,
+            three_nodes_stale_snapshot_does_not_undo_remote_register,
+            three_nodes_stale_snapshot_does_not_undo_remote_update,
             three_nodes_ack_sync_from_unknown_node_keeps_remote,
             three_nodes_ack_sync_from_unknown_node_keeps_local,
             three_nodes_ack_sync_from_unknown_node_default_resolution,
-            three_nodes_ack_sync_from_unknown_node_resolution_reaches_peer
+            three_nodes_ack_sync_from_unknown_node_resolution_reaches_peer,
+            three_nodes_resolver_keeps_neither_while_process_dies
         ]},
         {four_nodes_registry, [shuffle], [
             four_nodes_concurrency
@@ -1730,13 +1738,14 @@ three_nodes_ack_sync_ordered_delivery(Config) ->
     syn_test_suite_helper:connect_node(SlaveNode1),
     syn_test_suite_helper:assert_scope_subcluster(registry,node(), scope_order, [SlaveNode1]),
 
-    %% stop tracing
-    erlang:trace(SenderPid, false, ['receive']),
-
     %% verify that sender_loop received a {send_single, ...} message containing ack_sync.
     %% this proves ack_sync is routed through sender_loop (the fix), ensuring FIFO
     %% ordering with sync_register/sync_unregister broadcasts.
-    true = check_trace_for_ack_sync_via_sender().
+    true = check_trace_for_ack_sync_via_sender(),
+
+    %% stop tracing after the check: the node can show up in the subcluster
+    %% before the sender has received the queued ack_sync
+    erlang:trace(SenderPid, false, ['receive']).
 
 three_nodes_ack_sync_reconciles_registry_snapshot(Config) ->
     %% ack_sync contains a full snapshot for the remote node at its FIFO point.
@@ -1786,6 +1795,157 @@ three_nodes_ack_sync_reconciles_registry_snapshot(Config) ->
         {on_process_registered, LocalNode, scope_reconcile, "fresh-remote", FreshPid, fresh_meta,
             {syn_remote_scope_node_up, scope_reconcile, SlaveNode1}}
     ]).
+
+three_nodes_ack_sync_reconciles_large_snapshot(Config) ->
+    %% Reconciliation checks every entry already held for the remote node against the
+    %% names in the incoming snapshot. A list based membership test makes that check
+    %% quadratic, which blocks the scope process (and every registration on this node) when
+    %% an ack_sync comes in while we still hold that peer's entries, e.g. when a node that
+    %% connects during scope startup gets discovered twice.
+    %% The cost is asserted in reductions so that the bound does not depend on the machine.
+
+    SlaveNode1 = proplists:get_value(syn_slave_1, Config),
+
+    ok = syn:start(),
+    ok = rpc:call(SlaveNode1, syn, start, []),
+    ok = syn:add_node_to_scopes([scope_reconcile_large]),
+    ok = rpc:call(SlaveNode1, syn, add_node_to_scopes, [[scope_reconcile_large]]),
+
+    syn_test_suite_helper:assert_scope_subcluster(registry, node(), scope_reconcile_large, [SlaveNode1]),
+    syn_test_suite_helper:assert_scope_subcluster(registry, SlaveNode1, scope_reconcile_large, [node()]),
+
+    EntryCount = 10000,
+    %% every name is held by its own process, the way a registry of this size looks in practice.
+    %% Putting all the names on one pid would instead measure the per pid ets bag, which is a
+    %% different cost and not the one under test here.
+    %% They are all linked to a single owner on the slave, so killing the owner kills them all.
+    TestPid = self(),
+    OwnerPid = syn_test_suite_helper:start_process(SlaveNode1, fun() ->
+        Pids = [spawn_link(fun syn_test_suite_helper:process_main/0) || _ <- lists:seq(0, EntryCount)],
+        TestPid ! {entry_pids, self(), Pids},
+        syn_test_suite_helper:process_main()
+    end),
+    try
+        [StalePid | EntryPids] = receive
+            {entry_pids, OwnerPid, Pids} -> Pids
+        after 5000 ->
+            ct:fail("entry processes were not started on ~p", [SlaveNode1])
+        end,
+
+        %% the slave replies to discovery with its own (empty) ack_sync, which would wipe the entries
+        %% added below if it got here after them. A register on the slave goes out right behind it
+        %% through the same sender, so once we see it here we're good.
+        %% The snapshot below doesn't include this name, so reconciliation has to remove it.
+        ok = rpc:call(SlaveNode1, syn, register, [scope_reconcile_large, "stale-remote", StalePid, stale_meta]),
+        syn_test_suite_helper:assert_wait(
+            {StalePid, stale_meta},
+            fun() -> syn:lookup(scope_reconcile_large, "stale-remote") end
+        ),
+
+        Entries = lists:zip([{name, I} || I <- lists:seq(1, EntryCount)], EntryPids),
+        lists:foreach(fun({Name, Pid}) ->
+            add_to_local_table(scope_reconcile_large, Name, Pid, meta, 1, undefined)
+        end, Entries),
+
+        %% the last entry carries a new meta, so that waiting for it means the whole snapshot was applied
+        {LastName, LastPid} = lists:last(Entries),
+        Snapshot = [{Name, Pid, meta, 2} || {Name, Pid} <- lists:droplast(Entries)]
+            ++ [{LastName, LastPid, applied_meta, 2}],
+
+        RemoteScopePid = rpc:call(SlaveNode1, erlang, whereis, [syn_registry_scope_reconcile_large]),
+        true = is_pid(RemoteScopePid),
+        ScopePid = whereis(syn_registry_scope_reconcile_large),
+        {reductions, ReductionsBefore} = erlang:process_info(ScopePid, reductions),
+
+        ScopePid ! {'3.0', ack_sync, RemoteScopePid, Snapshot},
+
+        syn_test_suite_helper:assert_wait(
+            {LastPid, applied_meta},
+            fun() -> syn:lookup(scope_reconcile_large, LastName) end
+        ),
+        {reductions, ReductionsAfter} = erlang:process_info(ScopePid, reductions),
+        Reductions = ReductionsAfter - ReductionsBefore,
+        ct:pal("reconciled and applied a snapshot of ~p entries in ~p reductions", [EntryCount, Reductions]),
+
+        %% the stale entry is gone and nothing else was dropped
+        undefined = syn:lookup(scope_reconcile_large, "stale-remote"),
+        EntryCount = syn:registry_count(scope_reconcile_large, SlaveNode1),
+
+        %% applying the snapshot is a few dozen reductions per entry, a quadratic reconciliation
+        %% adds about EntryCount / 2 per entry: keep EntryCount well above 2x the bound or this
+        %% stops catching it
+        case Reductions < EntryCount * 200 of
+            true -> ok;
+            false -> ct:fail("reconciliation took ~p reductions for ~p entries", [Reductions, EntryCount])
+        end
+    after
+        syn_test_suite_helper:kill_process(OwnerPid)
+    end.
+
+three_nodes_stale_snapshot_does_not_undo_remote_register(Config) ->
+    %% registering a process that lives on the slave updates our table right away, and an older
+    %% snapshot from the slave still sitting in our scope's queue must not undo that
+
+    SlaveNode1 = proplists:get_value(syn_slave_1, Config),
+
+    ok = syn:start(),
+    ok = rpc:call(SlaveNode1, syn, start, []),
+    ok = syn:add_node_to_scopes([scope_stale]),
+    ok = rpc:call(SlaveNode1, syn, add_node_to_scopes, [[scope_stale]]),
+    syn_test_suite_helper:assert_scope_subcluster(registry, node(), scope_stale, [SlaveNode1]),
+    syn_test_suite_helper:assert_scope_subcluster(registry, SlaveNode1, scope_stale, [node()]),
+
+    Pid = syn_test_suite_helper:start_process(SlaveNode1),
+
+    %% hold the slave's snapshot back in this node's scope mailbox, then register
+    ScopePid = whereis(syn_registry_scope_stale),
+    {RemoteScopePid, Snapshot} = get_remote_snapshot(SlaveNode1, syn_registry_scope_stale),
+    ok = sys:suspend(ScopePid),
+    ScopePid ! {'3.0', ack_sync, RemoteScopePid, Snapshot},
+    ok = syn:register(scope_stale, "proc", Pid, meta),
+    {Pid, meta} = syn:lookup(scope_stale, "proc"),
+    ok = sys:resume(ScopePid),
+    _ = sys:get_state(ScopePid),
+
+    syn_test_suite_helper:assert_wait(
+        {Pid, meta},
+        fun() -> syn:lookup(scope_stale, "proc") end
+    ),
+    {Pid, meta} = rpc:call(SlaveNode1, syn, lookup, [scope_stale, "proc"]).
+
+three_nodes_stale_snapshot_does_not_undo_remote_update(Config) ->
+    %% updating the meta of a process that lives on the slave updates our table right away, and an older
+    %% snapshot from the slave still sitting in our scope's queue must not put the old meta back
+
+    SlaveNode1 = proplists:get_value(syn_slave_1, Config),
+
+    ok = syn:start(),
+    ok = rpc:call(SlaveNode1, syn, start, []),
+    ok = syn:add_node_to_scopes([scope_stale]),
+    ok = rpc:call(SlaveNode1, syn, add_node_to_scopes, [[scope_stale]]),
+    syn_test_suite_helper:assert_scope_subcluster(registry, node(), scope_stale, [SlaveNode1]),
+    syn_test_suite_helper:assert_scope_subcluster(registry, SlaveNode1, scope_stale, [node()]),
+
+    Pid = syn_test_suite_helper:start_process(SlaveNode1),
+    ok = syn:register(scope_stale, "proc", Pid, meta),
+    syn_test_suite_helper:assert_wait(
+        {Pid, meta},
+        fun() -> rpc:call(SlaveNode1, syn, lookup, [scope_stale, "proc"]) end
+    ),
+
+    %% hold the slave's snapshot back in our scope's queue, then update
+    ScopePid = whereis(syn_registry_scope_stale),
+    {RemoteScopePid, Snapshot} = get_remote_snapshot(SlaveNode1, syn_registry_scope_stale),
+    [{"proc", Pid, meta, _}] = Snapshot,
+    ok = sys:suspend(ScopePid),
+    ScopePid ! {'3.0', ack_sync, RemoteScopePid, Snapshot},
+    {ok, {Pid, new_meta}} = syn:update_registry(scope_stale, "proc", fun(_, meta) -> new_meta end),
+    {Pid, new_meta} = syn:lookup(scope_stale, "proc"),
+    ok = sys:resume(ScopePid),
+    _ = sys:get_state(ScopePid),
+
+    {Pid, new_meta} = syn:lookup(scope_stale, "proc"),
+    {Pid, new_meta} = rpc:call(SlaveNode1, syn, lookup, [scope_stale, "proc"]).
 
 three_nodes_ack_sync_from_unknown_node_keeps_remote(Config) ->
     %% The local node sees both slaves, which cannot see each other. The name is registered
@@ -1987,6 +2147,66 @@ three_nodes_ack_sync_from_unknown_node_resolution_reaches_peer(Config) ->
         end
     ).
 
+three_nodes_resolver_keeps_neither_while_process_dies(Config) ->
+    %% the resolver keeps neither process, and the process on slave 1 dies after slave 1 sent its list
+    %% but before it reads the list of slave 2: slave 1 must not keep the process of slave 2,
+    %% since slave 2 has already dropped the name
+
+    SlaveNode1 = proplists:get_value(syn_slave_1, Config),
+    SlaveNode2 = proplists:get_value(syn_slave_2, Config),
+
+    ok = rpc:call(SlaveNode1, syn, start, []),
+    ok = rpc:call(SlaveNode2, syn, start, []),
+    rpc:call(SlaveNode1, syn, set_event_handler, [syn_test_event_handler_resolution]),
+    rpc:call(SlaveNode2, syn, set_event_handler, [syn_test_event_handler_resolution]),
+    ok = rpc:call(SlaveNode1, syn, add_node_to_scopes, [[scope_bc]]),
+    ok = rpc:call(SlaveNode2, syn, add_node_to_scopes, [[scope_bc]]),
+    syn_test_suite_helper:assert_scope_subcluster(registry, SlaveNode1, scope_bc, [SlaveNode2]),
+    syn_test_suite_helper:assert_scope_subcluster(registry, SlaveNode2, scope_bc, [SlaveNode1]),
+    ScopePid1 = rpc:call(SlaveNode1, erlang, whereis, [syn_registry_scope_bc]),
+    ScopePid2 = rpc:call(SlaveNode2, erlang, whereis, [syn_registry_scope_bc]),
+
+    %% split the slaves and register the same name on both sides
+    rpc:call(SlaveNode1, syn_test_suite_helper, disconnect_node, [SlaveNode2]),
+    syn_test_suite_helper:assert_scope_subcluster(registry, SlaveNode1, scope_bc, []),
+    syn_test_suite_helper:assert_scope_subcluster(registry, SlaveNode2, scope_bc, []),
+    TestPid = self(),
+    PidOn1 = syn_test_suite_helper:start_process(SlaveNode1),
+    PidOn2 = syn_test_suite_helper:start_process(SlaveNode2),
+    ok = rpc:call(SlaveNode1, syn, register, [scope_bc, "proc", PidOn1, {recipient, TestPid, crash}]),
+    ok = rpc:call(SlaveNode2, syn, register, [scope_bc, "proc", PidOn2, {recipient, TestPid, crash}]),
+    syn_test_suite_helper:assert_received_messages([
+        {on_process_registered, SlaveNode1, scope_bc, "proc", PidOn1, crash, normal},
+        {on_process_registered, SlaveNode2, scope_bc, "proc", PidOn2, crash, normal}
+    ]),
+
+    %% hold both scope processes with empty queues, then reconnect
+    _ = sys:get_state(ScopePid1),
+    _ = sys:get_state(ScopePid2),
+    ok = sys:suspend(ScopePid1),
+    ok = sys:suspend(ScopePid2),
+    true = rpc:call(SlaveNode1, syn_test_suite_helper, connect_node, [SlaveNode2]),
+    wait_for_message_queue_len(ScopePid1, 1),
+    wait_for_message_queue_len(ScopePid2, 1),
+
+    %% slave 2 handles its nodeup and sends its discover, which waits behind the nodeup of slave 1
+    ok = sys:resume(ScopePid2),
+    wait_for_message_queue_len(ScopePid1, 2),
+
+    %% the process on slave 1 dies, slave 1 handles that after it has answered the discover
+    syn_test_suite_helper:kill_process(PidOn1),
+    wait_for_message_queue_len(ScopePid1, 3),
+    ok = sys:resume(ScopePid1),
+
+    syn_test_suite_helper:assert_received_messages([
+        {on_process_unregistered, SlaveNode1, scope_bc, "proc", PidOn1, crash, killed},
+        {on_process_registered, SlaveNode1, scope_bc, "proc", PidOn2, crash, {syn_remote_scope_node_up, scope_bc, SlaveNode2}},
+        {on_process_unregistered, SlaveNode1, scope_bc, "proc", PidOn2, crash, syn_conflict_resolution},
+        {on_process_unregistered, SlaveNode2, scope_bc, "proc", PidOn2, crash, syn_conflict_resolution}
+    ]),
+    undefined = rpc:call(SlaveNode1, syn, lookup, [scope_bc, "proc"]),
+    undefined = rpc:call(SlaveNode2, syn, lookup, [scope_bc, "proc"]).
+
 four_nodes_concurrency(Config) ->
     %% get slaves
     SlaveNode1 = proplists:get_value(syn_slave_1, Config),
@@ -2103,6 +2323,13 @@ remove_from_local_table(Scope, Name, Pid) ->
     TableByPid = syn_backbone:get_table_name(syn_registry_by_pid, Scope),
     syn_registry:remove_from_local_table(Name, Pid, TableByName, TableByPid).
 
+%% the scope process on Node, and the data it would send in an ack_sync right now
+get_remote_snapshot(Node, ScopeProcessName) ->
+    RemoteScopePid = rpc:call(Node, erlang, whereis, [ScopeProcessName]),
+    State = rpc:call(Node, sys, get_state, [RemoteScopePid]),
+    {ok, Snapshot} = rpc:call(Node, syn_registry, get_local_data, [State]),
+    {RemoteScopePid, Snapshot}.
+
 %% Entry of Name in the registry table of Node, in the format of an ack_sync snapshot.
 get_registry_entry(Node, Scope, Name) ->
     TableByName = rpc:call(Node, syn_backbone, get_table_name, [syn_registry_by_name, Scope]),
@@ -2163,3 +2390,9 @@ join_with_ack_sync_first(Node, PeerNode, Name) ->
     PeerScopePid ! {'3.0', discover, ScopePid},
     syn_test_suite_helper:assert_scope_subcluster(registry, PeerNode, scope_all, [node(), Node]),
     ok = sys:resume(ScopePid).
+
+wait_for_message_queue_len(Pid, Len) ->
+    syn_test_suite_helper:assert_wait(
+        {message_queue_len, Len},
+        fun() -> rpc:call(node(Pid), erlang, process_info, [Pid, message_queue_len]) end
+    ).

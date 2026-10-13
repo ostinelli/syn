@@ -64,6 +64,33 @@ cleanup second. The zombie is created momentarily but immediately removed.
 
 Fix applied in [this commit](https://github.com/ostinelli/syn/commit/7716a9885924643ce84bb47cbc36b5efb891e577).
 
+## Calls Made From Another Node
+
+The model only has nodes registering and unregistering their own processes. In the code, a node can
+also register or unregister a process that lives on another node: the call goes to that node, and when
+the reply comes back the calling node writes the result straight into its own table, so that a lookup
+right after the call already sees it. The node that handled the call doesn't send the calling node a
+`sync_register` / `sync_unregister`, since it already has the change.
+
+That write doesn't go through the calling node's scope process, so it isn't lined up with what the
+other node sends to that scope. When this path was added to the model, TLC found that an older
+`ack_sync` snapshot still waiting in the calling node's scope queue could undo it:
+
+- A name registered from another node got removed again when the older snapshot was reconciled.
+  This is fixed: the calling node marks what it writes from a reply, and reconciliation keeps a marked
+  entry that is newer than everything in the snapshot, since the snapshot can't know about it yet.
+  An older snapshot also can't put back an older meta for the same process anymore.
+- A name unregistered from another node can come back if the older snapshot still has it.
+- An unregister the other node sent before the call can arrive after it, and remove the entry the call
+  just wrote for the same process.
+- If the calling node processes a `DOWN` for the other node after writing, it drops the entry, and a
+  snapshot sent before the call won't bring it back.
+- If two nodes register the same name on each other's processes at the same time, each one writes
+  the other's process over its own entry, and the conflict is never resolved.
+
+The last four need the other node's updates to reach the calling node too, without the calling
+node firing its callbacks twice. They are not fixed yet, and the model doesn't cover this path.
+
 ## Running the Model Checker
 
 Requires Java 8+:
@@ -87,6 +114,9 @@ The model starts from an already discovered, fully connected subcluster. It then
 membership loss and rediscovery through disconnect/reconnect cycles. This keeps startup
 discovery out of scope while covering the protocol races that happen after a known
 remote scope process goes down and later rejoins.
+
+A node can only have one unregister per name waiting in its inbox. More would just fail with
+`{error, undefined}`, and without that limit the inbox can grow forever, so the checker never finishes.
 
 ## Unit Tests
 

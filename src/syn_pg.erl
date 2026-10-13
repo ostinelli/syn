@@ -191,8 +191,9 @@ join_or_update(Scope, GroupName, Pid, MetaOrFun) ->
             Node = node(Pid),
             case syn_gen_scope:call(?MODULE, Node, Scope, {'3.0', join_or_update_on_node, node(), GroupName, Pid, MetaOrFun}) of
                 {ok, {CallbackMethod, PreviousMeta, Meta, Time, TableByName, TableByPid}} when Node =/= node() ->
-                    %% update table on caller node immediately so that subsequent calls have an updated pg
-                    add_to_local_table(GroupName, Pid, Meta, Time, undefined, TableByName, TableByPid),
+                    %% update table on caller node immediately so that subsequent calls have an updated pg,
+                    %% marked so that a snapshot sent before this change doesn't remove it
+                    add_to_local_table(GroupName, Pid, Meta, Time, caller, TableByName, TableByPid),
                     %% callback
                     syn_event_handler:call_event_handler(CallbackMethod, [Scope, GroupName, Pid, Meta, normal]),
                     syn_event_handler:call_event_handler(CallbackMethod, [Scope, GroupName, Pid, PreviousMeta, Meta, normal]),
@@ -640,7 +641,7 @@ maybe_demonitor(Pid, TableByPid) ->
     Pid :: pid(),
     Meta :: term(),
     Time :: integer(),
-    MRef :: undefined | reference(),
+    MRef :: undefined | reference() | caller,
     TableByName :: atom(),
     TableByPid :: atom()
 ) -> true.
@@ -690,20 +691,38 @@ reconcile_remote_pg_snapshot(Node, PgTuplesOfRemoteNode, #state{
     table_by_name = TableByName,
     table_by_pid = TableByPid
 }) ->
-    SnapshotKeys = ordsets:from_list([{GroupName, Pid} || {GroupName, Pid, _Meta, _Time} <- PgTuplesOfRemoteNode]),
-    ExistingTuples = get_pg_tuples_for_node(Node, TableByName),
-    lists:foreach(fun({GroupName, Pid, Meta, _Time}) ->
-        case ordsets:is_element({GroupName, Pid}, SnapshotKeys) of
-            true ->
-                ok;
+    ExistingEntries = ets:select(TableByName, [{
+        {{'$1', '$2'}, '$3', '$4', '$5', Node},
+        [],
+        [{{'$1', '$2', '$3', '$4', '$5'}}]
+    }]),
+    case ExistingEntries of
+        [] ->
+            ok;
 
-            false ->
-                remove_from_local_table(GroupName, Pid, TableByName, TableByPid),
-                syn_event_handler:call_event_handler(on_process_left,
-                    [Scope, GroupName, Pid, Meta, {syn_remote_scope_node_up, Scope, Node}]
-                )
-        end
-    end, ExistingTuples).
+        _ ->
+            %% gb_sets compares with == like the ordered_set tables do, so 1 and 1.0 are the same group here too
+            SnapshotKeys = gb_sets:from_list([{GroupName, Pid} || {GroupName, Pid, _Meta, _Time} <- PgTuplesOfRemoteNode]),
+            SnapshotTime = lists:foldl(fun({_, _, _, Time}, Acc) -> max(Time, Acc) end, 0, PgTuplesOfRemoteNode),
+            lists:foreach(fun({GroupName, Pid, Meta, Time, MRef}) ->
+                case gb_sets:is_element({GroupName, Pid}, SnapshotKeys) orelse is_newer_caller_entry(MRef, Time, SnapshotTime) of
+                    true ->
+                        ok;
+
+                    false ->
+                        remove_from_local_table(GroupName, Pid, TableByName, TableByPid),
+                        syn_event_handler:call_event_handler(on_process_left,
+                            [Scope, GroupName, Pid, Meta, {syn_remote_scope_node_up, Scope, Node}]
+                        )
+                end
+            end, ExistingEntries)
+    end.
+
+%% an entry this node wrote itself from the reply to its own call, newer than anything in the snapshot:
+%% the snapshot may have been sent before the call was handled, so it can't know about it yet
+-spec is_newer_caller_entry(MRef :: undefined | reference() | caller, Time :: integer(), SnapshotTime :: integer()) -> boolean().
+is_newer_caller_entry(caller, Time, SnapshotTime) -> Time > SnapshotTime;
+is_newer_caller_entry(_, _, _) -> false.
 
 -spec handle_pg_sync(
     GroupName :: term(),
