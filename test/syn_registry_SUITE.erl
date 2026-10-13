@@ -1784,8 +1784,9 @@ three_nodes_ack_sync_reconciles_registry_snapshot(Config) ->
 three_nodes_ack_sync_reconciles_large_snapshot(Config) ->
     %% Reconciliation checks every entry already held for the remote node against the
     %% names in the incoming snapshot. A list based membership test makes that check
-    %% quadratic, so a peer holding tens of thousands of names blocks the scope process
-    %% on every discovery, and every registration on this node waits behind it.
+    %% quadratic, which blocks the scope process (and every registration on this node) when
+    %% an ack_sync comes in while we still hold that peer's entries, e.g. when a node that
+    %% connects during scope startup gets discovered twice.
     %% The cost is asserted in reductions so that the bound does not depend on the machine.
 
     SlaveNode1 = proplists:get_value(syn_slave_1, Config),
@@ -1796,55 +1797,75 @@ three_nodes_ack_sync_reconciles_large_snapshot(Config) ->
     ok = rpc:call(SlaveNode1, syn, add_node_to_scopes, [[scope_reconcile_large]]),
 
     syn_test_suite_helper:assert_scope_subcluster(registry, node(), scope_reconcile_large, [SlaveNode1]),
+    syn_test_suite_helper:assert_scope_subcluster(registry, SlaveNode1, scope_reconcile_large, [node()]),
 
     EntryCount = 10000,
     %% every name is held by its own process, the way a registry of this size looks in practice.
     %% Putting all the names on one pid would instead measure the per pid ets bag, which is a
     %% different cost and not the one under test here.
-    Entries = [
-        {{name, I}, spawn(SlaveNode1, syn_test_suite_helper, process_main, [])}
-        || I <- lists:seq(1, EntryCount)
-    ],
-    lists:foreach(fun({Name, Pid}) ->
-        add_to_local_table(scope_reconcile_large, Name, Pid, meta, 1, undefined)
-    end, Entries),
-    %% an entry the snapshot does not carry, to keep checking that stale entries are removed
-    StalePid = syn_test_suite_helper:start_process(SlaveNode1),
-    add_to_local_table(scope_reconcile_large, "stale-remote", StalePid, stale_meta, 1, undefined),
+    %% They are all linked to a single owner on the slave, so killing the owner kills them all.
+    TestPid = self(),
+    OwnerPid = syn_test_suite_helper:start_process(SlaveNode1, fun() ->
+        Pids = [spawn_link(fun syn_test_suite_helper:process_main/0) || _ <- lists:seq(0, EntryCount)],
+        TestPid ! {entry_pids, self(), Pids},
+        syn_test_suite_helper:process_main()
+    end),
+    try
+        [StalePid | EntryPids] = receive
+            {entry_pids, OwnerPid, Pids} -> Pids
+        after 5000 ->
+            ct:fail("entry processes were not started on ~p", [SlaveNode1])
+        end,
 
-    %% the last entry carries a new meta, so that waiting for it means the whole snapshot was applied
-    {LastName, LastPid} = lists:last(Entries),
-    Snapshot = [{Name, Pid, meta, 2} || {Name, Pid} <- lists:droplast(Entries)]
-        ++ [{LastName, LastPid, applied_meta, 2}],
+        %% the slave replies to discovery with its own (empty) ack_sync, which would wipe the entries
+        %% added below if it got here after them. A register on the slave goes out right behind it
+        %% through the same sender, so once we see it here we're good.
+        %% The snapshot below doesn't include this name, so reconciliation has to remove it.
+        ok = rpc:call(SlaveNode1, syn, register, [scope_reconcile_large, "stale-remote", StalePid, stale_meta]),
+        syn_test_suite_helper:assert_wait(
+            {StalePid, stale_meta},
+            fun() -> syn:lookup(scope_reconcile_large, "stale-remote") end
+        ),
 
-    RemoteScopePid = rpc:call(SlaveNode1, erlang, whereis, [syn_registry_scope_reconcile_large]),
-    true = is_pid(RemoteScopePid),
-    ScopePid = whereis(syn_registry_scope_reconcile_large),
-    {reductions, ReductionsBefore} = erlang:process_info(ScopePid, reductions),
+        Entries = lists:zip([{name, I} || I <- lists:seq(1, EntryCount)], EntryPids),
+        lists:foreach(fun({Name, Pid}) ->
+            add_to_local_table(scope_reconcile_large, Name, Pid, meta, 1, undefined)
+        end, Entries),
 
-    ScopePid ! {'3.0', ack_sync, RemoteScopePid, Snapshot},
+        %% the last entry carries a new meta, so that waiting for it means the whole snapshot was applied
+        {LastName, LastPid} = lists:last(Entries),
+        Snapshot = [{Name, Pid, meta, 2} || {Name, Pid} <- lists:droplast(Entries)]
+            ++ [{LastName, LastPid, applied_meta, 2}],
 
-    syn_test_suite_helper:assert_wait(
-        {LastPid, applied_meta},
-        fun() -> syn:lookup(scope_reconcile_large, LastName) end
-    ),
-    {reductions, ReductionsAfter} = erlang:process_info(ScopePid, reductions),
-    Reductions = ReductionsAfter - ReductionsBefore,
-    ct:pal("reconciled and applied a snapshot of ~p entries in ~p reductions", [EntryCount, Reductions]),
+        RemoteScopePid = rpc:call(SlaveNode1, erlang, whereis, [syn_registry_scope_reconcile_large]),
+        true = is_pid(RemoteScopePid),
+        ScopePid = whereis(syn_registry_scope_reconcile_large),
+        {reductions, ReductionsBefore} = erlang:process_info(ScopePid, reductions),
 
-    %% the stale entry is gone and nothing else was dropped
-    undefined = syn:lookup(scope_reconcile_large, "stale-remote"),
-    EntryCount = syn:registry_count(scope_reconcile_large, SlaveNode1),
+        ScopePid ! {'3.0', ack_sync, RemoteScopePid, Snapshot},
 
-    %% linear reconciliation stays far below one thousand reductions per entry,
-    %% a quadratic one needs thousands of times more
-    case Reductions < EntryCount * 1000 of
-        true -> ok;
-        false -> ct:fail("reconciliation took ~p reductions for ~p entries", [Reductions, EntryCount])
-    end,
+        syn_test_suite_helper:assert_wait(
+            {LastPid, applied_meta},
+            fun() -> syn:lookup(scope_reconcile_large, LastName) end
+        ),
+        {reductions, ReductionsAfter} = erlang:process_info(ScopePid, reductions),
+        Reductions = ReductionsAfter - ReductionsBefore,
+        ct:pal("reconciled and applied a snapshot of ~p entries in ~p reductions", [EntryCount, Reductions]),
 
-    %% the slave node outlives this case and the group is shuffled, so the entry processes go now
-    lists:foreach(fun(Pid) -> exit(Pid, kill) end, [StalePid | [Pid || {_Name, Pid} <- Entries]]).
+        %% the stale entry is gone and nothing else was dropped
+        undefined = syn:lookup(scope_reconcile_large, "stale-remote"),
+        EntryCount = syn:registry_count(scope_reconcile_large, SlaveNode1),
+
+        %% applying the snapshot is a few dozen reductions per entry, a quadratic reconciliation
+        %% adds about EntryCount / 2 per entry: keep EntryCount well above 2x the bound or this
+        %% stops catching it
+        case Reductions < EntryCount * 200 of
+            true -> ok;
+            false -> ct:fail("reconciliation took ~p reductions for ~p entries", [Reductions, EntryCount])
+        end
+    after
+        syn_test_suite_helper:kill_process(OwnerPid)
+    end.
 
 four_nodes_concurrency(Config) ->
     %% get slaves
