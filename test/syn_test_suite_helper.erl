@@ -43,6 +43,7 @@
 
 %% internal
 -export([process_main/0]).
+-export([erase_scope_event_handlers/0]).
 
 %% macro
 -define(DEFAULT_WAIT_TIMEOUT, 5000).
@@ -139,6 +140,9 @@ clean_after_test() ->
         rpc:call(Node, application, unset_env, [syn, event_handler]),
         rpc:call(Node, application, unset_env, [syn, strict_mode]),
         rpc:call(Node, application, unset_env, [syn, scopes]),
+        rpc:call(Node, application, unset_env, [syn, scope_event_handlers]),
+        %% clean scope event handlers (persistent terms survive the application stop)
+        rpc:call(Node, syn_test_suite_helper, erase_scope_event_handlers, []),
         %% messages
         flush_inbox()
     end, Nodes).
@@ -334,6 +338,12 @@ process_main() ->
         _ ->
             process_main()
     end.
+
+erase_scope_event_handlers() ->
+    lists:foreach(fun
+        ({{syn_event_handler, _} = Key, _}) -> persistent_term:erase(Key);
+        (_) -> ok
+    end, persistent_term:get()).
 
 do_assert_scope_subcluster(Type, Node, Scope, ExpectedNodes) ->
     do_assert_scope_subcluster(Type, Node, Scope, ExpectedNodes, os:system_time(millisecond)).

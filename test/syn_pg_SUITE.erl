@@ -33,7 +33,8 @@
 
 %% tests
 -export([
-    one_node_strict_mode/1
+    one_node_strict_mode/1,
+    one_node_scope_event_handler_joined_left/1
 ]).
 -export([
     two_nodes_member_count/1
@@ -98,7 +99,8 @@ all() ->
 groups() ->
     [
         {one_node_pg, [shuffle], [
-            one_node_strict_mode
+            one_node_strict_mode,
+            one_node_scope_event_handler_joined_left
         ]},
         {two_nodes_pg, [shuffle], [
             two_nodes_member_count
@@ -222,6 +224,38 @@ one_node_strict_mode(_Config) ->
     ok = syn:join(scope, "strict", Self),
     [{Self, undefined}] = syn:members(scope, "strict"),
     ok = syn:leave(scope, "strict", Self).
+
+one_node_scope_event_handler_joined_left(_Config) ->
+    %% start syn
+    ok = syn:start(),
+
+    %% node-wide handler, and an own handler for one scope
+    ok = syn:set_event_handler(syn_test_event_handler_callbacks),
+    ok = syn:set_event_handler(scope_with_handler, syn_test_event_handler_scope_callbacks),
+    ok = syn:add_node_to_scopes([scope_with_handler, scope_without_handler]),
+
+    %% init
+    LocalNode = node(),
+    Pid = syn_test_suite_helper:start_process(),
+
+    %% join, update & leave in both scopes
+    %% (the scope handler does not implement the update callbacks, the node-wide handler does)
+    ok = syn:join(scope_with_handler, "group-handler", Pid, {recipient, self(), <<"meta">>}),
+    ok = syn:join(scope_without_handler, "group-handler", Pid, {recipient, self(), <<"meta">>}),
+    ok = syn:join(scope_with_handler, "group-handler", Pid, {recipient, self(), <<"new-meta">>}),
+    ok = syn:join(scope_without_handler, "group-handler", Pid, {recipient, self(), <<"new-meta">>}),
+    ok = syn:leave(scope_with_handler, "group-handler", Pid),
+    ok = syn:leave(scope_without_handler, "group-handler", Pid),
+
+    %% check that each scope's callbacks reach only one handler
+    syn_test_suite_helper:assert_received_messages([
+        {on_process_joined, syn_test_event_handler_scope_callbacks, LocalNode, scope_with_handler, "group-handler", Pid, <<"meta">>, normal},
+        {on_process_left, syn_test_event_handler_scope_callbacks, LocalNode, scope_with_handler, "group-handler", Pid, <<"new-meta">>, normal},
+        {on_process_joined, LocalNode, scope_without_handler, "group-handler", Pid, <<"meta">>, normal},
+        {on_group_process_updated, LocalNode, scope_without_handler, "group-handler", Pid, <<"new-meta">>, normal},
+        {on_group_process_updated, LocalNode, scope_without_handler, "group-handler", Pid, <<"meta">>, <<"new-meta">>, normal},
+        {on_process_left, LocalNode, scope_without_handler, "group-handler", Pid, <<"new-meta">>, normal}
+    ]).
 
 two_nodes_member_count(Config) ->
     %% get slave
