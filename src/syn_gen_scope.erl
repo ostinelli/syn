@@ -234,22 +234,26 @@ handle_info({'3.0', ack_sync, RemoteScopePid, Data}, #state{
     RemoteScopeNode = node(RemoteScopePid),
     ?LOG_NOTICE(#{handler => HandlerLogName, scope => Scope,
                  event => ack_sync, from => RemoteScopeNode, entries => length(Data)}),
-    %% save remote data
-    Handler:save_remote_data(RemoteScopeNode, Data, State),
     %% is this a new node?
     case maps:is_key(RemoteScopeNode, NodesMap) of
         true ->
-            %% already known
+            %% already known, save remote data
+            Handler:save_remote_data(RemoteScopeNode, Data, State),
             {noreply, State};
 
         false ->
             %% monitor
             _MRef = monitor(process, RemoteScopePid),
-            %% send local to remote (ordered to maintain FIFO with broadcasts)
-            {ok, LocalData} = Handler:get_local_data(State),
-            send_to_node(RemoteScopeNode, {'3.0', ack_sync, self(), LocalData}, State),
+            State1 = State#state{nodes_map = NodesMap#{RemoteScopeNode => RemoteScopePid}},
+            %% add to subcluster and send local data to remote before saving remote data,
+            %% so that the snapshot keeps the entries a conflict resolution may remove
+            %% and the broadcasts of the resolution reach the remote node after it (FIFO)
+            {ok, LocalData} = Handler:get_local_data(State1),
+            send_to_node(RemoteScopeNode, {'3.0', ack_sync, self(), LocalData}, State1),
+            %% save remote data
+            Handler:save_remote_data(RemoteScopeNode, Data, State1),
             %% return
-            {noreply, State#state{nodes_map = NodesMap#{RemoteScopeNode => RemoteScopePid}}}
+            {noreply, State1}
     end;
 
 handle_info({'DOWN', MRef, process, Pid, Reason}, #state{
