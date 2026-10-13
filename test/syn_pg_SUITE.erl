@@ -1942,11 +1942,19 @@ three_nodes_ack_sync_reconciles_pg_snapshot(Config) ->
     ok = rpc:call(SlaveNode1, syn, add_node_to_scopes, [[scope_reconcile]]),
 
     syn_test_suite_helper:assert_scope_subcluster(pg, node(), scope_reconcile, [SlaveNode1]),
+    syn_test_suite_helper:assert_scope_subcluster(pg, SlaveNode1, scope_reconcile, [node()]),
 
+    %% the slave replies to discovery with its own ack_sync, which would wipe the membership injected below
+    %% if it got here after it. A join on the slave goes out right behind it through the same sender,
+    %% so once we see it here we're good.
+    %% The snapshot below doesn't include this membership, so reconciliation has to remove it.
     StalePid = syn_test_suite_helper:start_process(SlaveNode1),
     StaleMeta = {recipient, self(), stale_meta},
-    add_to_local_table(scope_reconcile, "stale-group", StalePid, StaleMeta, 1, undefined),
-    [{StalePid, StaleMeta}] = syn:members(scope_reconcile, "stale-group"),
+    ok = rpc:call(SlaveNode1, syn, join, [scope_reconcile, "stale-group", StalePid, StaleMeta]),
+    syn_test_suite_helper:assert_wait(
+        [{StalePid, StaleMeta}],
+        fun() -> syn:members(scope_reconcile, "stale-group") end
+    ),
 
     FreshPid = syn_test_suite_helper:start_process(SlaveNode1),
     FreshMeta = {recipient, self(), fresh_meta},
@@ -1973,6 +1981,7 @@ three_nodes_ack_sync_reconciles_pg_snapshot(Config) ->
         fun() -> syn:member_count(scope_reconcile, "fresh-group", SlaveNode1) end
     ),
     syn_test_suite_helper:assert_received_messages([
+        {on_process_joined, LocalNode, scope_reconcile, "stale-group", StalePid, stale_meta, normal},
         {on_process_left, LocalNode, scope_reconcile, "stale-group", StalePid, stale_meta,
             {syn_remote_scope_node_up, scope_reconcile, SlaveNode1}},
         {on_process_joined, LocalNode, scope_reconcile, "fresh-group", FreshPid, fresh_meta,
