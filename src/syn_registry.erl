@@ -615,20 +615,25 @@ reconcile_remote_registry_snapshot(Node, RegistryTuplesOfRemoteNode, #state{
     table_by_name = TableByName,
     table_by_pid = TableByPid
 }) ->
-    SnapshotNames = ordsets:from_list([Name || {Name, _Pid, _Meta, _Time} <- RegistryTuplesOfRemoteNode]),
-    ExistingTuples = get_registry_tuples_for_node(Node, TableByName),
-    lists:foreach(fun({Name, Pid, Meta, _Time}) ->
-        case ordsets:is_element(Name, SnapshotNames) of
-            true ->
-                ok;
+    case get_registry_tuples_for_node(Node, TableByName) of
+        [] ->
+            ok;
 
-            false ->
-                remove_from_local_table(Name, Pid, TableByName, TableByPid),
-                syn_event_handler:call_event_handler(on_process_unregistered,
-                    [Scope, Name, Pid, Meta, {syn_remote_scope_node_up, Scope, Node}]
-                )
-        end
-    end, ExistingTuples).
+        ExistingTuples ->
+            SnapshotNames = maps:from_list([{Name, true} || {Name, _Pid, _Meta, _Time} <- RegistryTuplesOfRemoteNode]),
+            lists:foreach(fun({Name, Pid, Meta, _Time}) ->
+                case is_map_key(Name, SnapshotNames) of
+                    true ->
+                        ok;
+
+                    false ->
+                        remove_from_local_table(Name, Pid, TableByName, TableByPid),
+                        syn_event_handler:call_event_handler(on_process_unregistered,
+                            [Scope, Name, Pid, Meta, {syn_remote_scope_node_up, Scope, Node}]
+                        )
+                end
+            end, ExistingTuples)
+    end.
 
 -spec handle_registry_sync(
     Name :: term(),
