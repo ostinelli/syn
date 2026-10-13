@@ -1724,13 +1724,14 @@ three_nodes_ack_sync_ordered_delivery(Config) ->
     syn_test_suite_helper:connect_node(SlaveNode1),
     syn_test_suite_helper:assert_scope_subcluster(registry,node(), scope_order, [SlaveNode1]),
 
-    %% stop tracing
-    erlang:trace(SenderPid, false, ['receive']),
-
     %% verify that sender_loop received a {send_single, ...} message containing ack_sync.
     %% this proves ack_sync is routed through sender_loop (the fix), ensuring FIFO
     %% ordering with sync_register/sync_unregister broadcasts.
-    true = check_trace_for_ack_sync_via_sender().
+    true = check_trace_for_ack_sync_via_sender(),
+
+    %% stop tracing after the check: the node can show up in the subcluster
+    %% before the sender has received the queued ack_sync
+    erlang:trace(SenderPid, false, ['receive']).
 
 three_nodes_ack_sync_reconciles_registry_snapshot(Config) ->
     %% ack_sync contains a full snapshot for the remote node at its FIFO point.
