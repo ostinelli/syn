@@ -81,12 +81,14 @@ other node sends to that scope. When this path was added to the model, TLC found
   entry that is newer than everything in the snapshot, since the snapshot can't know about it yet.
   An older snapshot also can't put back an older meta for the same process anymore.
 - A name unregistered from another node can come back if the older snapshot still has it.
+- An unregister the other node sent before the call can arrive after it, and remove the entry the call
+  just wrote for the same process.
 - If the calling node processes a `DOWN` for the other node after writing, it drops the entry, and a
   snapshot sent before the call won't bring it back.
 - If two nodes register the same name on each other's processes at the same time, each one writes
   the other's process over its own entry, and the conflict is never resolved.
 
-The last three need the other node's updates to reach the calling node too, without the calling
+The last four need the other node's updates to reach the calling node too, without the calling
 node firing its callbacks twice. They are not fixed yet, and the model doesn't cover this path.
 
 ## Running the Model Checker
