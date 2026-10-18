@@ -1,7 +1,7 @@
 ---- MODULE syn ----
 EXTENDS FiniteSets, Integers, Sequences, TLC
 
-CONSTANTS Nodes, Names, MaxDisconnections
+CONSTANTS Nodes, Names, MaxDisconnections, DownOvertakes
 
 Symmetry == Permutations(Nodes)
 
@@ -40,6 +40,22 @@ RegisteredOnThisNode(node) ==
 ConnectedKnownNodes(n) ==
     visible_nodes[n] \intersect known_nodes[n]
 
+\* what node o # n gets when n handles a register or unregister call: a node that made the call
+\* from elsewhere gets the reply instead of the sync message, through the same queue as everything
+\* else n sends it, as long as it can still be reached
+Outgoing(o, n, requester, reply, sync) ==
+    CASE (o = requester) -> (IF o \in visible_nodes[n] THEN Append(inbox[o], reply) ELSE inbox[o])
+    [] (o \in ConnectedKnownNodes(n)) -> Append(inbox[o], sync)
+    [] OTHER -> inbox[o]
+
+InsertAt(s, i, e) ==
+    SubSeq(s, 1, i - 1) \o <<e>> \o SubSeq(s, i, Len(s))
+
+\* where a DOWN can land in the inbox of o: at the end, or with DownOvertakes anywhere,
+\* ahead of messages the other node sent before it
+DownPositions(o) ==
+    IF DownOvertakes THEN 1..(Len(inbox[o]) + 1) ELSE {Len(inbox[o]) + 1}
+
 Init ==
     /\ inbox = [n \in Nodes |-> <<>>]
     /\ registered = [n \in Names |-> 0]
@@ -50,11 +66,13 @@ Init ==
     /\ known_nodes = [n \in Nodes |-> AllOtherNodes(n)]
     /\ time = 0
 
+\* register a process that lives on n, called from n itself or from a node that can see n
 Register(n) ==
     /\ LET available_names == names[n] \ AllRegisteredForNode(locally_registered[n])
         IN available_names # {}
-        /\ LET next_val == CHOOSE o \in available_names: TRUE
-            IN inbox' = [inbox EXCEPT![n] = Append(inbox[n], [action |-> "register_or_update_on_node", name |-> next_val])]
+        /\ \E requester \in {n} \union visible_nodes[n]:
+            LET next_val == CHOOSE o \in available_names: TRUE
+            IN inbox' = [inbox EXCEPT![n] = Append(inbox[n], [action |-> "register_or_update_on_node", name |-> next_val, requester |-> requester])]
             /\ names' = [names EXCEPT![n] = names[n] \ {next_val}]
     /\ time' = time
     /\ UNCHANGED <<registered, locally_registered, visible_nodes, known_nodes, disconnections>>
@@ -74,11 +92,10 @@ RegisterOrUpdateOnNode(n) ==
         ELSE
             registered' = [registered EXCEPT![message.name] = @ + 1]
             /\ locally_registered' = [locally_registered EXCEPT![n] = l]
-            /\ inbox' = [o \in Nodes |-> CASE
-                (o = n) -> Tail(inbox[n])
-                [] (o \in ConnectedKnownNodes(n)) -> Append(inbox[o], [action |-> "sync_register", name |-> message.name, from |-> n, time |-> time])
-                [] OTHER -> inbox[o]
-            ]
+            /\ inbox' = [o \in Nodes |-> IF o = n THEN Tail(inbox[n]) ELSE Outgoing(o, n, message.requester,
+                [action |-> "register_reply", name |-> message.name, from |-> n, time |-> time],
+                [action |-> "sync_register", name |-> message.name, from |-> n, time |-> time]
+            )]
         )
     /\ time' = time + 1
     /\ UNCHANGED <<names, visible_nodes, known_nodes, disconnections>>
@@ -122,9 +139,11 @@ MergeRegistrySnapshot(local, remote, remote_node) ==
         [] OTHER -> Merge(local[r], remote)
     ]
 
+\* the reply to a register call this node made for a process on another node is applied like a
+\* sync_register, conflict resolution included, and then the call returns
 SyncRegister(n) ==
     /\ Len(inbox[n]) > 0
-    /\ Head(inbox[n]).action = "sync_register"
+    /\ Head(inbox[n]).action \in {"sync_register", "register_reply"}
     /\ LET message == Head(inbox[n])
         known_sender == message.from \in known_nodes[n]
         conflict == message.name \in DOMAIN locally_registered[n][n]
@@ -152,13 +171,16 @@ SyncRegister(n) ==
 ItemToRemove(n) ==
     CHOOSE r \in DOMAIN locally_registered[n][n]: TRUE
 
+\* unregister a name held by a process on n, called from n itself or from a node that can see n
+\* and has the name in its own table
 \* only one unregister per name can be waiting: more would just fail with {error, undefined}, and
 \* without this limit the inbox can grow forever and the model checker never finishes
 Unregister(n) ==
-    /\ Cardinality(DOMAIN locally_registered[n][n]) > 0
-    /\ LET item_to_remove == ItemToRemove(n)
-        IN (~\E i \in 1..Len(inbox[n]): inbox[n][i].action = "unregister_on_node" /\ inbox[n][i].name = item_to_remove)
-        /\ inbox' = [inbox EXCEPT![n] = Append(inbox[n], [action |-> "unregister_on_node", name |-> item_to_remove])]
+    /\ \E requester \in {n} \union visible_nodes[n]:
+        /\ Cardinality(DOMAIN locally_registered[requester][n]) > 0
+        /\ LET item_to_remove == CHOOSE r \in DOMAIN locally_registered[requester][n]: TRUE
+            IN (~\E i \in 1..Len(inbox[n]): inbox[n][i].action = "unregister_on_node" /\ inbox[n][i].name = item_to_remove)
+            /\ inbox' = [inbox EXCEPT![n] = Append(inbox[n], [action |-> "unregister_on_node", name |-> item_to_remove, requester |-> requester])]
     /\ time' = time
     /\ UNCHANGED <<registered, locally_registered, visible_nodes, known_nodes, disconnections, names>>
 
@@ -178,18 +200,19 @@ UnregisterOnNode(n) ==
         ELSE
             registered' = [registered EXCEPT![message.name] = @ - 1]
             /\ locally_registered' = [locally_registered EXCEPT![n] = ([locally_registered[n] EXCEPT![n] = l])]
-            /\ inbox' = [o \in Nodes |-> CASE
-                (o = n) -> Tail(inbox[n])
-                [] (o \in ConnectedKnownNodes(n)) -> Append(inbox[o], [action |-> "sync_unregister", name |-> message.name, from |-> n])
-                [] OTHER -> inbox[o]
-            ]
+            /\ inbox' = [o \in Nodes |-> IF o = n THEN Tail(inbox[n]) ELSE Outgoing(o, n, message.requester,
+                [action |-> "unregister_reply", name |-> message.name, from |-> n],
+                [action |-> "sync_unregister", name |-> message.name, from |-> n]
+            )]
         )
     /\ time' = time
     /\ UNCHANGED <<names, visible_nodes, known_nodes, disconnections>>
 
+\* the reply to an unregister call this node made for a process on another node is applied like a
+\* sync_unregister, and then the call returns
 SyncUnregister(n) ==
     /\ Len(inbox[n]) > 0
-    /\ Head(inbox[n]).action = "sync_unregister"
+    /\ Head(inbox[n]).action \in {"sync_unregister", "unregister_reply"}
     /\ LET message == Head(inbox[n])
         l == [r \in (DOMAIN locally_registered[n][message.from] \ {message.name}) |-> locally_registered[n][message.from][r]]
         IN locally_registered' = [locally_registered EXCEPT![n] = [locally_registered[n] EXCEPT![message.from] = l]]
@@ -219,11 +242,12 @@ Disconnect(n) ==
             [] (o = n) -> visible_nodes[o] \ {other_node}
             [] OTHER -> visible_nodes[o]
         ]
-        /\ inbox' = [o \in Nodes |-> CASE
-            (o = n) -> Append(inbox[o], [action |-> "DOWN", from |-> other_node])
-            [] (o = other_node) -> Append(inbox[o], [action |-> "DOWN", from |-> n])
-            [] OTHER -> inbox[o]
-        ]
+        /\ \E i \in DownPositions(n), j \in DownPositions(other_node):
+            inbox' = [o \in Nodes |-> CASE
+                (o = n) -> InsertAt(inbox[o], i, [action |-> "DOWN", from |-> other_node])
+                [] (o = other_node) -> InsertAt(inbox[o], j, [action |-> "DOWN", from |-> n])
+                [] OTHER -> inbox[o]
+            ]
     /\ disconnections' = disconnections + 1
     /\ time' = time
     /\ UNCHANGED <<registered, locally_registered, known_nodes, names>>
@@ -334,6 +358,29 @@ Duplicates(keys, struct, acc) ==
         k2 == CHOOSE k \in (keys \ {k1}): TRUE
         duplicates == DOMAIN struct[k1] \intersect DOMAIN struct[k2]
         IN Duplicates(keys \ {k1}, struct, duplicates \union acc)
+
+\* when all messages are processed and all nodes are connected, every node has each name on the
+\* node that actually runs it
+ViewsMatchOwners ==
+    (\A o \in Nodes: Len(inbox[o]) = 0) /\ (\A n \in Nodes: visible_nodes[n] = AllOtherNodes(n)) =>
+        \A n, o \in Nodes: DOMAIN locally_registered[n][o] = DOMAIN locally_registered[o][o]
+
+\* n's scope handles the reply to a register call n made for a process on another node
+RegisterReplyHandled(n) ==
+    /\ Len(inbox[n]) > 0
+    /\ Head(inbox[n]).action = "register_reply"
+    /\ inbox'[n] = Tail(inbox[n])
+
+\* the call returns ok if n now has the name on that node, or if n doesn't know that node yet and so
+\* doesn't apply the reply; otherwise n resolved a clash against it and the call returns race_condition
+RemoteRegisterOk(n) ==
+    LET message == Head(inbox[n])
+    IN message.from \notin known_nodes[n] \/ message.name \in DOMAIN locally_registered'[n][message.from]
+
+\* a register call made for a process on another node that returns ok has the name in the caller's table
+ReadYourWrites ==
+    [][\A n \in Nodes: RegisterReplyHandled(n) /\ RemoteRegisterOk(n) =>
+        Head(inbox[n]).name \in DOMAIN locally_registered'[n][Head(inbox[n]).from]]_vars
 
 ThereCanBeOnlyOne ==
     \A n \in Nodes:

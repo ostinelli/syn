@@ -131,29 +131,59 @@ register_or_update(Scope, Name, Pid, MetaOrFun) ->
 
         _ ->
             Node = node(Pid),
-            case syn_gen_scope:call(?MODULE, Node, Scope, {'3.0', register_or_update_on_node, node(), Name, Pid, MetaOrFun}) of
-                {ok, {CallbackMethod, PreviousMeta, Meta, Time, TableByName, TableByPid}} when Node =/= node() ->
-                    %% update table on caller node immediately so that subsequent calls have an updated registry,
-                    %% marked so that a snapshot sent before this change doesn't remove it
-                    add_to_local_table(Name, Pid, Meta, Time, caller, TableByName, TableByPid),
-                    %% callback
-                    syn_event_handler:call_event_handler(CallbackMethod, [Scope, Name, Pid, Meta, normal]),
-                    syn_event_handler:call_event_handler(CallbackMethod, [Scope, Name, Pid, PreviousMeta, Meta, normal]),
-                    %% return
-                    {ok, {Pid, Meta}};
-
-                {ok, {_, _, Meta, _, _, _}} ->
-                    {ok, {Pid, Meta}};
-
-                {noop, Meta} ->
-                    {ok, {Pid, Meta}};
-
-                {error, Reason} ->
-                    {error, Reason};
-
-                {raise, Class, Reason, Stacktrace} ->
-                    erlang:raise(Class, Reason, Stacktrace)
+            case Node =/= node() andalso not syn_gen_scope:is_scope_process(?MODULE, Scope) of
+                true -> register_or_update_ordered(Scope, Node, Name, Pid, MetaOrFun);
+                false -> register_or_update_direct(Scope, Node, Name, Pid, MetaOrFun)
             end
+    end.
+
+%% the scope process of this node applies the result, in order with everything else the process' node sends it,
+%% and replies once it has: a lookup on this node right after the call sees it
+-spec register_or_update_ordered(Scope :: atom(), Node :: node(), Name :: term(), Pid :: pid(), MetaOrFun :: term() | function()) ->
+    {ok, {Pid :: pid(), Meta :: term()}} | {error, Reason :: term()}.
+register_or_update_ordered(Scope, Node, Name, Pid, MetaOrFun) ->
+    case syn_gen_scope:call(?MODULE, Node, Scope, {'3.0', register_or_update_on_node_ordered, node(), Name, Pid, MetaOrFun}) of
+        {ok, {Pid, Meta}} ->
+            {ok, {Pid, Meta}};
+
+        {error, Reason} ->
+            {error, Reason};
+
+        {raise, Class, Reason, Stacktrace} ->
+            erlang:raise(Class, Reason, Stacktrace);
+
+        undefined ->
+            %% the process' node runs a version that doesn't know this call
+            register_or_update_direct(Scope, Node, Name, Pid, MetaOrFun)
+    end.
+
+%% the process' node replies to the caller directly: used for local processes, from the scope process itself
+%% (which can't wait for its own reply) and with nodes that don't know the ordered call
+-spec register_or_update_direct(Scope :: atom(), Node :: node(), Name :: term(), Pid :: pid(), MetaOrFun :: term() | function()) ->
+    {ok, {Pid :: pid(), Meta :: term()}} | {error, Reason :: term()}.
+register_or_update_direct(Scope, Node, Name, Pid, MetaOrFun) ->
+    case syn_gen_scope:call(?MODULE, Node, Scope, {'3.0', register_or_update_on_node, node(), Name, Pid, MetaOrFun}) of
+        {ok, {CallbackMethod, PreviousMeta, Meta, Time, TableByName, TableByPid}} when Node =/= node() ->
+            %% update table on caller node immediately so that subsequent calls have an updated registry,
+            %% marked so that a snapshot sent before this change doesn't remove it
+            add_to_local_table(Name, Pid, Meta, Time, caller, TableByName, TableByPid),
+            %% callback
+            syn_event_handler:call_event_handler(CallbackMethod, [Scope, Name, Pid, Meta, normal]),
+            syn_event_handler:call_event_handler(CallbackMethod, [Scope, Name, Pid, PreviousMeta, Meta, normal]),
+            %% return
+            {ok, {Pid, Meta}};
+
+        {ok, {_, _, Meta, _, _, _}} ->
+            {ok, {Pid, Meta}};
+
+        {noop, Meta} ->
+            {ok, {Pid, Meta}};
+
+        {error, Reason} ->
+            {error, Reason};
+
+        {raise, Class, Reason, Stacktrace} ->
+            erlang:raise(Class, Reason, Stacktrace)
     end.
 
 -spec unregister(Scope :: atom(), Name :: term()) -> ok | {error, Reason :: term()}.
@@ -170,22 +200,45 @@ unregister(Scope, Name) ->
 
                 {Name, Pid, Meta, _, _, _} ->
                     Node = node(Pid),
-                    case syn_gen_scope:call(?MODULE, Node, Scope, {'3.0', unregister_on_node, node(), Name, Pid}) of
-                        {ok, TableByPid} when Node =/= node() ->
-                            %% remove table on caller node immediately so that subsequent calls have an updated registry
-                            remove_from_local_table(Name, Pid, TableByName, TableByPid),
-                            %% callback
-                            syn_event_handler:call_event_handler(on_process_unregistered, [Scope, Name, Pid, Meta, normal]),
-                            %% return
-                            ok;
-
-                        {ok, _} ->
-                            ok;
-
-                        {error, Reason} ->
-                            {error, Reason}
+                    case Node =/= node() andalso not syn_gen_scope:is_scope_process(?MODULE, Scope) of
+                        true -> unregister_ordered(Scope, Node, Name, Pid, Meta, TableByName);
+                        false -> unregister_direct(Scope, Node, Name, Pid, Meta, TableByName)
                     end
             end
+    end.
+
+-spec unregister_ordered(Scope :: atom(), Node :: node(), Name :: term(), Pid :: pid(), Meta :: term(), TableByName :: atom()) ->
+    ok | {error, Reason :: term()}.
+unregister_ordered(Scope, Node, Name, Pid, Meta, TableByName) ->
+    case syn_gen_scope:call(?MODULE, Node, Scope, {'3.0', unregister_on_node_ordered, node(), Name, Pid}) of
+        ok ->
+            ok;
+
+        {error, Reason} ->
+            {error, Reason};
+
+        undefined ->
+            %% the process' node runs a version that doesn't know this call
+            unregister_direct(Scope, Node, Name, Pid, Meta, TableByName)
+    end.
+
+-spec unregister_direct(Scope :: atom(), Node :: node(), Name :: term(), Pid :: pid(), Meta :: term(), TableByName :: atom()) ->
+    ok | {error, Reason :: term()}.
+unregister_direct(Scope, Node, Name, Pid, Meta, TableByName) ->
+    case syn_gen_scope:call(?MODULE, Node, Scope, {'3.0', unregister_on_node, node(), Name, Pid}) of
+        {ok, TableByPid} when Node =/= node() ->
+            %% remove table on caller node immediately so that subsequent calls have an updated registry
+            remove_from_local_table(Name, Pid, TableByName, TableByPid),
+            %% callback
+            syn_event_handler:call_event_handler(on_process_unregistered, [Scope, Name, Pid, Meta, normal]),
+            %% return
+            ok;
+
+        {ok, _} ->
+            ok;
+
+        {error, Reason} ->
+            {error, Reason}
     end.
 
 -spec count(Scope :: atom()) -> non_neg_integer().
@@ -246,77 +299,50 @@ handle_call({'3.0', register_or_update_on_node, RequesterNode, Name, Pid, MetaOr
     table_by_name = TableByName,
     table_by_pid = TableByPid
 } = State) ->
-    case is_process_alive(Pid) of
-        true ->
-            case find_registry_entry_by_name(Name, TableByName) of
-                undefined when is_function(MetaOrFun) ->
-                    {reply, {error, undefined}, State};
+    case register_or_update_on_node(RequesterNode, Name, Pid, MetaOrFun, State) of
+        {ok, {CallbackMethod, PreviousMeta, Meta, Time}} ->
+            {reply, {ok, {CallbackMethod, PreviousMeta, Meta, Time, TableByName, TableByPid}}, State};
 
-                undefined ->
-                    %% available
-                    MRef = case find_monitor_for_pid(Pid, TableByPid) of
-                        undefined -> erlang:monitor(process, Pid);  %% process is not monitored yet, add
-                        MRef0 -> MRef0
-                    end,
-                    do_register_on_node(Name, Pid, undefined, MetaOrFun, MRef, normal, RequesterNode, on_process_registered, State);
+        {noop, Meta, _Time} ->
+            {reply, {noop, Meta}, State};
 
-                {Name, Pid, TableMeta, _, MRef, _} when is_function(MetaOrFun) ->
-                    %% update with fun
-                    try MetaOrFun(Pid, TableMeta) of
-                        Meta when Meta =:= TableMeta ->
-                            {reply, {noop, TableMeta}, State};
+        Error ->
+            {reply, Error, State}
+    end;
 
-                        Meta ->
-                            do_register_on_node(Name, Pid, TableMeta, Meta, MRef, normal, RequesterNode, on_registry_process_updated, State)
+handle_call({'3.0', register_or_update_on_node_ordered, RequesterNode, Name, Pid, MetaOrFun}, From, State) ->
+    case register_or_update_on_node(RequesterNode, Name, Pid, MetaOrFun, State) of
+        {ok, {_, _, Meta, Time}} ->
+            %% the requester's scope process applies it after everything sent to it before, then replies
+            syn_gen_scope:send_to_node(RequesterNode, {'3.0', sync_register_reply, Name, Pid, Meta, Time, From}, State),
+            {noreply, State};
 
-                    catch Class:Reason:Stacktrace ->
-                              ?LOG_ERROR(#{event => callback_error,
-                                           class => Class, reason => Reason,
-                                           callback => {registry_update, [Pid, TableMeta]},
-                                           stacktrace => Stacktrace}),
-                        {reply, {raise, Class, Reason, Stacktrace}, State}
-                    end;
+        {noop, Meta, Time} ->
+            %% sent anyway, the requester may be missing the entry
+            syn_gen_scope:send_to_node(RequesterNode, {'3.0', sync_register_reply, Name, Pid, Meta, Time, From}, State),
+            {noreply, State};
 
-                {Name, Pid, MetaOrFun, _, _, _} ->
-                    %% same pid, same meta
-                    {reply, {noop, MetaOrFun}, State};
-
-                {Name, Pid, TableMeta, _, MRef, _} ->
-                    %% same pid, different meta
-                    do_register_on_node(Name, Pid, TableMeta, MetaOrFun, MRef, normal, RequesterNode, on_registry_process_updated, State);
-
-                _ ->
-                    {reply, {error, taken}, State}
-            end;
-
-        false ->
-            {reply, {error, not_alive}, State}
+        Error ->
+            {reply, Error, State}
     end;
 
 handle_call({'3.0', unregister_on_node, RequesterNode, Name, Pid}, _From, #state{
-    scope = Scope,
-    table_by_name = TableByName,
     table_by_pid = TableByPid
 } = State) ->
-    case find_registry_entry_by_name(Name, TableByName) of
-        undefined ->
-            {reply, {error, undefined}, State};
+    case unregister_on_node(RequesterNode, Name, Pid, State) of
+        {ok, _Meta} -> {reply, {ok, TableByPid}, State};
+        {error, Reason} -> {reply, {error, Reason}, State}
+    end;
 
-        {Name, Pid, Meta, _, _, _} ->
-            %% demonitor if the process is not registered under other names
-            maybe_demonitor(Pid, TableByPid),
-            %% remove from table
-            remove_from_local_table(Name, Pid, TableByName, TableByPid),
-            %% callback
-            syn_event_handler:call_event_handler(on_process_unregistered, [Scope, Name, Pid, Meta, normal]),
-            %% broadcast
-            syn_gen_scope:broadcast({'3.0', sync_unregister, Name, Pid, Meta, normal}, [RequesterNode], State),
-            %% return
-            {reply, {ok, TableByPid}, State};
+handle_call({'3.0', unregister_on_node_ordered, RequesterNode, Name, Pid}, From, State) ->
+    case unregister_on_node(RequesterNode, Name, Pid, State) of
+        {ok, Meta} ->
+            %% the requester's scope process applies it after everything sent to it before, then replies
+            syn_gen_scope:send_to_node(RequesterNode, {'3.0', sync_unregister_reply, Name, Pid, Meta, From}, State),
+            {noreply, State};
 
-        _ ->
-            %% process is registered locally with another pid: race condition, wait for sync to happen & return error
-            {reply, {error, race_condition}, State}
+        {error, Reason} ->
+            {reply, {error, Reason}, State}
     end;
 
 handle_call(Request, From, #state{scope = Scope} = State) ->
@@ -342,22 +368,36 @@ handle_info({'3.0', sync_register, Name, Pid, Meta, Time, Reason}, #state{nodes_
     end,
     {noreply, State};
 
-handle_info({'3.0', sync_unregister, Name, Pid, Meta, Reason}, #state{
-    scope = Scope,
+handle_info({'3.0', sync_register_reply, Name, Pid, Meta, Time, From}, #state{
     table_by_name = TableByName,
-    table_by_pid = TableByPid
+    nodes_map = NodesMap
 } = State) ->
-    case find_registry_entry_by_name(Name, TableByName) of
-        {_, Pid, _, _, _, _} ->
-            remove_from_local_table(Name, Pid, TableByName, TableByPid),
-            %% callback
-            syn_event_handler:call_event_handler(on_process_unregistered, [Scope, Name, Pid, Meta, Reason]);
+    Reply = case maps:is_key(node(Pid), NodesMap) of
+        true ->
+            handle_registry_sync(Name, Pid, Meta, Time, normal, State),
+            case find_registry_entry_by_name(Name, TableByName) of
+                {Name, Pid, _, _, _, _} ->
+                    {ok, {Pid, Meta}};
 
-        _ ->
-            %% not in table, nothing to do
-            ok
+                _ ->
+                    %% a conflict resolved here did not keep it
+                    {error, race_condition}
+            end;
+
+        false ->
+            %% node not yet discovered, its ack_sync brings the entry
+            {ok, {Pid, Meta}}
     end,
-    %% return
+    gen_server:reply(From, Reply),
+    {noreply, State};
+
+handle_info({'3.0', sync_unregister, Name, Pid, Meta, Reason}, State) ->
+    handle_registry_unregister_sync(Name, Pid, Meta, Reason, State),
+    {noreply, State};
+
+handle_info({'3.0', sync_unregister_reply, Name, Pid, Meta, From}, State) ->
+    handle_registry_unregister_sync(Name, Pid, Meta, normal, State),
+    gen_server:reply(From, ok),
     {noreply, State};
 
 handle_info({'DOWN', _MRef, process, Pid, Reason}, #state{
@@ -450,6 +490,96 @@ do_rebuild_monitors([{Name, Pid, Meta, Time} | T], NewMRefs, Scope, TableByName,
             do_rebuild_monitors(T, NewMRefs, Scope, TableByName, TableByPid)
     end.
 
+-spec register_or_update_on_node(
+    RequesterNode :: node(),
+    Name :: term(),
+    Pid :: pid(),
+    MetaOrFun :: term() | function(),
+    #state{}
+) ->
+    {ok, {CallbackMethod :: atom(), PreviousMeta :: term(), Meta :: term(), Time :: integer()}} |
+    {noop, Meta :: term(), Time :: integer()} |
+    {error, Reason :: term()} |
+    {raise, Class :: atom(), Reason :: term(), Stacktrace :: list()}.
+register_or_update_on_node(RequesterNode, Name, Pid, MetaOrFun, #state{
+    table_by_name = TableByName,
+    table_by_pid = TableByPid
+} = State) ->
+    case is_process_alive(Pid) of
+        true ->
+            case find_registry_entry_by_name(Name, TableByName) of
+                undefined when is_function(MetaOrFun) ->
+                    {error, undefined};
+
+                undefined ->
+                    %% available
+                    MRef = case find_monitor_for_pid(Pid, TableByPid) of
+                        undefined -> erlang:monitor(process, Pid);  %% process is not monitored yet, add
+                        MRef0 -> MRef0
+                    end,
+                    do_register_on_node(Name, Pid, undefined, MetaOrFun, MRef, normal, RequesterNode, on_process_registered, State);
+
+                {Name, Pid, TableMeta, TableTime, MRef, _} when is_function(MetaOrFun) ->
+                    %% update with fun
+                    try MetaOrFun(Pid, TableMeta) of
+                        Meta when Meta =:= TableMeta ->
+                            {noop, TableMeta, TableTime};
+
+                        Meta ->
+                            do_register_on_node(Name, Pid, TableMeta, Meta, MRef, normal, RequesterNode, on_registry_process_updated, State)
+
+                    catch Class:Reason:Stacktrace ->
+                              ?LOG_ERROR(#{event => callback_error,
+                                           class => Class, reason => Reason,
+                                           callback => {registry_update, [Pid, TableMeta]},
+                                           stacktrace => Stacktrace}),
+                        {raise, Class, Reason, Stacktrace}
+                    end;
+
+                {Name, Pid, MetaOrFun, TableTime, _, _} ->
+                    %% same pid, same meta
+                    {noop, MetaOrFun, TableTime};
+
+                {Name, Pid, TableMeta, _, MRef, _} ->
+                    %% same pid, different meta
+                    do_register_on_node(Name, Pid, TableMeta, MetaOrFun, MRef, normal, RequesterNode, on_registry_process_updated, State);
+
+                _ ->
+                    {error, taken}
+            end;
+
+        false ->
+            {error, not_alive}
+    end.
+
+-spec unregister_on_node(RequesterNode :: node(), Name :: term(), Pid :: pid(), #state{}) ->
+    {ok, Meta :: term()} | {error, Reason :: term()}.
+unregister_on_node(RequesterNode, Name, Pid, #state{
+    scope = Scope,
+    table_by_name = TableByName,
+    table_by_pid = TableByPid
+} = State) ->
+    case find_registry_entry_by_name(Name, TableByName) of
+        undefined ->
+            {error, undefined};
+
+        {Name, Pid, Meta, _, _, _} ->
+            %% demonitor if the process is not registered under other names
+            maybe_demonitor(Pid, TableByPid),
+            %% remove from table
+            remove_from_local_table(Name, Pid, TableByName, TableByPid),
+            %% callback
+            syn_event_handler:call_event_handler(on_process_unregistered, [Scope, Name, Pid, Meta, normal]),
+            %% broadcast
+            syn_gen_scope:broadcast({'3.0', sync_unregister, Name, Pid, Meta, normal}, [RequesterNode], State),
+            %% return
+            {ok, Meta};
+
+        _ ->
+            %% process is registered locally with another pid: race condition, wait for sync to happen & return error
+            {error, race_condition}
+    end.
+
 -spec do_register_on_node(
     Name :: term(),
     Pid :: pid(),
@@ -461,18 +591,7 @@ do_rebuild_monitors([{Name, Pid, Meta, Time} | T], NewMRefs, Scope, TableByName,
     CallbackMethod :: atom(),
     #state{}
 ) ->
-    {
-        reply,
-        {ok, {
-            CallbackMethod :: atom(),
-            PreviousMeta :: term(),
-            Meta :: term(),
-            Time :: non_neg_integer(),
-            TableByName :: atom(),
-            TableByPid :: atom()
-        }},
-        #state{}
-    }.
+    {ok, {CallbackMethod :: atom(), PreviousMeta :: term(), Meta :: term(), Time :: integer()}}.
 do_register_on_node(Name, Pid, PreviousMeta, Meta, MRef, Reason, RequesterNode, CallbackMethod, #state{
     scope = Scope,
     table_by_name = TableByName,
@@ -487,7 +606,7 @@ do_register_on_node(Name, Pid, PreviousMeta, Meta, MRef, Reason, RequesterNode, 
     %% broadcast
     syn_gen_scope:broadcast({'3.0', sync_register, Name, Pid, Meta, Time, Reason}, [RequesterNode], State),
     %% return
-    {reply, {ok, {CallbackMethod, PreviousMeta, Meta, Time, TableByName, TableByPid}}, State}.
+    {ok, {CallbackMethod, PreviousMeta, Meta, Time}}.
 
 -spec get_registry_tuples_for_node(Node :: node(), TableByName :: atom()) -> [syn_registry_tuple()].
 get_registry_tuples_for_node(Node, TableByName) ->
@@ -702,6 +821,29 @@ handle_registry_sync(Name, Pid, Meta, Time, Reason, #state{
 
         _ ->
             %% race condition: incoming data is older, ignore
+            ok
+    end.
+
+-spec handle_registry_unregister_sync(
+    Name :: term(),
+    Pid :: pid(),
+    Meta :: term(),
+    Reason :: term(),
+    #state{}
+) -> any().
+handle_registry_unregister_sync(Name, Pid, Meta, Reason, #state{
+    scope = Scope,
+    table_by_name = TableByName,
+    table_by_pid = TableByPid
+}) ->
+    case find_registry_entry_by_name(Name, TableByName) of
+        {_, Pid, _, _, _, _} ->
+            remove_from_local_table(Name, Pid, TableByName, TableByPid),
+            %% callback
+            syn_event_handler:call_event_handler(on_process_unregistered, [Scope, Name, Pid, Meta, Reason]);
+
+        _ ->
+            %% not in table, nothing to do
             ok
     end.
 

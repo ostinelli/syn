@@ -31,7 +31,8 @@
 -export([
     start_link/3,
     subcluster_nodes/2,
-    call/3, call/4
+    call/3, call/4,
+    is_scope_process/2
 ]).
 -export([
     broadcast/2,
@@ -112,6 +113,14 @@ call(Handler, Node, Scope, Message) ->
             catch exit:{noproc, {gen_server, call, _}} when node() =/= Node ->
                 error({invalid_remote_scope, Scope, Node})
             end
+    end.
+
+%% the calling process is the local scope process, i.e. code running in a callback
+-spec is_scope_process(Handler :: module(), Scope :: atom()) -> boolean().
+is_scope_process(Handler, Scope) ->
+    case get_process_name_for_scope(Handler, Scope) of
+        undefined -> false;
+        ProcessName -> whereis(ProcessName) =:= self()
     end.
 
 %% ===================================================================

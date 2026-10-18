@@ -58,29 +58,36 @@ Pid ->
 ```
 
 This works because of the FIFO guarantee established by PR #87 (routing `ack_sync` through
-`multicast_loop`). Both the stale `ack_sync` and the corrective `sync_unregister` flow through
-the same node's `multicast_loop`, so the receiver always processes the stale data first and the
-cleanup second. The zombie is created momentarily but immediately removed.
+the sender process, `sender_loop`). Both the stale `ack_sync` and the corrective `sync_unregister`
+flow through the same node's `sender_loop`, so the receiver always processes the stale data first
+and the cleanup second. The zombie is created momentarily but immediately removed.
 
 Fix applied in [this commit](https://github.com/ostinelli/syn/commit/7716a9885924643ce84bb47cbc36b5efb891e577).
 
 ## Calls Made From Another Node
 
-The model only has nodes registering and unregistering their own processes. In the code, a node can
-also register or unregister a process that lives on another node: the call goes to that node, and when
-the reply comes back the calling node writes the result straight into its own table, so that a lookup
-right after the call already sees it. The node that handled the call doesn't send the calling node a
-`sync_register` / `sync_unregister`, since it already has the change.
+A node can register or unregister a process that lives on another node: the call goes to that node,
+which handles it like one for its own processes and sends the usual `sync_register` / `sync_unregister`
+to the other nodes, but not to the calling node. The calling node gets the result instead in a
+`register_reply` / `unregister_reply`, through the same queue as everything else that node sends it.
+Its scope process applies it like a sync message, conflict resolution included, and only then does
+the call return: a lookup on the calling node right after the call sees it, and nothing the other
+node sent before can undo it. If the calling node resolves a conflict on the name that doesn't keep
+the process, the call returns `{error, race_condition}`.
 
-That write doesn't go through the calling node's scope process, so it isn't lined up with what the
-other node sends to that scope. When this path was added to the model, TLC found that an older
-`ack_sync` snapshot still waiting in the calling node's scope queue could undo it:
+In the model, `Register` and `Unregister` can be called from the node that runs the process or from
+any node that can see it.
 
-- A name registered from another node got removed again when the older snapshot was reconciled.
-  This is fixed: the calling node marks what it writes from a reply, and reconciliation keeps a marked
-  entry that is newer than everything in the snapshot, since the snapshot can't know about it yet.
-  An older snapshot also can't put back an older meta for the same process anymore.
-- A name unregistered from another node can come back if the older snapshot still has it.
+When the calling node writes the result into its own table itself, outside of its scope process, the
+write isn't lined up with what the other node sends to that scope. That is what happens with calls
+made from a scope process itself (i.e. from a callback, which can't wait for its own scope process),
+and with nodes running a version that doesn't support the reply above. In those cases an older
+`ack_sync` snapshot still waiting in the calling node's scope queue can't remove a name registered
+from another node: the calling node marks what it writes from a reply, and reconciliation keeps a
+marked entry that is newer than everything in the snapshot, since the snapshot can't know about it yet.
+But:
+
+- A name unregistered from another node can come back if an older snapshot still has it.
 - An unregister the other node sent before the call can arrive after it, and remove the entry the call
   just wrote for the same process.
 - If the calling node processes a `DOWN` for the other node after writing, it drops the entry, and a
@@ -88,8 +95,21 @@ other node sends to that scope. When this path was added to the model, TLC found
 - If two nodes register the same name on each other's processes at the same time, each one writes
   the other's process over its own entry, and the conflict is never resolved.
 
-The last four need the other node's updates to reach the calling node too, without the calling
-node firing its callbacks twice. They are not fixed yet, and the model doesn't cover this path.
+The model doesn't cover these cases.
+
+### DOWN Messages Ahead of Earlier Messages
+
+Erlang only guarantees the order of messages between a pair of processes. When a scope process
+restarts, its `DOWN` and the messages of its sender process come from two different processes, so
+the `DOWN` could reach another node ahead of messages that were sent before it. The model has no
+scope restarts: with `DownOvertakes = TRUE` (see `syn_down_overtakes.cfg`), the `DOWN` of a
+`Disconnect` can land anywhere in the inbox instead.
+
+All the invariants still hold, but `ReadYourWrites` doesn't: if the calling node handles the `DOWN`
+before the reply, it no longer knows the other node and doesn't apply the reply, so the call returns
+`ok` while the name isn't in its table yet. It gets there with the other node's `ack_sync`, once the
+two nodes have found each other again. `syn_down_overtakes.cfg` leaves `ReadYourWrites` out for this
+reason.
 
 ## Running the Model Checker
 
@@ -102,18 +122,25 @@ java -XX:+UseParallelGC -cp tla2tools.jar tlc2.TLC \
     -config syn.cfg -workers auto -cleanup syn.tla
 ```
 
-The model checks three properties:
+Use `-config syn_down_overtakes.cfg` for DOWN messages that can arrive ahead of earlier ones.
+
+The model checks these properties:
 
 - **AllRegistered** (invariant): When all messages are processed and all nodes are connected,
   every node's view of registered names matches the global truth.
 - **ThereCanBeOnlyOne** (invariant): No name is registered on two different nodes simultaneously
   on any single node's view.
+- **ViewsMatchOwners** (invariant): When all messages are processed and all nodes are connected,
+  every node has each name on the node that actually runs it.
 - **AllMessagesProcessed** (liveness): All message queues eventually drain.
+- **ReadYourWrites** (action property): A register call made from another node that returns `ok`
+  has the name in the calling node's table.
 
 The model starts from an already discovered, fully connected subcluster. It then models
 membership loss and rediscovery through disconnect/reconnect cycles. This keeps startup
 discovery out of scope while covering the protocol races that happen after a known
-remote scope process goes down and later rejoins.
+remote scope process goes down and later rejoins. It only covers the registry, without
+registering a process again with other meta.
 
 A node can only have one unregister per name waiting in its inbox. More would just fail with
 `{error, undefined}`, and without that limit the inbox can grow forever, so the checker never finishes.

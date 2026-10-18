@@ -189,29 +189,59 @@ join_or_update(Scope, GroupName, Pid, MetaOrFun) ->
 
         _ ->
             Node = node(Pid),
-            case syn_gen_scope:call(?MODULE, Node, Scope, {'3.0', join_or_update_on_node, node(), GroupName, Pid, MetaOrFun}) of
-                {ok, {CallbackMethod, PreviousMeta, Meta, Time, TableByName, TableByPid}} when Node =/= node() ->
-                    %% update table on caller node immediately so that subsequent calls have an updated pg,
-                    %% marked so that a snapshot sent before this change doesn't remove it
-                    add_to_local_table(GroupName, Pid, Meta, Time, caller, TableByName, TableByPid),
-                    %% callback
-                    syn_event_handler:call_event_handler(CallbackMethod, [Scope, GroupName, Pid, Meta, normal]),
-                    syn_event_handler:call_event_handler(CallbackMethod, [Scope, GroupName, Pid, PreviousMeta, Meta, normal]),
-                    %% return
-                    {ok, {Pid, Meta}};
-
-                {ok, {_, _, Meta, _, _, _}} ->
-                    {ok, {Pid, Meta}};
-
-                {noop, Meta} ->
-                    {ok, {Pid, Meta}};
-
-                {error, Reason} ->
-                    {error, Reason};
-
-                {raise, Class, Reason, Stacktrace} ->
-                    erlang:raise(Class, Reason, Stacktrace)
+            case Node =/= node() andalso not syn_gen_scope:is_scope_process(?MODULE, Scope) of
+                true -> join_or_update_ordered(Scope, Node, GroupName, Pid, MetaOrFun);
+                false -> join_or_update_direct(Scope, Node, GroupName, Pid, MetaOrFun)
             end
+    end.
+
+%% the scope process of this node applies the result, in order with everything else the process' node sends it,
+%% and replies once it has: a lookup on this node right after the call sees it
+-spec join_or_update_ordered(Scope :: atom(), Node :: node(), GroupName :: term(), Pid :: pid(), MetaOrFun :: term() | function()) ->
+    {ok, {Pid :: pid(), Meta :: term()}} | {error, Reason :: term()}.
+join_or_update_ordered(Scope, Node, GroupName, Pid, MetaOrFun) ->
+    case syn_gen_scope:call(?MODULE, Node, Scope, {'3.0', join_or_update_on_node_ordered, node(), GroupName, Pid, MetaOrFun}) of
+        {ok, {Pid, Meta}} ->
+            {ok, {Pid, Meta}};
+
+        {error, Reason} ->
+            {error, Reason};
+
+        {raise, Class, Reason, Stacktrace} ->
+            erlang:raise(Class, Reason, Stacktrace);
+
+        undefined ->
+            %% the process' node runs a version that doesn't know this call
+            join_or_update_direct(Scope, Node, GroupName, Pid, MetaOrFun)
+    end.
+
+%% the process' node replies to the caller directly: used for local processes, from the scope process itself
+%% (which can't wait for its own reply) and with nodes that don't know the ordered call
+-spec join_or_update_direct(Scope :: atom(), Node :: node(), GroupName :: term(), Pid :: pid(), MetaOrFun :: term() | function()) ->
+    {ok, {Pid :: pid(), Meta :: term()}} | {error, Reason :: term()}.
+join_or_update_direct(Scope, Node, GroupName, Pid, MetaOrFun) ->
+    case syn_gen_scope:call(?MODULE, Node, Scope, {'3.0', join_or_update_on_node, node(), GroupName, Pid, MetaOrFun}) of
+        {ok, {CallbackMethod, PreviousMeta, Meta, Time, TableByName, TableByPid}} when Node =/= node() ->
+            %% update table on caller node immediately so that subsequent calls have an updated pg,
+            %% marked so that a snapshot sent before this change doesn't remove it
+            add_to_local_table(GroupName, Pid, Meta, Time, caller, TableByName, TableByPid),
+            %% callback
+            syn_event_handler:call_event_handler(CallbackMethod, [Scope, GroupName, Pid, Meta, normal]),
+            syn_event_handler:call_event_handler(CallbackMethod, [Scope, GroupName, Pid, PreviousMeta, Meta, normal]),
+            %% return
+            {ok, {Pid, Meta}};
+
+        {ok, {_, _, Meta, _, _, _}} ->
+            {ok, {Pid, Meta}};
+
+        {noop, Meta} ->
+            {ok, {Pid, Meta}};
+
+        {error, Reason} ->
+            {error, Reason};
+
+        {raise, Class, Reason, Stacktrace} ->
+            erlang:raise(Class, Reason, Stacktrace)
     end.
 
 -spec leave(Scope :: atom(), GroupName :: term(), pid()) -> ok | {error, Reason :: term()}.
@@ -222,21 +252,44 @@ leave(Scope, GroupName, Pid) ->
 
         TableByName ->
             Node = node(Pid),
-            case syn_gen_scope:call(?MODULE, Node, Scope, {'3.0', leave_on_node, node(), GroupName, Pid}) of
-                {ok, {Meta, TableByPid}} when Node =/= node() ->
-                    %% remove table on caller node immediately so that subsequent calls have an updated process group
-                    remove_from_local_table(GroupName, Pid, TableByName, TableByPid),
-                    %% callback
-                    syn_event_handler:call_event_handler(on_process_left, [Scope, GroupName, Pid, Meta, normal]),
-                    %% return
-                    ok;
-
-                {ok, _} ->
-                    ok;
-
-                {error, Reason} ->
-                    {error, Reason}
+            case Node =/= node() andalso not syn_gen_scope:is_scope_process(?MODULE, Scope) of
+                true -> leave_ordered(Scope, Node, GroupName, Pid, TableByName);
+                false -> leave_direct(Scope, Node, GroupName, Pid, TableByName)
             end
+    end.
+
+-spec leave_ordered(Scope :: atom(), Node :: node(), GroupName :: term(), Pid :: pid(), TableByName :: atom()) ->
+    ok | {error, Reason :: term()}.
+leave_ordered(Scope, Node, GroupName, Pid, TableByName) ->
+    case syn_gen_scope:call(?MODULE, Node, Scope, {'3.0', leave_on_node_ordered, node(), GroupName, Pid}) of
+        ok ->
+            ok;
+
+        {error, Reason} ->
+            {error, Reason};
+
+        undefined ->
+            %% the process' node runs a version that doesn't know this call
+            leave_direct(Scope, Node, GroupName, Pid, TableByName)
+    end.
+
+-spec leave_direct(Scope :: atom(), Node :: node(), GroupName :: term(), Pid :: pid(), TableByName :: atom()) ->
+    ok | {error, Reason :: term()}.
+leave_direct(Scope, Node, GroupName, Pid, TableByName) ->
+    case syn_gen_scope:call(?MODULE, Node, Scope, {'3.0', leave_on_node, node(), GroupName, Pid}) of
+        {ok, {Meta, TableByPid}} when Node =/= node() ->
+            %% remove table on caller node immediately so that subsequent calls have an updated process group
+            remove_from_local_table(GroupName, Pid, TableByName, TableByPid),
+            %% callback
+            syn_event_handler:call_event_handler(on_process_left, [Scope, GroupName, Pid, Meta, normal]),
+            %% return
+            ok;
+
+        {ok, _} ->
+            ok;
+
+        {error, Reason} ->
+            {error, Reason}
     end.
 
 -spec count(Scope :: atom()) -> non_neg_integer().
@@ -343,70 +396,50 @@ handle_call({'3.0', join_or_update_on_node, RequesterNode, GroupName, Pid, MetaO
     table_by_name = TableByName,
     table_by_pid = TableByPid
 } = State) ->
-    case is_process_alive(Pid) of
-        true ->
-            case find_pg_entry_by_name_and_pid(GroupName, Pid, TableByName) of
-                undefined when is_function(MetaOrFun) ->
-                    {reply, {error, undefined}, State};
+    case join_or_update_on_node(RequesterNode, GroupName, Pid, MetaOrFun, State) of
+        {ok, {CallbackMethod, PreviousMeta, Meta, Time}} ->
+            {reply, {ok, {CallbackMethod, PreviousMeta, Meta, Time, TableByName, TableByPid}}, State};
 
-                undefined ->
-                    %% add
-                    MRef = case find_monitor_for_pid(Pid, TableByPid) of
-                        undefined -> erlang:monitor(process, Pid);  %% process is not monitored yet, create
-                        MRef0 -> MRef0
-                    end,
-                    do_join_on_node(GroupName, Pid, undefined, MetaOrFun, MRef, normal, RequesterNode, on_process_joined, State);
+        {noop, Meta, _Time} ->
+            {reply, {noop, Meta}, State};
 
-                {{_, _}, TableMeta, _, MRef, _} when is_function(MetaOrFun) ->
-                    %% update with fun
-                    try MetaOrFun(TableMeta) of
-                        Meta when Meta =:= TableMeta ->
-                            {reply, {noop, TableMeta}, State};
+        Error ->
+            {reply, Error, State}
+    end;
 
-                        Meta ->
-                            do_join_on_node(GroupName, Pid, TableMeta, Meta, MRef, normal, RequesterNode, on_group_process_updated, State)
+handle_call({'3.0', join_or_update_on_node_ordered, RequesterNode, GroupName, Pid, MetaOrFun}, From, State) ->
+    case join_or_update_on_node(RequesterNode, GroupName, Pid, MetaOrFun, State) of
+        {ok, {_, _, Meta, Time}} ->
+            %% the requester's scope process applies it after everything sent to it before, then replies
+            syn_gen_scope:send_to_node(RequesterNode, {'3.0', sync_join_reply, GroupName, Pid, Meta, Time, From}, State),
+            {noreply, State};
 
-                    catch Class:Reason:Stacktrace ->
-                      ?LOG_ERROR(#{event => callback_error,
-                                   class => Class, reason => Reason,
-                                   callback => {pg_update, [TableMeta]},
-                                   stacktrace => Stacktrace}),
-                        {reply, {raise, Class, Reason, Stacktrace}, State}
-                    end;
+        {noop, Meta, Time} ->
+            %% sent anyway, the requester may be missing the entry
+            syn_gen_scope:send_to_node(RequesterNode, {'3.0', sync_join_reply, GroupName, Pid, Meta, Time, From}, State),
+            {noreply, State};
 
-                {{_, _}, MetaOrFun, _, _, _} ->
-                    %% re-joined with same meta
-                    {reply, {noop, MetaOrFun}, State};
-
-                {{_, _}, TableMeta, _, MRef, _} ->
-                    %% re-joined with different meta
-                    do_join_on_node(GroupName, Pid, TableMeta, MetaOrFun, MRef, normal, RequesterNode, on_group_process_updated, State)
-            end;
-
-        false ->
-            {reply, {error, not_alive}, State}
+        Error ->
+            {reply, Error, State}
     end;
 
 handle_call({'3.0', leave_on_node, RequesterNode, GroupName, Pid}, _From, #state{
-    scope = Scope,
-    table_by_name = TableByName,
     table_by_pid = TableByPid
 } = State) ->
-    case find_pg_entry_by_name_and_pid(GroupName, Pid, TableByName) of
-        undefined ->
-            {reply, {error, not_in_group}, State};
+    case leave_on_node(RequesterNode, GroupName, Pid, State) of
+        {ok, Meta} -> {reply, {ok, {Meta, TableByPid}}, State};
+        {error, Reason} -> {reply, {error, Reason}, State}
+    end;
 
-        {{_, _}, Meta, _, _, _} ->
-            %% is this the last group process is in?
-            maybe_demonitor(Pid, TableByPid),
-            %% remove from table
-            remove_from_local_table(GroupName, Pid, TableByName, TableByPid),
-            %% callback
-            syn_event_handler:call_event_handler(on_process_left, [Scope, GroupName, Pid, Meta, normal]),
-            %% broadcast
-            syn_gen_scope:broadcast({'3.0', sync_leave, GroupName, Pid, Meta, normal}, [RequesterNode], State),
-            %% return
-            {reply, {ok, {Meta, TableByPid}}, State}
+handle_call({'3.0', leave_on_node_ordered, RequesterNode, GroupName, Pid}, From, State) ->
+    case leave_on_node(RequesterNode, GroupName, Pid, State) of
+        {ok, Meta} ->
+            %% the requester's scope process applies it after everything sent to it before, then replies
+            syn_gen_scope:send_to_node(RequesterNode, {'3.0', sync_leave_reply, GroupName, Pid, Meta, From}, State),
+            {noreply, State};
+
+        {error, Reason} ->
+            {reply, {error, Reason}, State}
     end;
 
 handle_call(Request, From, #state{scope = Scope} = State) ->
@@ -432,23 +465,25 @@ handle_info({'3.0', sync_join, GroupName, Pid, Meta, Time, Reason}, #state{nodes
     end,
     {noreply, State};
 
-handle_info({'3.0', sync_leave, GroupName, Pid, Meta, Reason}, #state{
-    scope = Scope,
-    table_by_name = TableByName,
-    table_by_pid = TableByPid
-} = State) ->
-    case find_pg_entry_by_name_and_pid(GroupName, Pid, TableByName) of
-        undefined ->
-            %% not in table, nothing to do
-            ok;
+handle_info({'3.0', sync_join_reply, GroupName, Pid, Meta, Time, From}, #state{nodes_map = NodesMap} = State) ->
+    case maps:is_key(node(Pid), NodesMap) of
+        true ->
+            handle_pg_sync(GroupName, Pid, Meta, Time, normal, State);
 
-        _ ->
-            %% remove from table
-            remove_from_local_table(GroupName, Pid, TableByName, TableByPid),
-            %% callback
-            syn_event_handler:call_event_handler(on_process_left, [Scope, GroupName, Pid, Meta, Reason])
+        false ->
+            %% node not yet discovered, its ack_sync brings the entry
+            ok
     end,
-    %% return
+    gen_server:reply(From, {ok, {Pid, Meta}}),
+    {noreply, State};
+
+handle_info({'3.0', sync_leave, GroupName, Pid, Meta, Reason}, State) ->
+    handle_pg_leave_sync(GroupName, Pid, Meta, Reason, State),
+    {noreply, State};
+
+handle_info({'3.0', sync_leave_reply, GroupName, Pid, Meta, From}, State) ->
+    handle_pg_leave_sync(GroupName, Pid, Meta, normal, State),
+    gen_server:reply(From, ok),
     {noreply, State};
 
 handle_info({'DOWN', _MRef, process, Pid, Reason}, #state{
@@ -541,6 +576,89 @@ do_rebuild_monitors([{GroupName, Pid, Meta, Time} | T], NewMRefs, Scope, TableBy
             do_rebuild_monitors(T, NewMRefs, Scope, TableByName, TableByPid)
     end.
 
+-spec join_or_update_on_node(
+    RequesterNode :: node(),
+    GroupName :: term(),
+    Pid :: pid(),
+    MetaOrFun :: term() | function(),
+    #state{}
+) ->
+    {ok, {CallbackMethod :: atom(), PreviousMeta :: term(), Meta :: term(), Time :: integer()}} |
+    {noop, Meta :: term(), Time :: integer()} |
+    {error, Reason :: term()} |
+    {raise, Class :: atom(), Reason :: term(), Stacktrace :: list()}.
+join_or_update_on_node(RequesterNode, GroupName, Pid, MetaOrFun, #state{
+    table_by_name = TableByName,
+    table_by_pid = TableByPid
+} = State) ->
+    case is_process_alive(Pid) of
+        true ->
+            case find_pg_entry_by_name_and_pid(GroupName, Pid, TableByName) of
+                undefined when is_function(MetaOrFun) ->
+                    {error, undefined};
+
+                undefined ->
+                    %% add
+                    MRef = case find_monitor_for_pid(Pid, TableByPid) of
+                        undefined -> erlang:monitor(process, Pid);  %% process is not monitored yet, create
+                        MRef0 -> MRef0
+                    end,
+                    do_join_on_node(GroupName, Pid, undefined, MetaOrFun, MRef, normal, RequesterNode, on_process_joined, State);
+
+                {{_, _}, TableMeta, TableTime, MRef, _} when is_function(MetaOrFun) ->
+                    %% update with fun
+                    try MetaOrFun(TableMeta) of
+                        Meta when Meta =:= TableMeta ->
+                            {noop, TableMeta, TableTime};
+
+                        Meta ->
+                            do_join_on_node(GroupName, Pid, TableMeta, Meta, MRef, normal, RequesterNode, on_group_process_updated, State)
+
+                    catch Class:Reason:Stacktrace ->
+                      ?LOG_ERROR(#{event => callback_error,
+                                   class => Class, reason => Reason,
+                                   callback => {pg_update, [TableMeta]},
+                                   stacktrace => Stacktrace}),
+                        {raise, Class, Reason, Stacktrace}
+                    end;
+
+                {{_, _}, MetaOrFun, TableTime, _, _} ->
+                    %% re-joined with same meta
+                    {noop, MetaOrFun, TableTime};
+
+                {{_, _}, TableMeta, _, MRef, _} ->
+                    %% re-joined with different meta
+                    do_join_on_node(GroupName, Pid, TableMeta, MetaOrFun, MRef, normal, RequesterNode, on_group_process_updated, State)
+            end;
+
+        false ->
+            {error, not_alive}
+    end.
+
+-spec leave_on_node(RequesterNode :: node(), GroupName :: term(), Pid :: pid(), #state{}) ->
+    {ok, Meta :: term()} | {error, Reason :: term()}.
+leave_on_node(RequesterNode, GroupName, Pid, #state{
+    scope = Scope,
+    table_by_name = TableByName,
+    table_by_pid = TableByPid
+} = State) ->
+    case find_pg_entry_by_name_and_pid(GroupName, Pid, TableByName) of
+        undefined ->
+            {error, not_in_group};
+
+        {{_, _}, Meta, _, _, _} ->
+            %% is this the last group process is in?
+            maybe_demonitor(Pid, TableByPid),
+            %% remove from table
+            remove_from_local_table(GroupName, Pid, TableByName, TableByPid),
+            %% callback
+            syn_event_handler:call_event_handler(on_process_left, [Scope, GroupName, Pid, Meta, normal]),
+            %% broadcast
+            syn_gen_scope:broadcast({'3.0', sync_leave, GroupName, Pid, Meta, normal}, [RequesterNode], State),
+            %% return
+            {ok, Meta}
+    end.
+
 -spec do_join_on_node(
     GroupName :: term(),
     Pid :: pid(),
@@ -552,18 +670,7 @@ do_rebuild_monitors([{GroupName, Pid, Meta, Time} | T], NewMRefs, Scope, TableBy
     CallbackMethod :: atom(),
     #state{}
 ) ->
-    {
-        reply,
-        {ok, {
-            CallbackMethod :: atom(),
-            PreviousMeta :: term(),
-            Meta :: term(),
-            Time :: non_neg_integer(),
-            TableByName :: atom(),
-            TableByPid :: atom()
-        }},
-        #state{}
-    }.
+    {ok, {CallbackMethod :: atom(), PreviousMeta :: term(), Meta :: term(), Time :: integer()}}.
 do_join_on_node(GroupName, Pid, PreviousMeta, Meta, MRef, Reason, RequesterNode, CallbackMethod, #state{
     scope = Scope,
     table_by_name = TableByName,
@@ -578,7 +685,7 @@ do_join_on_node(GroupName, Pid, PreviousMeta, Meta, MRef, Reason, RequesterNode,
     %% broadcast
     syn_gen_scope:broadcast({'3.0', sync_join, GroupName, Pid, Meta, Time, Reason}, [RequesterNode], State),
     %% return
-    {reply, {ok, {CallbackMethod, PreviousMeta, Meta, Time, TableByName, TableByPid}}, State}.
+    {ok, {CallbackMethod, PreviousMeta, Meta, Time}}.
 
 -spec get_pg_tuples_for_node(Node :: node(), TableByName :: atom()) -> [syn_pg_tuple()].
 get_pg_tuples_for_node(Node, TableByName) ->
@@ -758,6 +865,30 @@ handle_pg_sync(GroupName, Pid, Meta, Time, Reason, #state{
         _ ->
             %% race condition: incoming data is older, ignore
             ok
+    end.
+
+-spec handle_pg_leave_sync(
+    GroupName :: term(),
+    Pid :: pid(),
+    Meta :: term(),
+    Reason :: term(),
+    #state{}
+) -> any().
+handle_pg_leave_sync(GroupName, Pid, Meta, Reason, #state{
+    scope = Scope,
+    table_by_name = TableByName,
+    table_by_pid = TableByPid
+}) ->
+    case find_pg_entry_by_name_and_pid(GroupName, Pid, TableByName) of
+        undefined ->
+            %% not in table, nothing to do
+            ok;
+
+        _ ->
+            %% remove from table
+            remove_from_local_table(GroupName, Pid, TableByName, TableByPid),
+            %% callback
+            syn_event_handler:call_event_handler(on_process_left, [Scope, GroupName, Pid, Meta, Reason])
     end.
 
 -spec multi_call_and_receive(

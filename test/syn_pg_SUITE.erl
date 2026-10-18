@@ -50,7 +50,11 @@
     three_nodes_member_and_update/1,
     three_nodes_ack_sync_reconciles_pg_snapshot/1,
     three_nodes_ack_sync_reconciles_large_pg_snapshot/1,
-    three_nodes_stale_snapshot_does_not_undo_remote_join/1
+    three_nodes_stale_snapshot_does_not_undo_remote_join/1,
+    three_nodes_stale_snapshot_does_not_undo_remote_leave/1,
+    three_nodes_late_leave_does_not_undo_remote_join/1,
+    three_nodes_scope_down_does_not_undo_remote_join/1,
+    three_nodes_remote_join_from_scope_process/1
 ]).
 -export([
     four_nodes_concurrency/1
@@ -117,7 +121,11 @@ groups() ->
             three_nodes_member_and_update,
             three_nodes_ack_sync_reconciles_pg_snapshot,
             three_nodes_ack_sync_reconciles_large_pg_snapshot,
-            three_nodes_stale_snapshot_does_not_undo_remote_join
+            three_nodes_stale_snapshot_does_not_undo_remote_join,
+            three_nodes_stale_snapshot_does_not_undo_remote_leave,
+            three_nodes_late_leave_does_not_undo_remote_join,
+            three_nodes_scope_down_does_not_undo_remote_join,
+            three_nodes_remote_join_from_scope_process
         ]},
         {four_nodes_pg, [shuffle], [
             four_nodes_concurrency
@@ -2059,35 +2067,137 @@ three_nodes_ack_sync_reconciles_large_pg_snapshot(Config) ->
     end.
 
 three_nodes_stale_snapshot_does_not_undo_remote_join(Config) ->
-    %% joining a process that lives on the slave updates our table right away, and an older
-    %% snapshot from the slave still sitting in our scope's queue must not undo that
+    %% joining a process that lives on the slave returns once our scope has applied it, after
+    %% an older snapshot from the slave still sitting in its queue, so that snapshot can't undo it
 
     SlaveNode1 = proplists:get_value(syn_slave_1, Config),
-
-    ok = syn:start(),
-    ok = rpc:call(SlaveNode1, syn, start, []),
-    ok = syn:add_node_to_scopes([scope_stale]),
-    ok = rpc:call(SlaveNode1, syn, add_node_to_scopes, [[scope_stale]]),
-    syn_test_suite_helper:assert_scope_subcluster(pg, node(), scope_stale, [SlaveNode1]),
-    syn_test_suite_helper:assert_scope_subcluster(pg, SlaveNode1, scope_stale, [node()]),
+    ScopePid = start_scope_stale(SlaveNode1),
 
     Pid = syn_test_suite_helper:start_process(SlaveNode1),
 
     %% hold the slave's snapshot back in this node's scope mailbox, then join
-    ScopePid = whereis(syn_pg_scope_stale),
     {RemoteScopePid, Snapshot} = get_remote_snapshot(SlaveNode1, syn_pg_scope_stale),
     ok = sys:suspend(ScopePid),
     ScopePid ! {'3.0', ack_sync, RemoteScopePid, Snapshot},
-    ok = syn:join(scope_stale, "group", Pid, meta),
-    [{Pid, meta}] = syn:members(scope_stale, "group"),
-    ok = sys:resume(ScopePid),
-    _ = sys:get_state(ScopePid),
+    CallRef = syn_test_suite_helper:run_async(fun() -> syn:join(scope_stale, "group", Pid, meta) end),
 
-    syn_test_suite_helper:assert_wait(
-        [{Pid, meta}],
-        fun() -> syn:members(scope_stale, "group") end
-    ),
+    %% the slave has it, the call waits for our scope
+    wait_for_message_queue_len(ScopePid, 2),
+    syn_test_suite_helper:assert_async_waiting(CallRef),
+    [{Pid, meta}] = rpc:call(SlaveNode1, syn, members, [scope_stale, "group"]),
+    [] = syn:members(scope_stale, "group"),
+    ok = sys:resume(ScopePid),
+
+    ok = syn_test_suite_helper:wait_async(CallRef),
+    _ = sys:get_state(ScopePid),
+    [{Pid, meta}] = syn:members(scope_stale, "group"),
     [{Pid, meta}] = rpc:call(SlaveNode1, syn, members, [scope_stale, "group"]).
+
+three_nodes_stale_snapshot_does_not_undo_remote_leave(Config) ->
+    %% removing a process that lives on the slave from a group returns once our scope has applied it,
+    %% after an older snapshot from the slave still sitting in its queue, so that snapshot can't bring it back
+
+    SlaveNode1 = proplists:get_value(syn_slave_1, Config),
+    ScopePid = start_scope_stale(SlaveNode1),
+
+    Pid = syn_test_suite_helper:start_process(SlaveNode1),
+    ok = syn:join(scope_stale, "group", Pid, meta),
+
+    %% hold the slave's snapshot back in our scope's queue, then leave
+    {RemoteScopePid, Snapshot} = get_remote_snapshot(SlaveNode1, syn_pg_scope_stale),
+    [{"group", Pid, meta, _}] = Snapshot,
+    ok = sys:suspend(ScopePid),
+    ScopePid ! {'3.0', ack_sync, RemoteScopePid, Snapshot},
+    CallRef = syn_test_suite_helper:run_async(fun() -> syn:leave(scope_stale, "group", Pid) end),
+    wait_for_message_queue_len(ScopePid, 2),
+    syn_test_suite_helper:assert_async_waiting(CallRef),
+    ok = sys:resume(ScopePid),
+
+    ok = syn_test_suite_helper:wait_async(CallRef),
+    _ = sys:get_state(ScopePid),
+    [] = syn:members(scope_stale, "group"),
+    [] = rpc:call(SlaveNode1, syn, members, [scope_stale, "group"]).
+
+three_nodes_late_leave_does_not_undo_remote_join(Config) ->
+    %% the slave removes its process from a group and we add it again right after: the leave the slave sent
+    %% before our call reaches our scope before the join, so it can't remove it
+
+    SlaveNode1 = proplists:get_value(syn_slave_1, Config),
+    ScopePid = start_scope_stale(SlaveNode1),
+
+    Pid = syn_test_suite_helper:start_process(SlaveNode1),
+    ok = syn:join(scope_stale, "group", Pid, meta),
+
+    %% the slave's leave waits in our scope's queue while we join again
+    ok = sys:suspend(ScopePid),
+    ok = rpc:call(SlaveNode1, syn, leave, [scope_stale, "group", Pid]),
+    wait_for_message_queue_len(ScopePid, 1),
+    CallRef = syn_test_suite_helper:run_async(fun() -> syn:join(scope_stale, "group", Pid, new_meta) end),
+    wait_for_message_queue_len(ScopePid, 2),
+    syn_test_suite_helper:assert_async_waiting(CallRef),
+    ok = sys:resume(ScopePid),
+
+    ok = syn_test_suite_helper:wait_async(CallRef),
+    _ = sys:get_state(ScopePid),
+    [{Pid, new_meta}] = syn:members(scope_stale, "group"),
+    [{Pid, new_meta}] = rpc:call(SlaveNode1, syn, members, [scope_stale, "group"]).
+
+three_nodes_scope_down_does_not_undo_remote_join(Config) ->
+    %% the scope process of the slave restarts while ours is busy, and we add a process of the slave to a group:
+    %% the old scope's DOWN, and the new one's snapshot sent before our call, are in our queue before the join,
+    %% so they can't remove it
+
+    SlaveNode1 = proplists:get_value(syn_slave_1, Config),
+    ScopePid = start_scope_stale(SlaveNode1),
+
+    Pid = syn_test_suite_helper:start_process(SlaveNode1),
+
+    %% restart the slave's scope process, its new one discovers us
+    ok = sys:suspend(ScopePid),
+    OldRemoteScopePid = rpc:call(SlaveNode1, erlang, whereis, [syn_pg_scope_stale]),
+    syn_test_suite_helper:kill_process(OldRemoteScopePid),
+    wait_for_message_queue_len(ScopePid, 2),
+    %% and sends us its snapshot, without the member
+    RemoteScopePid = rpc:call(SlaveNode1, erlang, whereis, [syn_pg_scope_stale]),
+    RemoteScopePid ! {'3.0', discover, ScopePid},
+    wait_for_message_queue_len(ScopePid, 3),
+    CallRef = syn_test_suite_helper:run_async(fun() -> syn:join(scope_stale, "group", Pid, meta) end),
+    wait_for_message_queue_len(ScopePid, 4),
+    syn_test_suite_helper:assert_async_waiting(CallRef),
+    ok = sys:resume(ScopePid),
+
+    ok = syn_test_suite_helper:wait_async(CallRef),
+    _ = sys:get_state(ScopePid),
+    [{Pid, meta}] = syn:members(scope_stale, "group"),
+    syn_test_suite_helper:assert_scope_subcluster(pg, node(), scope_stale, [SlaveNode1]),
+    syn_test_suite_helper:assert_scope_subcluster(pg, SlaveNode1, scope_stale, [node()]),
+    [{Pid, meta}] = syn:members(scope_stale, "group"),
+    [{Pid, meta}] = rpc:call(SlaveNode1, syn, members, [scope_stale, "group"]).
+
+three_nodes_remote_join_from_scope_process(Config) ->
+    %% code running in our scope process, like a callback, can't wait for that process to apply
+    %% the result of a call for a process of the slave: the slave replies to it directly
+
+    SlaveNode1 = proplists:get_value(syn_slave_1, Config),
+    ScopePid = start_scope_stale(SlaveNode1),
+
+    Pid = syn_test_suite_helper:start_process(SlaveNode1),
+    TestPid = self(),
+    _ = sys:replace_state(ScopePid, fun(State) ->
+        TestPid ! {joined, syn:join(scope_stale, "group", Pid, meta)},
+        State
+    end),
+    ok = receive {joined, Joined} -> Joined end,
+    [{Pid, meta}] = syn:members(scope_stale, "group"),
+    [{Pid, meta}] = rpc:call(SlaveNode1, syn, members, [scope_stale, "group"]),
+
+    _ = sys:replace_state(ScopePid, fun(State) ->
+        TestPid ! {left, syn:leave(scope_stale, "group", Pid)},
+        State
+    end),
+    ok = receive {left, Left} -> Left end,
+    [] = syn:members(scope_stale, "group"),
+    [] = rpc:call(SlaveNode1, syn, members, [scope_stale, "group"]).
 
 %% ===================================================================
 %% Internal
@@ -2117,3 +2227,19 @@ get_remote_snapshot(Node, ScopeProcessName) ->
     State = rpc:call(Node, sys, get_state, [RemoteScopePid]),
     {ok, Snapshot} = rpc:call(Node, syn_pg, get_local_data, [State]),
     {RemoteScopePid, Snapshot}.
+
+%% start syn and add scope_stale on this node and on Node, returns the scope process of this node
+start_scope_stale(Node) ->
+    ok = syn:start(),
+    ok = rpc:call(Node, syn, start, []),
+    ok = syn:add_node_to_scopes([scope_stale]),
+    ok = rpc:call(Node, syn, add_node_to_scopes, [[scope_stale]]),
+    syn_test_suite_helper:assert_scope_subcluster(pg, node(), scope_stale, [Node]),
+    syn_test_suite_helper:assert_scope_subcluster(pg, Node, scope_stale, [node()]),
+    whereis(syn_pg_scope_stale).
+
+wait_for_message_queue_len(Pid, Len) ->
+    syn_test_suite_helper:assert_wait(
+        {message_queue_len, Len},
+        fun() -> rpc:call(node(Pid), erlang, process_info, [Pid, message_queue_len]) end
+    ).

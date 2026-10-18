@@ -10,6 +10,15 @@ them to the other nodes.
 
 This serializes per node operations and allows keeping per node consistency.
 
+When the operation is called from another node, the result is sent to the scope process of the calling node
+in format `{'3.0', sync_register_reply, ...}` (or `sync_unregister_reply`, `sync_join_reply`, `sync_leave_reply`),
+through the same process that sends it all the other data, so that it gets processed in order with it. The calling
+scope process applies it like any other sync message and only then replies to the caller, so that its tables are
+already updated when the call returns.
+
+If the call is made from a scope process itself (i.e. from a callback), or the process' node runs a version of Syn
+that does not support this, the process' node replies to the caller directly, and the caller updates the tables of its node.
+
 ## Scope Subclusters
 Syn implements Scopes, which are a way to create namespaced, logical overlay networks running on top of the Erlang
 distribution cluster. Nodes that belong to the same Scope will form a "subcluster": they will synchronize data

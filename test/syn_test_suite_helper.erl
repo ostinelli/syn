@@ -32,6 +32,7 @@
 -export([clean_after_test/0]).
 -export([start_process/0, start_process/1, start_process/2]).
 -export([kill_process/1, kill_scope_supervisors/0]).
+-export([run_async/1, run_async/2, wait_async/1, assert_async_waiting/1]).
 -export([wait_cluster_mesh_connected/1]).
 -export([wait_process_name_ready/1, wait_process_name_ready/2]).
 -export([wait_message_queue_empty/0]).
@@ -155,6 +156,30 @@ start_process(Loop) when is_function(Loop) ->
 start_process(Node, Loop) ->
     Pid = spawn(Node, Loop),
     Pid.
+
+%% runs Fun in a new process (on Node), get its result with wait_async/1
+run_async(Fun) ->
+    run_async(node(), Fun).
+run_async(Node, Fun) ->
+    TestPid = self(),
+    Ref = make_ref(),
+    spawn_link(Node, fun() -> TestPid ! {async_result, Ref, Fun()} end),
+    Ref.
+
+wait_async(Ref) ->
+    receive
+        {async_result, Ref, Result} -> Result
+    after ?DEFAULT_WAIT_TIMEOUT ->
+        ct:fail("~n\tNo result from async call (line ~p)~n", [get_line_from_stacktrace()])
+    end.
+
+assert_async_waiting(Ref) ->
+    receive
+        {async_result, Ref, Result} ->
+            ct:fail("~n\tAsync call returned too early (line ~p): ~p~n", [get_line_from_stacktrace(), Result])
+    after 0 ->
+        ok
+    end.
 
 kill_scope_supervisors() ->
     lists:foreach(fun

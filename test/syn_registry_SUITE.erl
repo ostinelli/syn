@@ -52,6 +52,11 @@
     three_nodes_ack_sync_reconciles_large_snapshot/1,
     three_nodes_stale_snapshot_does_not_undo_remote_register/1,
     three_nodes_stale_snapshot_does_not_undo_remote_update/1,
+    three_nodes_stale_snapshot_does_not_undo_remote_unregister/1,
+    three_nodes_late_unregister_does_not_undo_remote_register/1,
+    three_nodes_scope_down_does_not_undo_remote_register/1,
+    three_nodes_crossed_remote_registers_resolve_conflict/1,
+    three_nodes_remote_register_from_scope_process/1,
     three_nodes_clock_going_backwards/1,
     three_nodes_ack_sync_from_unknown_node_keeps_remote/1,
     three_nodes_ack_sync_from_unknown_node_resolution_reaches_peer/1,
@@ -119,6 +124,11 @@ groups() ->
             three_nodes_ack_sync_reconciles_large_snapshot,
             three_nodes_stale_snapshot_does_not_undo_remote_register,
             three_nodes_stale_snapshot_does_not_undo_remote_update,
+            three_nodes_stale_snapshot_does_not_undo_remote_unregister,
+            three_nodes_late_unregister_does_not_undo_remote_register,
+            three_nodes_scope_down_does_not_undo_remote_register,
+            three_nodes_crossed_remote_registers_resolve_conflict,
+            three_nodes_remote_register_from_scope_process,
             three_nodes_clock_going_backwards,
             three_nodes_ack_sync_from_unknown_node_keeps_remote,
             three_nodes_ack_sync_from_unknown_node_resolution_reaches_peer,
@@ -1894,69 +1904,212 @@ three_nodes_ack_sync_reconciles_large_snapshot(Config) ->
     end.
 
 three_nodes_stale_snapshot_does_not_undo_remote_register(Config) ->
-    %% registering a process that lives on the slave updates our table right away, and an older
-    %% snapshot from the slave still sitting in our scope's queue must not undo that
+    %% registering a process that lives on the slave returns once our scope has applied it, after
+    %% an older snapshot from the slave still sitting in its queue, so that snapshot can't undo it
 
     SlaveNode1 = proplists:get_value(syn_slave_1, Config),
-
-    ok = syn:start(),
-    ok = rpc:call(SlaveNode1, syn, start, []),
-    ok = syn:add_node_to_scopes([scope_stale]),
-    ok = rpc:call(SlaveNode1, syn, add_node_to_scopes, [[scope_stale]]),
-    syn_test_suite_helper:assert_scope_subcluster(registry, node(), scope_stale, [SlaveNode1]),
-    syn_test_suite_helper:assert_scope_subcluster(registry, SlaveNode1, scope_stale, [node()]),
+    ScopePid = start_scope_stale(SlaveNode1),
 
     Pid = syn_test_suite_helper:start_process(SlaveNode1),
 
     %% hold the slave's snapshot back in this node's scope mailbox, then register
-    ScopePid = whereis(syn_registry_scope_stale),
     {RemoteScopePid, Snapshot} = get_remote_snapshot(SlaveNode1, syn_registry_scope_stale),
     ok = sys:suspend(ScopePid),
     ScopePid ! {'3.0', ack_sync, RemoteScopePid, Snapshot},
-    ok = syn:register(scope_stale, "proc", Pid, meta),
-    {Pid, meta} = syn:lookup(scope_stale, "proc"),
-    ok = sys:resume(ScopePid),
-    _ = sys:get_state(ScopePid),
+    CallRef = syn_test_suite_helper:run_async(fun() -> syn:register(scope_stale, "proc", Pid, meta) end),
 
-    syn_test_suite_helper:assert_wait(
-        {Pid, meta},
-        fun() -> syn:lookup(scope_stale, "proc") end
-    ),
+    %% the slave has it, the call waits for our scope
+    wait_for_message_queue_len(ScopePid, 2),
+    syn_test_suite_helper:assert_async_waiting(CallRef),
+    {Pid, meta} = rpc:call(SlaveNode1, syn, lookup, [scope_stale, "proc"]),
+    undefined = syn:lookup(scope_stale, "proc"),
+    ok = sys:resume(ScopePid),
+
+    ok = syn_test_suite_helper:wait_async(CallRef),
+    _ = sys:get_state(ScopePid),
+    {Pid, meta} = syn:lookup(scope_stale, "proc"),
     {Pid, meta} = rpc:call(SlaveNode1, syn, lookup, [scope_stale, "proc"]).
 
 three_nodes_stale_snapshot_does_not_undo_remote_update(Config) ->
-    %% updating the meta of a process that lives on the slave updates our table right away, and an older
-    %% snapshot from the slave still sitting in our scope's queue must not put the old meta back
+    %% updating the meta of a process that lives on the slave returns once our scope has applied it, after
+    %% an older snapshot from the slave still sitting in its queue, so that snapshot can't put the old meta back
 
     SlaveNode1 = proplists:get_value(syn_slave_1, Config),
-
-    ok = syn:start(),
-    ok = rpc:call(SlaveNode1, syn, start, []),
-    ok = syn:add_node_to_scopes([scope_stale]),
-    ok = rpc:call(SlaveNode1, syn, add_node_to_scopes, [[scope_stale]]),
-    syn_test_suite_helper:assert_scope_subcluster(registry, node(), scope_stale, [SlaveNode1]),
-    syn_test_suite_helper:assert_scope_subcluster(registry, SlaveNode1, scope_stale, [node()]),
+    ScopePid = start_scope_stale(SlaveNode1),
 
     Pid = syn_test_suite_helper:start_process(SlaveNode1),
     ok = syn:register(scope_stale, "proc", Pid, meta),
-    syn_test_suite_helper:assert_wait(
-        {Pid, meta},
-        fun() -> rpc:call(SlaveNode1, syn, lookup, [scope_stale, "proc"]) end
-    ),
+    {Pid, meta} = rpc:call(SlaveNode1, syn, lookup, [scope_stale, "proc"]),
 
     %% hold the slave's snapshot back in our scope's queue, then update
-    ScopePid = whereis(syn_registry_scope_stale),
     {RemoteScopePid, Snapshot} = get_remote_snapshot(SlaveNode1, syn_registry_scope_stale),
     [{"proc", Pid, meta, _}] = Snapshot,
     ok = sys:suspend(ScopePid),
     ScopePid ! {'3.0', ack_sync, RemoteScopePid, Snapshot},
-    {ok, {Pid, new_meta}} = syn:update_registry(scope_stale, "proc", fun(_, meta) -> new_meta end),
-    {Pid, new_meta} = syn:lookup(scope_stale, "proc"),
+    CallRef = syn_test_suite_helper:run_async(fun() ->
+        syn:update_registry(scope_stale, "proc", fun(_, meta) -> new_meta end)
+    end),
+    wait_for_message_queue_len(ScopePid, 2),
+    syn_test_suite_helper:assert_async_waiting(CallRef),
     ok = sys:resume(ScopePid),
-    _ = sys:get_state(ScopePid),
 
+    {ok, {Pid, new_meta}} = syn_test_suite_helper:wait_async(CallRef),
+    _ = sys:get_state(ScopePid),
     {Pid, new_meta} = syn:lookup(scope_stale, "proc"),
     {Pid, new_meta} = rpc:call(SlaveNode1, syn, lookup, [scope_stale, "proc"]).
+
+three_nodes_stale_snapshot_does_not_undo_remote_unregister(Config) ->
+    %% unregistering a process that lives on the slave returns once our scope has applied it, after
+    %% an older snapshot from the slave still sitting in its queue, so that snapshot can't bring it back
+
+    SlaveNode1 = proplists:get_value(syn_slave_1, Config),
+    ScopePid = start_scope_stale(SlaveNode1),
+
+    Pid = syn_test_suite_helper:start_process(SlaveNode1),
+    ok = syn:register(scope_stale, "proc", Pid, meta),
+
+    %% hold the slave's snapshot back in our scope's queue, then unregister
+    {RemoteScopePid, Snapshot} = get_remote_snapshot(SlaveNode1, syn_registry_scope_stale),
+    [{"proc", Pid, meta, _}] = Snapshot,
+    ok = sys:suspend(ScopePid),
+    ScopePid ! {'3.0', ack_sync, RemoteScopePid, Snapshot},
+    CallRef = syn_test_suite_helper:run_async(fun() -> syn:unregister(scope_stale, "proc") end),
+    wait_for_message_queue_len(ScopePid, 2),
+    syn_test_suite_helper:assert_async_waiting(CallRef),
+    ok = sys:resume(ScopePid),
+
+    ok = syn_test_suite_helper:wait_async(CallRef),
+    _ = sys:get_state(ScopePid),
+    undefined = syn:lookup(scope_stale, "proc"),
+    undefined = rpc:call(SlaveNode1, syn, lookup, [scope_stale, "proc"]).
+
+three_nodes_late_unregister_does_not_undo_remote_register(Config) ->
+    %% the slave unregisters its process and we register it again right after: the unregister the slave sent
+    %% before our call reaches our scope before the registration, so it can't remove it
+
+    SlaveNode1 = proplists:get_value(syn_slave_1, Config),
+    ScopePid = start_scope_stale(SlaveNode1),
+
+    Pid = syn_test_suite_helper:start_process(SlaveNode1),
+    ok = syn:register(scope_stale, "proc", Pid, meta),
+
+    %% the slave's unregister waits in our scope's queue while we register again
+    ok = sys:suspend(ScopePid),
+    ok = rpc:call(SlaveNode1, syn, unregister, [scope_stale, "proc"]),
+    wait_for_message_queue_len(ScopePid, 1),
+    CallRef = syn_test_suite_helper:run_async(fun() -> syn:register(scope_stale, "proc", Pid, new_meta) end),
+    wait_for_message_queue_len(ScopePid, 2),
+    syn_test_suite_helper:assert_async_waiting(CallRef),
+    ok = sys:resume(ScopePid),
+
+    ok = syn_test_suite_helper:wait_async(CallRef),
+    _ = sys:get_state(ScopePid),
+    {Pid, new_meta} = syn:lookup(scope_stale, "proc"),
+    {Pid, new_meta} = rpc:call(SlaveNode1, syn, lookup, [scope_stale, "proc"]).
+
+three_nodes_scope_down_does_not_undo_remote_register(Config) ->
+    %% the scope process of the slave restarts while ours is busy, and we register a process of the slave:
+    %% the old scope's DOWN, and the new one's snapshot sent before our call, are in our queue before the
+    %% registration, so they can't remove it
+
+    SlaveNode1 = proplists:get_value(syn_slave_1, Config),
+    ScopePid = start_scope_stale(SlaveNode1),
+
+    Pid = syn_test_suite_helper:start_process(SlaveNode1),
+
+    %% restart the slave's scope process, its new one discovers us
+    ok = sys:suspend(ScopePid),
+    OldRemoteScopePid = rpc:call(SlaveNode1, erlang, whereis, [syn_registry_scope_stale]),
+    syn_test_suite_helper:kill_process(OldRemoteScopePid),
+    wait_for_message_queue_len(ScopePid, 2),
+    %% and sends us its snapshot, without the name
+    RemoteScopePid = rpc:call(SlaveNode1, erlang, whereis, [syn_registry_scope_stale]),
+    RemoteScopePid ! {'3.0', discover, ScopePid},
+    wait_for_message_queue_len(ScopePid, 3),
+    CallRef = syn_test_suite_helper:run_async(fun() -> syn:register(scope_stale, "proc", Pid, meta) end),
+    wait_for_message_queue_len(ScopePid, 4),
+    syn_test_suite_helper:assert_async_waiting(CallRef),
+    ok = sys:resume(ScopePid),
+
+    ok = syn_test_suite_helper:wait_async(CallRef),
+    _ = sys:get_state(ScopePid),
+    {Pid, meta} = syn:lookup(scope_stale, "proc"),
+    syn_test_suite_helper:assert_scope_subcluster(registry, node(), scope_stale, [SlaveNode1]),
+    syn_test_suite_helper:assert_scope_subcluster(registry, SlaveNode1, scope_stale, [node()]),
+    {Pid, meta} = syn:lookup(scope_stale, "proc"),
+    {Pid, meta} = rpc:call(SlaveNode1, syn, lookup, [scope_stale, "proc"]).
+
+three_nodes_crossed_remote_registers_resolve_conflict(Config) ->
+    %% we register a name for a process of the slave while the slave registers it for one of ours:
+    %% both nodes see the conflict and resolve it, and the call of the process that is not kept
+    %% returns race_condition
+
+    SlaveNode1 = proplists:get_value(syn_slave_1, Config),
+    ScopePid = start_scope_stale(SlaveNode1),
+    RemoteScopePid = rpc:call(SlaveNode1, erlang, whereis, [syn_registry_scope_stale]),
+
+    LocalPid = syn_test_suite_helper:start_process(),
+    RemotePid = syn_test_suite_helper:start_process(SlaveNode1),
+
+    %% both calls wait in the queue of the other node's scope
+    ok = sys:suspend(ScopePid),
+    ok = sys:suspend(RemoteScopePid),
+    LocalCallRef = syn_test_suite_helper:run_async(fun() ->
+        syn:register(scope_stale, "proc", RemotePid, local_call)
+    end),
+    RemoteCallRef = syn_test_suite_helper:run_async(SlaveNode1, fun() ->
+        syn:register(scope_stale, "proc", LocalPid, remote_call)
+    end),
+    wait_for_message_queue_len(ScopePid, 1),
+    wait_for_message_queue_len(RemoteScopePid, 1),
+    ok = sys:resume(ScopePid),
+    ok = sys:resume(RemoteScopePid),
+
+    {KeptPid, KeptMeta, DiscardedPid} = case {
+        syn_test_suite_helper:wait_async(LocalCallRef),
+        syn_test_suite_helper:wait_async(RemoteCallRef)
+    } of
+        {ok, {error, race_condition}} -> {RemotePid, local_call, LocalPid};
+        {{error, race_condition}, ok} -> {LocalPid, remote_call, RemotePid}
+    end,
+    syn_test_suite_helper:assert_wait(
+        {KeptPid, KeptMeta},
+        fun() -> syn:lookup(scope_stale, "proc") end
+    ),
+    syn_test_suite_helper:assert_wait(
+        {KeptPid, KeptMeta},
+        fun() -> rpc:call(SlaveNode1, syn, lookup, [scope_stale, "proc"]) end
+    ),
+    %% killed by the default resolution
+    syn_test_suite_helper:assert_wait(
+        false,
+        fun() -> rpc:call(node(DiscardedPid), erlang, is_process_alive, [DiscardedPid]) end
+    ).
+
+three_nodes_remote_register_from_scope_process(Config) ->
+    %% code running in our scope process, like a callback, can't wait for that process to apply
+    %% the result of a call for a process of the slave: the slave replies to it directly
+
+    SlaveNode1 = proplists:get_value(syn_slave_1, Config),
+    ScopePid = start_scope_stale(SlaveNode1),
+
+    Pid = syn_test_suite_helper:start_process(SlaveNode1),
+    TestPid = self(),
+    _ = sys:replace_state(ScopePid, fun(State) ->
+        TestPid ! {registered, syn:register(scope_stale, "proc", Pid, meta)},
+        State
+    end),
+    ok = receive {registered, Registered} -> Registered end,
+    {Pid, meta} = syn:lookup(scope_stale, "proc"),
+    {Pid, meta} = rpc:call(SlaveNode1, syn, lookup, [scope_stale, "proc"]),
+
+    _ = sys:replace_state(ScopePid, fun(State) ->
+        TestPid ! {unregistered, syn:unregister(scope_stale, "proc")},
+        State
+    end),
+    ok = receive {unregistered, Unregistered} -> Unregistered end,
+    undefined = syn:lookup(scope_stale, "proc"),
+    undefined = rpc:call(SlaveNode1, syn, lookup, [scope_stale, "proc"]).
 
 three_nodes_clock_going_backwards(Config) ->
     %% times come from the clock of each node, which can step backwards: what a node sends about
