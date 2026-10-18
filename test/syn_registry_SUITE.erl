@@ -61,6 +61,10 @@
     three_nodes_remote_register_from_another_scope_process/1,
     three_nodes_remote_register_with_undiscovered_node/1,
     three_nodes_remote_register_loses_conflict_resolved_elsewhere/1,
+    three_nodes_ignored_registration_shown_when_newer_one_goes/1,
+    three_nodes_replaced_registration_shown_when_newer_one_goes/1,
+    three_nodes_kept_aside_registration_dropped_by_its_node/1,
+    three_nodes_kept_aside_registration_shown_when_other_node_goes/1,
     three_nodes_legacy_node_gets_direct_calls/1,
     three_nodes_clock_going_backwards/1,
     three_nodes_ack_sync_from_unknown_node_keeps_remote/1,
@@ -138,6 +142,10 @@ groups() ->
             three_nodes_remote_register_from_another_scope_process,
             three_nodes_remote_register_with_undiscovered_node,
             three_nodes_remote_register_loses_conflict_resolved_elsewhere,
+            three_nodes_ignored_registration_shown_when_newer_one_goes,
+            three_nodes_replaced_registration_shown_when_newer_one_goes,
+            three_nodes_kept_aside_registration_dropped_by_its_node,
+            three_nodes_kept_aside_registration_shown_when_other_node_goes,
             three_nodes_legacy_node_gets_direct_calls,
             three_nodes_clock_going_backwards,
             three_nodes_ack_sync_from_unknown_node_keeps_remote,
@@ -2229,6 +2237,124 @@ three_nodes_remote_register_loses_conflict_resolved_elsewhere(Config) ->
     _ = sys:get_state(ScopePid),
     {PidOn2, on_2} = syn:lookup(scope_all, "proc").
 
+three_nodes_ignored_registration_shown_when_newer_one_goes(Config) ->
+    %% we have the name on a process of slave 2 with a time from a clock ahead of slave 1's, and slave 1
+    %% registers it on its process: we keep that registration aside, and show it once slave 2 drops its own
+
+    SlaveNode1 = proplists:get_value(syn_slave_1, Config),
+    SlaveNode2 = proplists:get_value(syn_slave_2, Config),
+    ScopePid = start_scope_all(SlaveNode1, SlaveNode2),
+
+    PidOn1 = syn_test_suite_helper:start_process(SlaveNode1),
+    PidOn2 = syn_test_suite_helper:start_process(SlaveNode2),
+    ScopePid ! {'3.0', sync_register, "proc", PidOn2, on_2, later_time(), normal},
+    ok = rpc:call(SlaveNode1, syn, register, [scope_all, "proc", PidOn1, on_1]),
+    wait_for_registry_entry(SlaveNode2, scope_all, "proc", PidOn1),
+    {PidOn2, on_2} = syn:lookup(scope_all, "proc"),
+
+    ScopePid ! {'3.0', sync_unregister, "proc", PidOn2, on_2, normal},
+    _ = sys:get_state(ScopePid),
+    {PidOn1, on_1} = syn:lookup(scope_all, "proc"),
+
+    %% same with registrations at the same time
+    {_, _, _, Time, _, _} = get_registry_entry_with_mref(node(), scope_all, "proc"),
+    OtherPidOn2 = syn_test_suite_helper:start_process(SlaveNode2),
+    ScopePid ! {'3.0', sync_register, "proc-same-time", OtherPidOn2, on_2, Time, normal},
+    ScopePid ! {'3.0', sync_register, "proc-same-time", PidOn1, on_1, Time, normal},
+    _ = sys:get_state(ScopePid),
+    {OtherPidOn2, on_2} = syn:lookup(scope_all, "proc-same-time"),
+    ScopePid ! {'3.0', sync_unregister, "proc-same-time", OtherPidOn2, on_2, normal},
+    _ = sys:get_state(ScopePid),
+    {PidOn1, on_1} = syn:lookup(scope_all, "proc-same-time").
+
+three_nodes_replaced_registration_shown_when_newer_one_goes(Config) ->
+    %% we have the name on a process of slave 1, and slave 2 registers it on its own process with a later time,
+    %% then drops it before the two resolve the conflict: we show the registration of slave 1 again
+
+    SlaveNode1 = proplists:get_value(syn_slave_1, Config),
+    SlaveNode2 = proplists:get_value(syn_slave_2, Config),
+    ScopePid = start_scope_all(SlaveNode1, SlaveNode2),
+
+    PidOn1 = syn_test_suite_helper:start_process(SlaveNode1),
+    PidOn2 = syn_test_suite_helper:start_process(SlaveNode2),
+    ok = rpc:call(SlaveNode1, syn, register, [scope_all, "proc", PidOn1, on_1]),
+    syn_test_suite_helper:assert_wait(
+        {PidOn1, on_1},
+        fun() -> syn:lookup(scope_all, "proc") end
+    ),
+    ScopePid ! {'3.0', sync_register, "proc", PidOn2, on_2, later_time(), normal},
+    _ = sys:get_state(ScopePid),
+    {PidOn2, on_2} = syn:lookup(scope_all, "proc"),
+
+    ScopePid ! {'3.0', sync_unregister, "proc", PidOn2, on_2, normal},
+    _ = sys:get_state(ScopePid),
+    {PidOn1, on_1} = syn:lookup(scope_all, "proc").
+
+three_nodes_kept_aside_registration_dropped_by_its_node(Config) ->
+    %% a registration we keep aside goes when its node unregisters it, sends us a snapshot without it,
+    %% or goes down: it doesn't come back when the name's other process goes
+
+    SlaveNode1 = proplists:get_value(syn_slave_1, Config),
+    SlaveNode2 = proplists:get_value(syn_slave_2, Config),
+    ScopePid = start_scope_all(SlaveNode1, SlaveNode2),
+    RemoteScopePid1 = rpc:call(SlaveNode1, erlang, whereis, [syn_registry_scope_all]),
+
+    PidsOn1 = [syn_test_suite_helper:start_process(SlaveNode1) || _ <- lists:seq(1, 3)],
+    PidOn2 = syn_test_suite_helper:start_process(SlaveNode2),
+    Names = ["proc-unregistered", "proc-not-in-snapshot", "proc-node-down"],
+    lists:foreach(fun({Name, PidOn1}) ->
+        ScopePid ! {'3.0', sync_register, Name, PidOn2, on_2, later_time(), normal},
+        ok = rpc:call(SlaveNode1, syn, register, [scope_all, Name, PidOn1, on_1]),
+        wait_for_registry_entry(SlaveNode2, scope_all, Name, PidOn1)
+    end, lists:zip(Names, PidsOn1)),
+
+    %% unregistered by slave 1
+    ok = rpc:call(SlaveNode1, syn, unregister, [scope_all, "proc-unregistered"]),
+    wait_for_registry_entry(SlaveNode2, scope_all, "proc-unregistered", undefined),
+    ScopePid ! {'3.0', sync_unregister, "proc-unregistered", PidOn2, on_2, normal},
+    _ = sys:get_state(ScopePid),
+    undefined = syn:lookup(scope_all, "proc-unregistered"),
+
+    %% not in a snapshot of slave 1
+    {_, Snapshot} = get_remote_snapshot(SlaveNode1, syn_registry_scope_all),
+    ScopePid ! {'3.0', ack_sync, RemoteScopePid1, lists:keydelete("proc-not-in-snapshot", 1, Snapshot)},
+    ScopePid ! {'3.0', sync_unregister, "proc-not-in-snapshot", PidOn2, on_2, normal},
+    _ = sys:get_state(ScopePid),
+    undefined = syn:lookup(scope_all, "proc-not-in-snapshot"),
+
+    %% slave 1 goes down
+    syn_test_suite_helper:disconnect_node(SlaveNode1),
+    syn_test_suite_helper:assert_scope_subcluster(registry, node(), scope_all, [SlaveNode2]),
+    ScopePid ! {'3.0', sync_unregister, "proc-node-down", PidOn2, on_2, normal},
+    _ = sys:get_state(ScopePid),
+    undefined = syn:lookup(scope_all, "proc-node-down"),
+
+    %% reconnect for the next tests
+    true = syn_test_suite_helper:connect_node(SlaveNode1),
+    syn_test_suite_helper:assert_cluster(node(), [SlaveNode1, SlaveNode2]).
+
+three_nodes_kept_aside_registration_shown_when_other_node_goes(Config) ->
+    %% we keep aside the registration of slave 1, and the node of the process we show goes down: we show it
+
+    SlaveNode1 = proplists:get_value(syn_slave_1, Config),
+    SlaveNode2 = proplists:get_value(syn_slave_2, Config),
+    ScopePid = start_scope_all(SlaveNode1, SlaveNode2),
+
+    PidOn1 = syn_test_suite_helper:start_process(SlaveNode1),
+    PidOn2 = syn_test_suite_helper:start_process(SlaveNode2),
+    ScopePid ! {'3.0', sync_register, "proc", PidOn2, on_2, later_time(), normal},
+    ok = rpc:call(SlaveNode1, syn, register, [scope_all, "proc", PidOn1, on_1]),
+    wait_for_registry_entry(SlaveNode2, scope_all, "proc", PidOn1),
+    {PidOn2, on_2} = syn:lookup(scope_all, "proc"),
+
+    syn_test_suite_helper:disconnect_node(SlaveNode2),
+    syn_test_suite_helper:assert_scope_subcluster(registry, node(), scope_all, [SlaveNode1]),
+    {PidOn1, on_1} = syn:lookup(scope_all, "proc"),
+
+    %% reconnect for the next tests
+    true = syn_test_suite_helper:connect_node(SlaveNode2),
+    syn_test_suite_helper:assert_cluster(node(), [SlaveNode1, SlaveNode2]).
+
 three_nodes_legacy_node_gets_direct_calls(Config) ->
     %% a node running a version that doesn't know the ordered calls gets direct ones, until it disconnects
 
@@ -2733,6 +2859,44 @@ join_with_ack_sync_first(Node, PeerNode, Name) ->
     PeerScopePid ! {'3.0', discover, ScopePid},
     syn_test_suite_helper:assert_scope_subcluster(registry, PeerNode, scope_all, [node(), Node]),
     ok = sys:resume(ScopePid).
+
+%% start syn and add scope_all on this node and on Node1 and Node2, returns the scope process of this node
+start_scope_all(Node1, Node2) ->
+    ok = syn:start(),
+    ok = rpc:call(Node1, syn, start, []),
+    ok = rpc:call(Node2, syn, start, []),
+    ok = syn:add_node_to_scopes([scope_all]),
+    ok = rpc:call(Node1, syn, add_node_to_scopes, [[scope_all]]),
+    ok = rpc:call(Node2, syn, add_node_to_scopes, [[scope_all]]),
+    syn_test_suite_helper:assert_scope_subcluster(registry, node(), scope_all, [Node1, Node2]),
+    syn_test_suite_helper:assert_scope_subcluster(registry, Node1, scope_all, [node(), Node2]),
+    syn_test_suite_helper:assert_scope_subcluster(registry, Node2, scope_all, [node(), Node1]),
+    whereis(syn_registry_scope_all).
+
+get_registry_entry_with_mref(Node, Scope, Name) ->
+    TableByName = rpc:call(Node, syn_backbone, get_table_name, [syn_registry_by_name, Scope]),
+    [Entry] = rpc:call(Node, ets, lookup, [TableByName, Name]),
+    Entry.
+
+%% a time from a clock ahead of the others
+later_time() ->
+    erlang:system_time() + erlang:convert_time_unit(60, second, native).
+
+wait_for_registry_entry(Node, Scope, Name, undefined) ->
+    syn_test_suite_helper:assert_wait(
+        undefined,
+        fun() -> rpc:call(Node, syn, lookup, [Scope, Name]) end
+    );
+wait_for_registry_entry(Node, Scope, Name, Pid) ->
+    syn_test_suite_helper:assert_wait(
+        Pid,
+        fun() ->
+            case rpc:call(Node, syn, lookup, [Scope, Name]) of
+                {Pid, _} -> Pid;
+                Other -> Other
+            end
+        end
+    ).
 
 %% start syn and add scope_stale on this node and on Node, returns the scope process of this node
 start_scope_stale(Node) ->

@@ -10,6 +10,10 @@ them to the other nodes.
 
 This serializes per node operations and allows keeping per node consistency.
 
+When a node receives registrations of the same name from different nodes, its table shows the most recent one. It keeps
+the others aside until their node drops them: if the one it shows goes away, it shows the most recent of them, unless it
+went away because of a conflict resolution, since the node that keeps its process then tells everyone.
+
 When the operation is called from another node, the result is sent to the scope process of the calling node
 in format `{'3.0', sync_register_reply, ...}` (or `sync_unregister_reply`, `sync_join_reply`, `sync_leave_reply`),
 through the same process that sends it all the other data, so that it gets processed in order with it. The calling

@@ -33,7 +33,8 @@
     subcluster_nodes/2,
     call/3, call/4,
     call_ordered/4,
-    reply_ordered/2
+    reply_ordered/2,
+    send_to_local_scope/3
 ]).
 -export([
     broadcast/2,
@@ -152,6 +153,20 @@ call_ordered(Handler, Node, Scope, Message) ->
                         Response ->
                             Response
                     end
+            end
+    end.
+
+%% sends Message to the local scope process, if it's running
+-spec send_to_local_scope(Handler :: module(), Scope :: atom(), Message :: term()) -> any().
+send_to_local_scope(Handler, Scope, Message) ->
+    case get_process_name_for_scope(Handler, Scope) of
+        undefined ->
+            ok;
+
+        ProcessName ->
+            case whereis(ProcessName) of
+                undefined -> ok;
+                ScopePid -> ScopePid ! Message
             end
     end.
 

@@ -231,6 +231,8 @@ unregister_direct(Scope, Node, Name, Pid, Meta, TableByName) ->
             remove_from_local_table(Name, Pid, TableByName, TableByPid),
             %% callback
             syn_event_handler:call_event_handler(on_process_unregistered, [Scope, Name, Pid, Meta, normal]),
+            %% the process' node doesn't send it to our scope process, which may keep it aside or show it by now
+            syn_gen_scope:send_to_local_scope(?MODULE, Scope, {'3.0', sync_unregister, Name, Pid, Meta, normal}),
             %% return
             ok;
 
@@ -281,8 +283,8 @@ init(#state{
     %% purge remote & rebuild
     purge_registry_for_remote_nodes(Scope, TableByName, TableByPid),
     rebuild_monitors(Scope, TableByName, TableByPid),
-    %% init
-    HandlerState = #{},
+    %% init, with the registrations of other nodes kept aside (see shadow/6)
+    HandlerState = #{shadowed => ets:new(syn_registry_shadowed, [bag])},
     {ok, HandlerState}.
 
 %% ----------------------------------------------------------------------------------------------------------
@@ -418,7 +420,8 @@ handle_info({'DOWN', _MRef, process, Pid, Reason}, #state{
                 %% callback
                 syn_event_handler:call_event_handler(on_process_unregistered, [Scope, Name, Pid, Meta, Reason]),
                 %% broadcast
-                syn_gen_scope:broadcast({'3.0', sync_unregister, Name, Pid, Meta, Reason}, State)
+                syn_gen_scope:broadcast({'3.0', sync_unregister, Name, Pid, Meta, Reason}, State),
+                show_shadowed(Name, State)
             end, Entries)
     end,
     %% return
@@ -449,8 +452,10 @@ purge_local_data_for_node(Node, #state{
     scope = Scope,
     table_by_name = TableByName,
     table_by_pid = TableByPid
-}) ->
-    purge_registry_for_remote_node(Scope, Node, TableByName, TableByPid).
+} = State) ->
+    RegistryTuples = purge_registry_for_remote_node(Scope, Node, TableByName, TableByPid),
+    unshadow_node(Node, State),
+    lists:foreach(fun({Name, _, _, _}) -> show_shadowed(Name, State) end, RegistryTuples).
 
 %% ===================================================================
 %% Internal
@@ -573,6 +578,7 @@ unregister_on_node(RequesterNode, Name, Pid, #state{
             syn_event_handler:call_event_handler(on_process_unregistered, [Scope, Name, Pid, Meta, normal]),
             %% broadcast
             syn_gen_scope:broadcast({'3.0', sync_unregister, Name, Pid, Meta, normal}, [RequesterNode], State),
+            show_shadowed(Name, State),
             %% return
             {ok, Meta};
 
@@ -717,7 +723,8 @@ purge_registry_for_remote_nodes(Scope, TableByName, TableByPid) ->
         purge_registry_for_remote_node(Scope, RemoteNode, TableByName, TableByPid)
     end, undefined, RemoteNodes).
 
--spec purge_registry_for_remote_node(Scope :: atom(), Node :: atom(), TableByName :: atom(), TableByPid :: atom()) -> true.
+-spec purge_registry_for_remote_node(Scope :: atom(), Node :: atom(), TableByName :: atom(), TableByPid :: atom()) ->
+    [syn_registry_tuple()].
 purge_registry_for_remote_node(Scope, Node, TableByName, TableByPid) when Node =/= node() ->
     %% loop elements for callback
     RegistryTuples = get_registry_tuples_for_node(Node, TableByName),
@@ -728,26 +735,35 @@ purge_registry_for_remote_node(Scope, Node, TableByName, TableByPid) when Node =
     end, RegistryTuples),
     %% remove all from pid table
     true = ets:match_delete(TableByName, {'_', '_', '_', '_', '_', Node}),
-    true = ets:match_delete(TableByPid, {'_', '_', '_', '_', '_', Node}).
+    true = ets:match_delete(TableByPid, {'_', '_', '_', '_', '_', Node}),
+    RegistryTuples.
 
 -spec reconcile_remote_registry_snapshot(Node :: node(), [syn_registry_tuple()], #state{}) -> ok.
 reconcile_remote_registry_snapshot(Node, RegistryTuplesOfRemoteNode, #state{
     scope = Scope,
     table_by_name = TableByName,
     table_by_pid = TableByPid
-}) ->
+} = State) ->
     ExistingEntries = ets:select(TableByName, [{
         {'$1', '$2', '$3', '$4', '$5', Node},
         [],
         [{{'$1', '$2', '$3', '$4', '$5'}}]
     }]),
-    case ExistingEntries of
-        [] ->
+    Shadows = shadows_of_node(Node, State),
+    case ExistingEntries =:= [] andalso Shadows =:= [] of
+        true ->
             ok;
 
-        _ ->
+        false ->
             %% compare pids too: an entry whose name the snapshot has with another pid is stale, whatever its time
             SnapshotPids = maps:from_list([{Name, Pid} || {Name, Pid, _Meta, _Time} <- RegistryTuplesOfRemoteNode]),
+            %% registrations kept aside that the node doesn't have anymore
+            lists:foreach(fun({Name, _, Pid, _, _, _}) ->
+                case maps:get(Name, SnapshotPids, undefined) =:= Pid of
+                    true -> ok;
+                    false -> unshadow(Name, Pid, State)
+                end
+            end, Shadows),
             SnapshotTime = lists:foldl(fun({_, _, _, Time}, Acc) -> max(Time, Acc) end, 0, RegistryTuplesOfRemoteNode),
             lists:foreach(fun({Name, Pid, Meta, Time, MRef}) ->
                 case maps:get(Name, SnapshotPids, undefined) =:= Pid orelse is_newer_caller_entry(MRef, Time, SnapshotTime) of
@@ -758,7 +774,8 @@ reconcile_remote_registry_snapshot(Node, RegistryTuplesOfRemoteNode, #state{
                         remove_from_local_table(Name, Pid, TableByName, TableByPid),
                         syn_event_handler:call_event_handler(on_process_unregistered,
                             [Scope, Name, Pid, Meta, {syn_remote_scope_node_up, Scope, Node}]
-                        )
+                        ),
+                        show_shadowed(Name, State)
                 end
             end, ExistingEntries)
     end.
@@ -786,6 +803,7 @@ handle_registry_sync(Name, Pid, Meta, Time, Reason, #state{
         undefined ->
             %% no conflict
             add_to_local_table(Name, Pid, Meta, Time, undefined, TableByName, TableByPid),
+            unshadow(Name, node(Pid), State),
             %% callback
             syn_event_handler:call_event_handler(on_process_registered, [Scope, Name, Pid, Meta, Reason]);
 
@@ -797,6 +815,7 @@ handle_registry_sync(Name, Pid, Meta, Time, Reason, #state{
             %% same pid, more recent (because it comes from the same node, which means that it's sequential)
             %% maybe updated meta or time only
             add_to_local_table(Name, Pid, Meta, Time, MRef, TableByName, TableByPid),
+            unshadow(Name, node(Pid), State),
             %% callback (call only if meta update)
             case TableMeta =/= Meta of
                 true ->
@@ -813,12 +832,23 @@ handle_registry_sync(Name, Pid, Meta, Time, Reason, #state{
             %% * recipients check that the time is more recent that what they have to ensure that there are no race conditions
             resolve_conflict(Scope, Name, {Pid, Meta, Time}, {TablePid, TableMeta, TableTime, TableMRef}, State);
 
-        {_, TablePid, TableMeta, TableTime, _, _} when TableTime < Time ->
+        {_, TablePid, TableMeta, TableTime, _, TableNode} when TableTime < Time ->
             %% current node does not own any of the conflicting processes, update
             update_local_table(Name, TablePid, {Pid, Meta, Time, undefined}, TableByName, TableByPid),
+            unshadow(Name, node(Pid), State),
+            %% the replaced one is still registered on its node, unless it's the same node
+            case TableNode =/= node(Pid) of
+                true -> shadow(Name, TablePid, TableMeta, TableTime, normal, State);
+                false -> ok
+            end,
             %% callbacks
             syn_event_handler:call_event_handler(on_process_unregistered, [Scope, Name, TablePid, TableMeta, Reason]),
             syn_event_handler:call_event_handler(on_process_registered, [Scope, Name, Pid, Meta, Reason]);
+
+        {_, _, _, _, _, TableNode} when TableNode =/= node(Pid) ->
+            %% current node does not own any of the conflicting processes, incoming data is older or as old:
+            %% keep it aside, it's still registered on its node
+            shadow(Name, Pid, Meta, Time, Reason, State);
 
         _ ->
             %% race condition: incoming data is older, ignore
@@ -836,17 +866,97 @@ handle_registry_unregister_sync(Name, Pid, Meta, Reason, #state{
     scope = Scope,
     table_by_name = TableByName,
     table_by_pid = TableByPid
-}) ->
+} = State) ->
+    unshadow(Name, Pid, State),
     case find_registry_entry_by_name(Name, TableByName) of
         {_, Pid, _, _, _, _} ->
             remove_from_local_table(Name, Pid, TableByName, TableByPid),
             %% callback
-            syn_event_handler:call_event_handler(on_process_unregistered, [Scope, Name, Pid, Meta, Reason]);
+            syn_event_handler:call_event_handler(on_process_unregistered, [Scope, Name, Pid, Meta, Reason]),
+            %% after a conflict resolution, the node that keeps its process tells everyone
+            case Reason of
+                syn_conflict_resolution -> ok;
+                _ -> show_shadowed(Name, State)
+            end;
 
         _ ->
             %% not in table, nothing to do
             ok
     end.
+
+%% registrations of a name by other nodes that the table doesn't show, because it shows one at least as recent:
+%% kept aside until their node drops them, so that the most recent one gets shown if the table's one goes first
+-spec shadow(Name :: term(), Pid :: pid(), Meta :: term(), Time :: integer(), Reason :: term(), #state{}) -> any().
+shadow(Name, Pid, Meta, Time, Reason, State) ->
+    case shadowed_table(State) of
+        undefined ->
+            ok;
+
+        Shadowed ->
+            %% one per node, the last one it sent
+            unshadow(Name, node(Pid), State),
+            true = ets:insert(Shadowed, {Name, node(Pid), Pid, Meta, Time, Reason})
+    end.
+
+%% drops the registration of Name kept aside for a node, or with a pid
+-spec unshadow(Name :: term(), NodeOrPid :: node() | pid(), #state{}) -> any().
+unshadow(Name, NodeOrPid, State) ->
+    case shadowed_table(State) of
+        undefined ->
+            ok;
+
+        Shadowed ->
+            lists:foreach(fun
+                ({_, Node, Pid, _, _, _} = Shadow) when Node =:= NodeOrPid; Pid =:= NodeOrPid ->
+                    true = ets:delete_object(Shadowed, Shadow);
+                (_) ->
+                    ok
+            end, ets:lookup(Shadowed, Name))
+    end.
+
+%% drops all the registrations kept aside for a node
+-spec unshadow_node(Node :: node(), #state{}) -> any().
+unshadow_node(Node, State) ->
+    case shadowed_table(State) of
+        undefined -> ok;
+        Shadowed -> true = ets:match_delete(Shadowed, {'_', Node, '_', '_', '_', '_'})
+    end.
+
+-spec shadows_of_node(Node :: node(), #state{}) -> [tuple()].
+shadows_of_node(Node, State) ->
+    case shadowed_table(State) of
+        undefined -> [];
+        Shadowed -> ets:match_object(Shadowed, {'_', Node, '_', '_', '_', '_'})
+    end.
+
+%% the table doesn't have Name anymore: show the most recent registration kept aside, if any
+-spec show_shadowed(Name :: term(), #state{}) -> any().
+show_shadowed(Name, #state{
+    scope = Scope,
+    table_by_name = TableByName,
+    table_by_pid = TableByPid
+} = State) ->
+    case shadowed_table(State) of
+        undefined ->
+            ok;
+
+        Shadowed ->
+            case {ets:lookup(Shadowed, Name), find_registry_entry_by_name(Name, TableByName)} of
+                {[_ | _] = Shadows, undefined} ->
+                    %% most recent, the node breaking ties
+                    {_, _, Pid, Meta, Time, Reason} = Shadow = lists:last(lists:keysort(5, lists:keysort(2, Shadows))),
+                    true = ets:delete_object(Shadowed, Shadow),
+                    add_to_local_table(Name, Pid, Meta, Time, undefined, TableByName, TableByPid),
+                    syn_event_handler:call_event_handler(on_process_registered, [Scope, Name, Pid, Meta, Reason]);
+
+                _ ->
+                    ok
+            end
+    end.
+
+-spec shadowed_table(#state{}) -> ets:table() | undefined.
+shadowed_table(#state{handler_state = #{shadowed := Shadowed}}) -> Shadowed;
+shadowed_table(_) -> undefined.
 
 -spec resolve_conflict(
     Scope :: atom(),
@@ -875,6 +985,7 @@ resolve_conflict(Scope, Name, {Pid, Meta, Time}, {TablePid, TableMeta, TableTime
                         remote => {Pid, Meta}, local => {TablePid, TableMeta}, keep => remote}),
             %% update locally, the incoming sync_register will update with the time coming from remote node
             update_local_table(Name, TablePid, {Pid, Meta, Time, undefined}, TableByName, TableByPid),
+            unshadow(Name, node(Pid), State),
             %% kill
             case KillOtherPid of
                 true -> exit(TablePid, {syn_resolve_kill, Name, TableMeta});
