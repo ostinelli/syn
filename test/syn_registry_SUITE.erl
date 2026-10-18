@@ -703,7 +703,7 @@ three_nodes_cluster_changes(Config) ->
     SlaveNode2 = proplists:get_value(syn_slave_2, Config),
 
     %% disconnect 1 from 2
-    rpc:call(SlaveNode1, syn_test_suite_helper, disconnect_node, [SlaveNode2]),
+    syn_test_suite_helper:disconnect_nodes(SlaveNode1, SlaveNode2),
     syn_test_suite_helper:assert_cluster(node(), [SlaveNode1, SlaveNode2]),
     syn_test_suite_helper:assert_cluster(SlaveNode1, [node()]),
     syn_test_suite_helper:assert_cluster(SlaveNode2, [node()]),
@@ -805,7 +805,7 @@ three_nodes_cluster_changes(Config) ->
     0 = rpc:call(SlaveNode2, syn, registry_count, [scope_bc, SlaveNode2]),
 
     %% partial netsplit (1 cannot see 2)
-    rpc:call(SlaveNode1, syn_test_suite_helper, disconnect_node, [SlaveNode2]),
+    syn_test_suite_helper:disconnect_nodes(SlaveNode1, SlaveNode2),
     syn_test_suite_helper:assert_cluster(node(), [SlaveNode1, SlaveNode2]),
     syn_test_suite_helper:assert_cluster(SlaveNode1, [node()]),
     syn_test_suite_helper:assert_cluster(SlaveNode2, [node()]),
@@ -964,7 +964,7 @@ three_nodes_cluster_conflicts(Config) ->
     ok = rpc:call(SlaveNode2, syn, add_node_to_scopes, [[scope_all, scope_bc]]),
 
     %% partial netsplit (1 cannot see 2)
-    rpc:call(SlaveNode1, syn_test_suite_helper, disconnect_node, [SlaveNode2]),
+    syn_test_suite_helper:disconnect_nodes(SlaveNode1, SlaveNode2),
     syn_test_suite_helper:assert_cluster(node(), [SlaveNode1, SlaveNode2]),
     syn_test_suite_helper:assert_cluster(SlaveNode1, [node()]),
     syn_test_suite_helper:assert_cluster(SlaveNode2, [node()]),
@@ -1179,7 +1179,7 @@ three_nodes_custom_event_handler_reg_unreg(Config) ->
     ]),
 
     %% partial netsplit (1 cannot see 2)
-    rpc:call(SlaveNode1, syn_test_suite_helper, disconnect_node, [SlaveNode2]),
+    syn_test_suite_helper:disconnect_nodes(SlaveNode1, SlaveNode2),
     syn_test_suite_helper:assert_cluster(node(), [SlaveNode1, SlaveNode2]),
     syn_test_suite_helper:assert_cluster(SlaveNode1, [node()]),
     syn_test_suite_helper:assert_cluster(SlaveNode2, [node()]),
@@ -1213,7 +1213,7 @@ three_nodes_custom_event_handler_reg_unreg(Config) ->
 
     %% ---> after a conflict resolution
     %% partial netsplit (1 cannot see 2)
-    rpc:call(SlaveNode1, syn_test_suite_helper, disconnect_node, [SlaveNode2]),
+    syn_test_suite_helper:disconnect_nodes(SlaveNode1, SlaveNode2),
     syn_test_suite_helper:assert_cluster(node(), [SlaveNode1, SlaveNode2]),
     syn_test_suite_helper:assert_cluster(SlaveNode1, [node()]),
     syn_test_suite_helper:assert_cluster(SlaveNode2, [node()]),
@@ -1317,7 +1317,7 @@ three_nodes_custom_event_handler_conflict_resolution(Config) ->
     LocalNode = node(),
 
     %% partial netsplit (1 cannot see 2)
-    rpc:call(SlaveNode1, syn_test_suite_helper, disconnect_node, [SlaveNode2]),
+    syn_test_suite_helper:disconnect_nodes(SlaveNode1, SlaveNode2),
     syn_test_suite_helper:assert_cluster(node(), [SlaveNode1, SlaveNode2]),
     syn_test_suite_helper:assert_cluster(SlaveNode1, [node()]),
     syn_test_suite_helper:assert_cluster(SlaveNode2, [node()]),
@@ -1449,7 +1449,7 @@ three_nodes_custom_event_handler_conflict_resolution(Config) ->
 
     %% --> conflict by netsplit, which returns invalid pid
     %% partial netsplit (1 cannot see 2)
-    rpc:call(SlaveNode1, syn_test_suite_helper, disconnect_node, [SlaveNode2]),
+    syn_test_suite_helper:disconnect_nodes(SlaveNode1, SlaveNode2),
     syn_test_suite_helper:assert_cluster(node(), [SlaveNode1, SlaveNode2]),
     syn_test_suite_helper:assert_cluster(SlaveNode1, [node()]),
     syn_test_suite_helper:assert_cluster(SlaveNode2, [node()]),
@@ -1520,7 +1520,7 @@ three_nodes_custom_event_handler_conflict_resolution(Config) ->
     %% --> conflict by netsplit, which crashes
 
     %% partial netsplit (1 cannot see 2)
-    rpc:call(SlaveNode1, syn_test_suite_helper, disconnect_node, [SlaveNode2]),
+    syn_test_suite_helper:disconnect_nodes(SlaveNode1, SlaveNode2),
     syn_test_suite_helper:assert_cluster(node(), [SlaveNode1, SlaveNode2]),
     syn_test_suite_helper:assert_cluster(SlaveNode1, [node()]),
     syn_test_suite_helper:assert_cluster(SlaveNode2, [node()]),
@@ -2545,7 +2545,7 @@ three_nodes_resolver_keeps_neither_while_process_dies(Config) ->
     ScopePid2 = rpc:call(SlaveNode2, erlang, whereis, [syn_registry_scope_bc]),
 
     %% split the slaves and register the same name on both sides
-    rpc:call(SlaveNode1, syn_test_suite_helper, disconnect_node, [SlaveNode2]),
+    syn_test_suite_helper:disconnect_nodes(SlaveNode1, SlaveNode2),
     syn_test_suite_helper:assert_scope_subcluster(registry, SlaveNode1, scope_bc, []),
     syn_test_suite_helper:assert_scope_subcluster(registry, SlaveNode2, scope_bc, []),
     TestPid = self(),
@@ -2604,7 +2604,7 @@ three_nodes_process_dies_before_sending_its_list(Config) ->
     ScopePid2 = rpc:call(SlaveNode2, erlang, whereis, [syn_registry_scope_bc]),
 
     %% split the slaves and register the same name on both sides
-    rpc:call(SlaveNode1, syn_test_suite_helper, disconnect_node, [SlaveNode2]),
+    syn_test_suite_helper:disconnect_nodes(SlaveNode1, SlaveNode2),
     syn_test_suite_helper:assert_scope_subcluster(registry, SlaveNode1, scope_bc, []),
     syn_test_suite_helper:assert_scope_subcluster(registry, SlaveNode2, scope_bc, []),
     TestPid = self(),
@@ -2823,7 +2823,7 @@ register_conflict_in_partial_netsplit(SlaveNode1, SlaveNode2, Name, Meta1, Meta2
     syn_test_suite_helper:assert_scope_subcluster(registry, SlaveNode2, scope_all, [node(), SlaveNode1]),
 
     %% partial netsplit (1 cannot see 2)
-    rpc:call(SlaveNode1, syn_test_suite_helper, disconnect_node, [SlaveNode2]),
+    syn_test_suite_helper:disconnect_nodes(SlaveNode1, SlaveNode2),
     syn_test_suite_helper:assert_scope_subcluster(registry, SlaveNode1, scope_all, [node()]),
     syn_test_suite_helper:assert_scope_subcluster(registry, SlaveNode2, scope_all, [node()]),
 

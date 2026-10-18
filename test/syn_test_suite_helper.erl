@@ -28,7 +28,7 @@
 %% API
 -export([init_cluster/1, end_cluster/2]).
 -export([start_slave/1, stop_slave/1]).
--export([connect_node/1, disconnect_node/1]).
+-export([connect_node/1, disconnect_node/1, disconnect_nodes/2]).
 -export([clean_after_test/0]).
 -export([start_process/0, start_process/1, start_process/2]).
 -export([kill_process/1, kill_scope_supervisors/0]).
@@ -129,6 +129,11 @@ connect_node(Node) ->
 
 disconnect_node(Node) ->
     erlang:disconnect_node(Node).
+
+%% both nodes drop the connection: when only one does, the other one can keep it until it next writes to it
+disconnect_nodes(Node1, Node2) ->
+    rpc:call(Node1, erlang, disconnect_node, [Node2]),
+    rpc:call(Node2, erlang, disconnect_node, [Node1]).
 
 clean_after_test() ->
     Nodes = [node() | nodes()],

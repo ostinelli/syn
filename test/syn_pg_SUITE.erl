@@ -828,7 +828,7 @@ three_nodes_cluster_changes(Config) ->
     SlaveNode2 = proplists:get_value(syn_slave_2, Config),
 
     %% disconnect 1 from 2
-    rpc:call(SlaveNode1, syn_test_suite_helper, disconnect_node, [SlaveNode2]),
+    syn_test_suite_helper:disconnect_nodes(SlaveNode1, SlaveNode2),
     syn_test_suite_helper:assert_cluster(node(), [SlaveNode1, SlaveNode2]),
     syn_test_suite_helper:assert_cluster(SlaveNode1, [node()]),
     syn_test_suite_helper:assert_cluster(SlaveNode2, [node()]),
@@ -962,7 +962,7 @@ three_nodes_cluster_changes(Config) ->
     1 = rpc:call(SlaveNode2, syn, group_count, [scope_bc, SlaveNode2]),
 
     %% partial netsplit (1 cannot see 2)
-    rpc:call(SlaveNode1, syn_test_suite_helper, disconnect_node, [SlaveNode2]),
+    syn_test_suite_helper:disconnect_nodes(SlaveNode1, SlaveNode2),
     syn_test_suite_helper:assert_cluster(node(), [SlaveNode1, SlaveNode2]),
     syn_test_suite_helper:assert_cluster(SlaveNode1, [node()]),
     syn_test_suite_helper:assert_cluster(SlaveNode2, [node()]),
@@ -1288,7 +1288,7 @@ three_nodes_custom_event_handler_joined_left(Config) ->
     ]),
 
     %% partial netsplit (1 cannot see 2)
-    rpc:call(SlaveNode1, syn_test_suite_helper, disconnect_node, [SlaveNode2]),
+    syn_test_suite_helper:disconnect_nodes(SlaveNode1, SlaveNode2),
     syn_test_suite_helper:assert_cluster(node(), [SlaveNode1, SlaveNode2]),
     syn_test_suite_helper:assert_cluster(SlaveNode1, [node()]),
     syn_test_suite_helper:assert_cluster(SlaveNode2, [node()]),
@@ -1613,7 +1613,7 @@ three_nodes_group_names(Config) ->
     ),
 
     %% partial netsplit (1 cannot see 2)
-    rpc:call(SlaveNode1, syn_test_suite_helper, disconnect_node, [SlaveNode2]),
+    syn_test_suite_helper:disconnect_nodes(SlaveNode1, SlaveNode2),
     syn_test_suite_helper:assert_cluster(node(), [SlaveNode1, SlaveNode2]),
     syn_test_suite_helper:assert_cluster(SlaveNode1, [node()]),
     syn_test_suite_helper:assert_cluster(SlaveNode2, [node()]),
