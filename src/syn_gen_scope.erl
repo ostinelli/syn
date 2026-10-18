@@ -39,7 +39,8 @@
     broadcast/2,
     broadcast/3,
     send_to_node/3,
-    send_ordered_result/6
+    discover_requester/2,
+    send_ordered_result/5
 ]).
 
 %% gen_server callbacks
@@ -60,6 +61,10 @@
 -include("syn.hrl").
 
 -include_lib("kernel/include/logger.hrl").
+
+%% types
+-type requester() :: {node(), ScopePid :: pid() | undefined, ReplyWhen :: applied | handled}.
+-export_type([requester/0]).
 
 %% callbacks
 -callback init(#state{}) ->
@@ -118,28 +123,35 @@ call(Handler, Node, Scope, Message) ->
     end.
 
 %% a call for a process on another node, whose result the local scope process applies in order with everything else
-%% that node sends it, see send_ordered_result/6: undefined if that node runs a version that doesn't know the call
+%% that node sends it, see send_ordered_result/5: undefined if that node runs a version that doesn't know the call
 -spec call_ordered(Handler :: module(), Node :: atom(), Scope :: atom(), Message :: tuple()) -> Response :: term().
 call_ordered(Handler, Node, Scope, Message) ->
-    case syn_backbone:is_legacy_node(Node) of
-        true ->
-            undefined;
+    case get_process_name_for_scope(Handler, Scope) of
+        undefined ->
+            error({invalid_scope, Scope});
 
-        false ->
-            %% the scope process itself can't wait for its own reply: it gets it right away,
-            %% and applies the result when it gets to it
-            ReplyWhen = case is_scope_process(Handler, Scope) of
-                true -> handled;
-                false -> applied
-            end,
-            case call(Handler, Node, Scope, erlang:append_element(Message, ReplyWhen)) of
-                undefined ->
-                    %% that node logs the unknown call, ask it only once
-                    syn_backbone:save_legacy_node(Node),
+        ProcessName ->
+            case syn_backbone:is_legacy_node(Node) of
+                true ->
                     undefined;
 
-                Response ->
-                    Response
+                false ->
+                    %% a scope process can't wait for one, itself included: it gets the reply right away,
+                    %% and the local scope process applies the result when it gets to it
+                    ReplyWhen = case is_scope_process() of
+                        true -> handled;
+                        false -> applied
+                    end,
+                    Requester = {node(), whereis(ProcessName), ReplyWhen},
+                    case call(Handler, Node, Scope, erlang:append_element(Message, Requester)) of
+                        undefined ->
+                            %% that node logs the unknown call, ask it only once
+                            syn_backbone:save_legacy_node(Node),
+                            undefined;
+
+                        Response ->
+                            Response
+                    end
             end
     end.
 
@@ -163,20 +175,38 @@ broadcast(Message, ExcludedNodes, #state{sender_pid = SenderPid, process_name = 
 send_to_node(RemoteNode, Message, #state{sender_pid = SenderPid, process_name = ProcessName}) ->
     SenderPid ! {send_single, RemoteNode, Message, ProcessName}.
 
+%% an ordered call from a node this scope process doesn't know yet: that node gets the local data first, as for
+%% a discover, so that it knows this node when the result reaches it
+-spec discover_requester(Requester :: requester(), #state{}) -> {RequesterNode :: node(), #state{}}.
+discover_requester({RequesterNode, RequesterScopePid, _}, #state{
+    handler = Handler,
+    nodes_map = NodesMap
+} = State) ->
+    case is_pid(RequesterScopePid) andalso not maps:is_key(RequesterNode, NodesMap) of
+        true ->
+            {ok, LocalData} = Handler:get_local_data(State),
+            send_to_node(RequesterNode, {'3.0', ack_sync, self(), LocalData}, State),
+            _MRef = monitor(process, RequesterScopePid),
+            {RequesterNode, State#state{nodes_map = NodesMap#{RequesterNode => RequesterScopePid}}};
+
+        false ->
+            {RequesterNode, State}
+    end.
+
 %% the result of an ordered call goes to the scope process of the requester after everything sent to it before,
-%% with From appended: that process applies it and then replies, unless the call came from itself and gets Reply now
+%% with From appended: that process applies it and then replies, unless the call came from a scope process,
+%% which gets Reply now
 -spec send_ordered_result(
-    RequesterNode :: node(),
+    Requester :: requester(),
     Message :: tuple(),
     Reply :: term(),
-    ReplyWhen :: applied | handled,
     From :: {pid(), Tag :: term()},
     #state{}
 ) -> {noreply, #state{}} | {reply, Reply :: term(), #state{}}.
-send_ordered_result(RequesterNode, Message, _Reply, applied, From, State) ->
+send_ordered_result({RequesterNode, _, applied}, Message, _Reply, From, State) ->
     send_to_node(RequesterNode, erlang:append_element(Message, From), State),
     {noreply, State};
-send_ordered_result(RequesterNode, Message, Reply, handled, _From, State) ->
+send_ordered_result({RequesterNode, _, handled}, Message, Reply, _From, State) ->
     send_to_node(RequesterNode, erlang:append_element(Message, undefined), State),
     {reply, Reply, State}.
 
@@ -386,13 +416,10 @@ code_change(_OldVsn, State, _Extra) ->
 get_process_name_for_scope(Handler, Scope) ->
     syn_backbone:get_process_name({Handler, Scope}).
 
-%% the calling process is the local scope process, i.e. code running in a callback
--spec is_scope_process(Handler :: module(), Scope :: atom()) -> boolean().
-is_scope_process(Handler, Scope) ->
-    case get_process_name_for_scope(Handler, Scope) of
-        undefined -> false;
-        ProcessName -> whereis(ProcessName) =:= self()
-    end.
+%% the calling process is a scope process, i.e. code running in a callback
+-spec is_scope_process() -> boolean().
+is_scope_process() ->
+    get('$initial_call') =:= {?MODULE, init, 1}.
 
 -spec sender_loop() -> terminated.
 sender_loop() ->

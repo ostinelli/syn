@@ -55,6 +55,8 @@
     three_nodes_late_leave_does_not_undo_remote_join/1,
     three_nodes_scope_down_does_not_undo_remote_join/1,
     three_nodes_remote_join_from_scope_process/1,
+    three_nodes_remote_join_from_another_scope_process/1,
+    three_nodes_remote_join_with_undiscovered_node/1,
     three_nodes_clock_going_backwards/1
 ]).
 -export([
@@ -127,6 +129,8 @@ groups() ->
             three_nodes_late_leave_does_not_undo_remote_join,
             three_nodes_scope_down_does_not_undo_remote_join,
             three_nodes_remote_join_from_scope_process,
+            three_nodes_remote_join_from_another_scope_process,
+            three_nodes_remote_join_with_undiscovered_node,
             three_nodes_clock_going_backwards
         ]},
         {four_nodes_pg, [shuffle], [
@@ -2194,8 +2198,10 @@ three_nodes_remote_join_from_scope_process(Config) ->
         State
     end),
     {ok, []} = receive {joined, Joined, MembersInCallback} -> {Joined, MembersInCallback} end,
-    _ = sys:get_state(ScopePid),
-    [{Pid, meta}] = syn:members(scope_stale, "group"),
+    syn_test_suite_helper:assert_wait(
+        [{Pid, meta}],
+        fun() -> syn:members(scope_stale, "group") end
+    ),
     [{Pid, meta}] = rpc:call(SlaveNode1, syn, members, [scope_stale, "group"]),
 
     %% an older snapshot of the slave waits in the queue of our scope process, then it leaves
@@ -2207,10 +2213,56 @@ three_nodes_remote_join_from_scope_process(Config) ->
         State
     end),
     ok = receive {left, Left} -> Left end,
+    wait_for_message_queue_len(ScopePid, 2),
     ok = sys:resume(ScopePid),
     _ = sys:get_state(ScopePid),
     [] = syn:members(scope_stale, "group"),
     [] = rpc:call(SlaveNode1, syn, members, [scope_stale, "group"]).
+
+three_nodes_remote_join_from_another_scope_process(Config) ->
+    %% code running in a scope process, like a callback of our registry scope, can't wait for another scope process
+    %% either: the slave replies to it right away, also when our pg scope process is busy
+
+    SlaveNode1 = proplists:get_value(syn_slave_1, Config),
+    ScopePid = start_scope_stale(SlaveNode1),
+    RegistryScopePid = whereis(syn_registry_scope_stale),
+
+    Pid = syn_test_suite_helper:start_process(SlaveNode1),
+    TestPid = self(),
+    ok = sys:suspend(ScopePid),
+    _ = sys:replace_state(RegistryScopePid, fun(State) ->
+        TestPid ! {joined, syn:join(scope_stale, "group", Pid, meta)},
+        State
+    end),
+    ok = receive {joined, Joined} -> Joined end,
+    ok = sys:resume(ScopePid),
+    syn_test_suite_helper:assert_wait(
+        [{Pid, meta}],
+        fun() -> syn:members(scope_stale, "group") end
+    ),
+    [{Pid, meta}] = rpc:call(SlaveNode1, syn, members, [scope_stale, "group"]).
+
+three_nodes_remote_join_with_undiscovered_node(Config) ->
+    %% the slave gets our call before discovering us, and we haven't discovered it either: it sends us its data
+    %% before the result, as for a discover, so we already have the member when the call returns
+
+    SlaveNode1 = proplists:get_value(syn_slave_1, Config),
+    ScopePid = start_scope_stale(SlaveNode1),
+    RemoteScopePid = rpc:call(SlaveNode1, erlang, whereis, [syn_pg_scope_stale]),
+
+    Pid = syn_test_suite_helper:start_process(SlaveNode1),
+
+    %% the scope processes forget each other
+    RemoteScopePid ! {'DOWN', make_ref(), process, ScopePid, test},
+    ScopePid ! {'DOWN', make_ref(), process, RemoteScopePid, test},
+    syn_test_suite_helper:assert_scope_subcluster(pg, node(), scope_stale, []),
+    syn_test_suite_helper:assert_scope_subcluster(pg, SlaveNode1, scope_stale, []),
+
+    ok = syn:join(scope_stale, "group", Pid, meta),
+    [{Pid, meta}] = syn:members(scope_stale, "group"),
+    syn_test_suite_helper:assert_scope_subcluster(pg, node(), scope_stale, [SlaveNode1]),
+    syn_test_suite_helper:assert_scope_subcluster(pg, SlaveNode1, scope_stale, [node()]),
+    [{Pid, meta}] = rpc:call(SlaveNode1, syn, members, [scope_stale, "group"]).
 
 three_nodes_clock_going_backwards(Config) ->
     %% times come from the clock of each node, which can step backwards: what a node sends about

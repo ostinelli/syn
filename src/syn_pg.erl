@@ -200,7 +200,7 @@ join_or_update(Scope, GroupName, Pid, MetaOrFun) ->
 -spec join_or_update_ordered(Scope :: atom(), Node :: node(), GroupName :: term(), Pid :: pid(), MetaOrFun :: term() | function()) ->
     {ok, {Pid :: pid(), Meta :: term()}} | {error, Reason :: term()}.
 join_or_update_ordered(Scope, Node, GroupName, Pid, MetaOrFun) ->
-    case syn_gen_scope:call_ordered(?MODULE, Node, Scope, {'3.0', join_or_update_on_node_ordered, node(), GroupName, Pid, MetaOrFun}) of
+    case syn_gen_scope:call_ordered(?MODULE, Node, Scope, {'3.0', join_or_update_on_node_ordered, GroupName, Pid, MetaOrFun}) of
         {ok, {Pid, Meta}} ->
             {ok, {Pid, Meta}};
 
@@ -261,7 +261,7 @@ leave(Scope, GroupName, Pid) ->
 -spec leave_ordered(Scope :: atom(), Node :: node(), GroupName :: term(), Pid :: pid(), TableByName :: atom()) ->
     ok | {error, Reason :: term()}.
 leave_ordered(Scope, Node, GroupName, Pid, TableByName) ->
-    case syn_gen_scope:call_ordered(?MODULE, Node, Scope, {'3.0', leave_on_node_ordered, node(), GroupName, Pid}) of
+    case syn_gen_scope:call_ordered(?MODULE, Node, Scope, {'3.0', leave_on_node_ordered, GroupName, Pid}) of
         ok ->
             ok;
 
@@ -407,19 +407,20 @@ handle_call({'3.0', join_or_update_on_node, RequesterNode, GroupName, Pid, MetaO
             {reply, Error, State}
     end;
 
-handle_call({'3.0', join_or_update_on_node_ordered, RequesterNode, GroupName, Pid, MetaOrFun, ReplyWhen}, From, State) ->
-    case join_or_update_on_node(RequesterNode, GroupName, Pid, MetaOrFun, State) of
+handle_call({'3.0', join_or_update_on_node_ordered, GroupName, Pid, MetaOrFun, Requester}, From, State) ->
+    {RequesterNode, State1} = syn_gen_scope:discover_requester(Requester, State),
+    case join_or_update_on_node(RequesterNode, GroupName, Pid, MetaOrFun, State1) of
         {ok, {_, _, Meta, Time}} ->
             Message = {'3.0', sync_join_reply, GroupName, Pid, Meta, Time},
-            syn_gen_scope:send_ordered_result(RequesterNode, Message, {ok, {Pid, Meta}}, ReplyWhen, From, State);
+            syn_gen_scope:send_ordered_result(Requester, Message, {ok, {Pid, Meta}}, From, State1);
 
         {noop, Meta, Time} ->
             %% sent anyway, the requester may be missing the entry
             Message = {'3.0', sync_join_reply, GroupName, Pid, Meta, Time},
-            syn_gen_scope:send_ordered_result(RequesterNode, Message, {ok, {Pid, Meta}}, ReplyWhen, From, State);
+            syn_gen_scope:send_ordered_result(Requester, Message, {ok, {Pid, Meta}}, From, State1);
 
         Error ->
-            {reply, Error, State}
+            {reply, Error, State1}
     end;
 
 handle_call({'3.0', leave_on_node, RequesterNode, GroupName, Pid}, _From, #state{
@@ -430,14 +431,15 @@ handle_call({'3.0', leave_on_node, RequesterNode, GroupName, Pid}, _From, #state
         {error, Reason} -> {reply, {error, Reason}, State}
     end;
 
-handle_call({'3.0', leave_on_node_ordered, RequesterNode, GroupName, Pid, ReplyWhen}, From, State) ->
-    case leave_on_node(RequesterNode, GroupName, Pid, State) of
+handle_call({'3.0', leave_on_node_ordered, GroupName, Pid, Requester}, From, State) ->
+    {RequesterNode, State1} = syn_gen_scope:discover_requester(Requester, State),
+    case leave_on_node(RequesterNode, GroupName, Pid, State1) of
         {ok, Meta} ->
             Message = {'3.0', sync_leave_reply, GroupName, Pid, Meta},
-            syn_gen_scope:send_ordered_result(RequesterNode, Message, ok, ReplyWhen, From, State);
+            syn_gen_scope:send_ordered_result(Requester, Message, ok, From, State1);
 
         {error, Reason} ->
-            {reply, {error, Reason}, State}
+            {reply, {error, Reason}, State1}
     end;
 
 handle_call(Request, From, #state{scope = Scope} = State) ->

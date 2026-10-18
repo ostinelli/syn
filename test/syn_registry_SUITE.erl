@@ -57,6 +57,9 @@
     three_nodes_scope_down_does_not_undo_remote_register/1,
     three_nodes_crossed_remote_registers_resolve_conflict/1,
     three_nodes_remote_register_from_scope_process/1,
+    three_nodes_remote_register_from_another_scope_process/1,
+    three_nodes_remote_register_with_undiscovered_node/1,
+    three_nodes_remote_register_over_entry_of_another_node/1,
     three_nodes_legacy_node_gets_direct_calls/1,
     three_nodes_clock_going_backwards/1,
     three_nodes_ack_sync_from_unknown_node_keeps_remote/1,
@@ -130,6 +133,9 @@ groups() ->
             three_nodes_scope_down_does_not_undo_remote_register,
             three_nodes_crossed_remote_registers_resolve_conflict,
             three_nodes_remote_register_from_scope_process,
+            three_nodes_remote_register_from_another_scope_process,
+            three_nodes_remote_register_with_undiscovered_node,
+            three_nodes_remote_register_over_entry_of_another_node,
             three_nodes_legacy_node_gets_direct_calls,
             three_nodes_clock_going_backwards,
             three_nodes_ack_sync_from_unknown_node_keeps_remote,
@@ -2106,8 +2112,10 @@ three_nodes_remote_register_from_scope_process(Config) ->
         State
     end),
     {ok, undefined} = receive {registered, Registered, LookupInCallback} -> {Registered, LookupInCallback} end,
-    _ = sys:get_state(ScopePid),
-    {Pid, meta} = syn:lookup(scope_stale, "proc"),
+    syn_test_suite_helper:assert_wait(
+        {Pid, meta},
+        fun() -> syn:lookup(scope_stale, "proc") end
+    ),
     {Pid, meta} = rpc:call(SlaveNode1, syn, lookup, [scope_stale, "proc"]),
 
     %% an older snapshot of the slave waits in the queue of our scope process, then it unregisters
@@ -2119,10 +2127,90 @@ three_nodes_remote_register_from_scope_process(Config) ->
         State
     end),
     ok = receive {unregistered, Unregistered} -> Unregistered end,
+    wait_for_message_queue_len(ScopePid, 2),
     ok = sys:resume(ScopePid),
     _ = sys:get_state(ScopePid),
     undefined = syn:lookup(scope_stale, "proc"),
     undefined = rpc:call(SlaveNode1, syn, lookup, [scope_stale, "proc"]).
+
+three_nodes_remote_register_from_another_scope_process(Config) ->
+    %% code running in a scope process, like a callback of our pg scope, can't wait for another scope process
+    %% either: the slave replies to it right away, also when our registry scope process is busy
+
+    SlaveNode1 = proplists:get_value(syn_slave_1, Config),
+    ScopePid = start_scope_stale(SlaveNode1),
+    PgScopePid = whereis(syn_pg_scope_stale),
+
+    Pid = syn_test_suite_helper:start_process(SlaveNode1),
+    TestPid = self(),
+    ok = sys:suspend(ScopePid),
+    _ = sys:replace_state(PgScopePid, fun(State) ->
+        TestPid ! {registered, syn:register(scope_stale, "proc", Pid, meta)},
+        State
+    end),
+    ok = receive {registered, Registered} -> Registered end,
+    ok = sys:resume(ScopePid),
+    syn_test_suite_helper:assert_wait(
+        {Pid, meta},
+        fun() -> syn:lookup(scope_stale, "proc") end
+    ),
+    {Pid, meta} = rpc:call(SlaveNode1, syn, lookup, [scope_stale, "proc"]).
+
+three_nodes_remote_register_with_undiscovered_node(Config) ->
+    %% the slave gets our call before discovering us, and we haven't discovered it either: it sends us its data
+    %% before the result, as for a discover, so we already have the registration when the call returns
+
+    SlaveNode1 = proplists:get_value(syn_slave_1, Config),
+    ScopePid = start_scope_stale(SlaveNode1),
+    RemoteScopePid = rpc:call(SlaveNode1, erlang, whereis, [syn_registry_scope_stale]),
+
+    Pid = syn_test_suite_helper:start_process(SlaveNode1),
+
+    %% the scope processes forget each other
+    RemoteScopePid ! {'DOWN', make_ref(), process, ScopePid, test},
+    ScopePid ! {'DOWN', make_ref(), process, RemoteScopePid, test},
+    syn_test_suite_helper:assert_scope_subcluster(registry, node(), scope_stale, []),
+    syn_test_suite_helper:assert_scope_subcluster(registry, SlaveNode1, scope_stale, []),
+
+    ok = syn:register(scope_stale, "proc", Pid, meta),
+    {Pid, meta} = syn:lookup(scope_stale, "proc"),
+    syn_test_suite_helper:assert_scope_subcluster(registry, node(), scope_stale, [SlaveNode1]),
+    syn_test_suite_helper:assert_scope_subcluster(registry, SlaveNode1, scope_stale, [node()]),
+    {Pid, meta} = rpc:call(SlaveNode1, syn, lookup, [scope_stale, "proc"]).
+
+three_nodes_remote_register_over_entry_of_another_node(Config) ->
+    %% we have the name on a process of slave 2 that slave 2 has dropped already, with a time from a clock
+    %% ahead of slave 1's, and we register it for a process of slave 1: its result is the only message about
+    %% it that reaches us, so we apply it whatever the time
+
+    SlaveNode1 = proplists:get_value(syn_slave_1, Config),
+    SlaveNode2 = proplists:get_value(syn_slave_2, Config),
+
+    ok = syn:start(),
+    ok = rpc:call(SlaveNode1, syn, start, []),
+    ok = rpc:call(SlaveNode2, syn, start, []),
+    ok = syn:add_node_to_scopes([scope_all]),
+    ok = rpc:call(SlaveNode1, syn, add_node_to_scopes, [[scope_all]]),
+    ok = rpc:call(SlaveNode2, syn, add_node_to_scopes, [[scope_all]]),
+    syn_test_suite_helper:assert_scope_subcluster(registry, node(), scope_all, [SlaveNode1, SlaveNode2]),
+    syn_test_suite_helper:assert_scope_subcluster(registry, SlaveNode1, scope_all, [node(), SlaveNode2]),
+    syn_test_suite_helper:assert_scope_subcluster(registry, SlaveNode2, scope_all, [node(), SlaveNode1]),
+    ScopePid = whereis(syn_registry_scope_all),
+
+    PidOn1 = syn_test_suite_helper:start_process(SlaveNode1),
+    PidOn2 = syn_test_suite_helper:start_process(SlaveNode2),
+    Later = erlang:system_time() + erlang:convert_time_unit(60, second, native),
+    ScopePid ! {'3.0', sync_register, "proc", PidOn2, old, Later, normal},
+    _ = sys:get_state(ScopePid),
+    {PidOn2, old} = syn:lookup(scope_all, "proc"),
+
+    ok = syn:register(scope_all, "proc", PidOn1, new),
+    {PidOn1, new} = syn:lookup(scope_all, "proc"),
+    {PidOn1, new} = rpc:call(SlaveNode1, syn, lookup, [scope_all, "proc"]),
+    syn_test_suite_helper:assert_wait(
+        {PidOn1, new},
+        fun() -> rpc:call(SlaveNode2, syn, lookup, [scope_all, "proc"]) end
+    ).
 
 three_nodes_legacy_node_gets_direct_calls(Config) ->
     %% a node running a version that doesn't know the ordered calls gets direct ones, until it disconnects

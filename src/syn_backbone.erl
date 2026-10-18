@@ -73,13 +73,18 @@ get_process_name(Key) ->
     end.
 
 %% a node running a version of Syn that doesn't know the ordered calls, until it disconnects
--spec save_legacy_node(Node :: node()) -> true.
+%% (the table is missing when this code got loaded without restarting syn)
+-spec save_legacy_node(Node :: node()) -> boolean().
 save_legacy_node(Node) ->
-    true = ets:insert(syn_legacy_nodes, {Node}).
+    try ets:insert(syn_legacy_nodes, {Node})
+    catch error:badarg -> false
+    end.
 
 -spec is_legacy_node(Node :: node()) -> boolean().
 is_legacy_node(Node) ->
-    ets:member(syn_legacy_nodes, Node).
+    try ets:member(syn_legacy_nodes, Node)
+    catch error:badarg -> false
+    end.
 
 -spec get_table_name(TableId :: atom(), Scope :: atom()) -> TableName :: atom() | undefined.
 get_table_name(TableId, Scope) ->

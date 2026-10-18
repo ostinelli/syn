@@ -16,8 +16,12 @@ through the same process that sends it all the other data, so that it gets proce
 scope process applies it like any other sync message and only then replies to the caller, so that its tables are
 already updated when the call returns.
 
-If the call is made from a scope process itself (i.e. from a callback), that process can't wait for itself: the process'
-node replies to it right away, and the scope process applies the result in the same way once it's done with the callback.
+If the process' node doesn't know the calling node yet, it first sends it its local data, as when it receives a
+discover message, so that the calling node knows it by the time the result gets there.
+
+If the call is made from a scope process (i.e. from a callback), that process can't wait for one: the process' node
+replies to it right away, and the scope process of the calling node applies the result in the same way when it gets to it.
+Such a call returns the result of the process' node, and never `race_condition`.
 
 If the process' node runs a version of Syn that does not support this, it replies to the caller directly, and the caller
 updates the tables of its node. That node logs the unknown call the first time, and then gets direct calls until it disconnects.

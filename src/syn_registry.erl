@@ -142,7 +142,7 @@ register_or_update(Scope, Name, Pid, MetaOrFun) ->
 -spec register_or_update_ordered(Scope :: atom(), Node :: node(), Name :: term(), Pid :: pid(), MetaOrFun :: term() | function()) ->
     {ok, {Pid :: pid(), Meta :: term()}} | {error, Reason :: term()}.
 register_or_update_ordered(Scope, Node, Name, Pid, MetaOrFun) ->
-    case syn_gen_scope:call_ordered(?MODULE, Node, Scope, {'3.0', register_or_update_on_node_ordered, node(), Name, Pid, MetaOrFun}) of
+    case syn_gen_scope:call_ordered(?MODULE, Node, Scope, {'3.0', register_or_update_on_node_ordered, Name, Pid, MetaOrFun}) of
         {ok, {Pid, Meta}} ->
             {ok, {Pid, Meta}};
 
@@ -210,7 +210,7 @@ unregister(Scope, Name) ->
 -spec unregister_ordered(Scope :: atom(), Node :: node(), Name :: term(), Pid :: pid(), Meta :: term(), TableByName :: atom()) ->
     ok | {error, Reason :: term()}.
 unregister_ordered(Scope, Node, Name, Pid, Meta, TableByName) ->
-    case syn_gen_scope:call_ordered(?MODULE, Node, Scope, {'3.0', unregister_on_node_ordered, node(), Name, Pid}) of
+    case syn_gen_scope:call_ordered(?MODULE, Node, Scope, {'3.0', unregister_on_node_ordered, Name, Pid}) of
         ok ->
             ok;
 
@@ -310,19 +310,20 @@ handle_call({'3.0', register_or_update_on_node, RequesterNode, Name, Pid, MetaOr
             {reply, Error, State}
     end;
 
-handle_call({'3.0', register_or_update_on_node_ordered, RequesterNode, Name, Pid, MetaOrFun, ReplyWhen}, From, State) ->
-    case register_or_update_on_node(RequesterNode, Name, Pid, MetaOrFun, State) of
+handle_call({'3.0', register_or_update_on_node_ordered, Name, Pid, MetaOrFun, Requester}, From, State) ->
+    {RequesterNode, State1} = syn_gen_scope:discover_requester(Requester, State),
+    case register_or_update_on_node(RequesterNode, Name, Pid, MetaOrFun, State1) of
         {ok, {_, _, Meta, Time}} ->
             Message = {'3.0', sync_register_reply, Name, Pid, Meta, Time},
-            syn_gen_scope:send_ordered_result(RequesterNode, Message, {ok, {Pid, Meta}}, ReplyWhen, From, State);
+            syn_gen_scope:send_ordered_result(Requester, Message, {ok, {Pid, Meta}}, From, State1);
 
         {noop, Meta, Time} ->
             %% sent anyway, the requester may be missing the entry
             Message = {'3.0', sync_register_reply, Name, Pid, Meta, Time},
-            syn_gen_scope:send_ordered_result(RequesterNode, Message, {ok, {Pid, Meta}}, ReplyWhen, From, State);
+            syn_gen_scope:send_ordered_result(Requester, Message, {ok, {Pid, Meta}}, From, State1);
 
         Error ->
-            {reply, Error, State}
+            {reply, Error, State1}
     end;
 
 handle_call({'3.0', unregister_on_node, RequesterNode, Name, Pid}, _From, #state{
@@ -333,14 +334,15 @@ handle_call({'3.0', unregister_on_node, RequesterNode, Name, Pid}, _From, #state
         {error, Reason} -> {reply, {error, Reason}, State}
     end;
 
-handle_call({'3.0', unregister_on_node_ordered, RequesterNode, Name, Pid, ReplyWhen}, From, State) ->
-    case unregister_on_node(RequesterNode, Name, Pid, State) of
+handle_call({'3.0', unregister_on_node_ordered, Name, Pid, Requester}, From, State) ->
+    {RequesterNode, State1} = syn_gen_scope:discover_requester(Requester, State),
+    case unregister_on_node(RequesterNode, Name, Pid, State1) of
         {ok, Meta} ->
             Message = {'3.0', sync_unregister_reply, Name, Pid, Meta},
-            syn_gen_scope:send_ordered_result(RequesterNode, Message, ok, ReplyWhen, From, State);
+            syn_gen_scope:send_ordered_result(Requester, Message, ok, From, State1);
 
         {error, Reason} ->
-            {reply, {error, Reason}, State}
+            {reply, {error, Reason}, State1}
     end;
 
 handle_call(Request, From, #state{scope = Scope} = State) ->
@@ -367,12 +369,25 @@ handle_info({'3.0', sync_register, Name, Pid, Meta, Time, Reason}, #state{nodes_
     {noreply, State};
 
 handle_info({'3.0', sync_register_reply, Name, Pid, Meta, Time, From}, #state{
+    scope = Scope,
     table_by_name = TableByName,
+    table_by_pid = TableByPid,
     nodes_map = NodesMap
 } = State) ->
     Reply = case maps:is_key(node(Pid), NodesMap) of
         true ->
-            handle_registry_sync(Name, Pid, Meta, Time, normal, State),
+            case find_registry_entry_by_name(Name, TableByName) of
+                {_, TablePid, TableMeta, _, _, TableNode} when TablePid =/= Pid, TableNode =/= node() ->
+                    %% the name is on a process of another node here, whatever its time: the owner of this one
+                    %% has just registered it, and this is the only message about it that reaches this node, so
+                    %% the other process' node has dropped it, or resolves the conflict with the owner and tells all
+                    update_local_table(Name, TablePid, {Pid, Meta, Time, undefined}, TableByName, TableByPid),
+                    syn_event_handler:call_event_handler(on_process_unregistered, [Scope, Name, TablePid, TableMeta, normal]),
+                    syn_event_handler:call_event_handler(on_process_registered, [Scope, Name, Pid, Meta, normal]);
+
+                _ ->
+                    handle_registry_sync(Name, Pid, Meta, Time, normal, State)
+            end,
             case find_registry_entry_by_name(Name, TableByName) of
                 {Name, Pid, _, _, _, _} ->
                     {ok, {Pid, Meta}};

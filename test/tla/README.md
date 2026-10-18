@@ -73,9 +73,9 @@ to the other nodes, but not to the calling node. The calling node gets the resul
 Its scope process applies it like a sync message, conflict resolution included, and only then does
 the call return: a lookup on the calling node right after the call sees it, and nothing the other
 node sent before can undo it. If the calling node resolves a conflict on the name that doesn't keep
-the process, the call returns `{error, race_condition}`. A call made from a scope process itself (i.e.
-from a callback) can't wait for that process: it gets its reply right away, and the scope process
-applies the result in the same way once it's done with the callback.
+the process, the call returns `{error, race_condition}`. A call made from a scope process (i.e. from a
+callback) can't wait for one: it gets its reply right away, and the scope process of the calling node
+applies the result in the same way when it gets to it.
 
 In the model, `Register` and `Unregister` can be called from the node that runs the process or from
 any node that can see it.
@@ -135,7 +135,8 @@ The model checks these properties:
   every node has each name on the node that actually runs it.
 - **AllMessagesProcessed** (liveness): All message queues eventually drain.
 - **ReadYourWrites** (action property): A register call made from another node that returns `ok`
-  has the name in the calling node's table.
+  has the name in the calling node's table. A reply that the calling node applies always does, so this
+  fails only when the reply comes from a node the calling node doesn't know (anymore).
 
 The model starts from an already discovered, fully connected subcluster. It then models
 membership loss and rediscovery through disconnect/reconnect cycles. This keeps startup
