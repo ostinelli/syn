@@ -54,7 +54,8 @@
     three_nodes_stale_snapshot_does_not_undo_remote_leave/1,
     three_nodes_late_leave_does_not_undo_remote_join/1,
     three_nodes_scope_down_does_not_undo_remote_join/1,
-    three_nodes_remote_join_from_scope_process/1
+    three_nodes_remote_join_from_scope_process/1,
+    three_nodes_clock_going_backwards/1
 ]).
 -export([
     four_nodes_concurrency/1
@@ -125,7 +126,8 @@ groups() ->
             three_nodes_stale_snapshot_does_not_undo_remote_leave,
             three_nodes_late_leave_does_not_undo_remote_join,
             three_nodes_scope_down_does_not_undo_remote_join,
-            three_nodes_remote_join_from_scope_process
+            three_nodes_remote_join_from_scope_process,
+            three_nodes_clock_going_backwards
         ]},
         {four_nodes_pg, [shuffle], [
             four_nodes_concurrency
@@ -2198,6 +2200,19 @@ three_nodes_remote_join_from_scope_process(Config) ->
     ok = receive {left, Left} -> Left end,
     [] = syn:members(scope_stale, "group"),
     [] = rpc:call(SlaveNode1, syn, members, [scope_stale, "group"]).
+
+three_nodes_clock_going_backwards(Config) ->
+    %% times come from the clock of each node, which can step backwards: what a node sends about
+    %% its own processes is applied in the order it arrives, whatever the time
+
+    SlaveNode1 = proplists:get_value(syn_slave_1, Config),
+    ScopePid = start_scope_stale(SlaveNode1),
+
+    Pid = syn_test_suite_helper:start_process(SlaveNode1),
+    ScopePid ! {'3.0', sync_join, "group", Pid, old, 200, normal},
+    ScopePid ! {'3.0', sync_join, "group", Pid, new, 100, normal},
+    _ = sys:get_state(ScopePid),
+    [{Pid, new}] = syn:members(scope_stale, "group").
 
 %% ===================================================================
 %% Internal

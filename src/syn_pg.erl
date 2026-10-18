@@ -851,20 +851,21 @@ handle_pg_sync(GroupName, Pid, Meta, Time, Reason, #state{
             %% callback
             syn_event_handler:call_event_handler(on_process_joined, [Scope, GroupName, Pid, Meta, Reason]);
 
-        {{GroupName, Pid}, TableMeta, TableTime, _, _} when Time > TableTime ->
+        {{_, _}, _, TableTime, caller, _} when Time < TableTime ->
+            %% older than what this node wrote from the reply to its own call: ignore
+            ok;
+
+        {{_, _}, TableMeta, _, MRef, _} ->
+            %% more recent (because it comes from the same node, which means that it's sequential)
             %% maybe updated meta or time only
-            add_to_local_table(GroupName, Pid, Meta, Time, undefined, TableByName, TableByPid),
+            add_to_local_table(GroupName, Pid, Meta, Time, MRef, TableByName, TableByPid),
             %% callback (call only if meta update)
             case TableMeta =/= Meta of
                 true ->
                     syn_event_handler:call_event_handler(on_group_process_updated, [Scope, GroupName, Pid, Meta, Reason]),
                     syn_event_handler:call_event_handler(on_group_process_updated, [Scope, GroupName, Pid, TableMeta, Meta, Reason]);
                 _ -> ok
-            end;
-
-        _ ->
-            %% race condition: incoming data is older, ignore
-            ok
+            end
     end.
 
 -spec handle_pg_leave_sync(
