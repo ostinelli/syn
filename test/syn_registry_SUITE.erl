@@ -55,7 +55,9 @@
     three_nodes_clock_going_backwards/1,
     three_nodes_ack_sync_from_unknown_node_keeps_remote/1,
     three_nodes_ack_sync_from_unknown_node_resolution_reaches_peer/1,
-    three_nodes_resolver_keeps_neither_while_process_dies/1
+    three_nodes_resolver_keeps_neither_while_process_dies/1,
+    three_nodes_process_dies_before_sending_its_list/1,
+    three_nodes_resolver_runs_once_on_each_owner/1
 ]).
 -export([
     four_nodes_concurrency/1
@@ -120,7 +122,9 @@ groups() ->
             three_nodes_clock_going_backwards,
             three_nodes_ack_sync_from_unknown_node_keeps_remote,
             three_nodes_ack_sync_from_unknown_node_resolution_reaches_peer,
-            three_nodes_resolver_keeps_neither_while_process_dies
+            three_nodes_resolver_keeps_neither_while_process_dies,
+            three_nodes_process_dies_before_sending_its_list,
+            three_nodes_resolver_runs_once_on_each_owner
         ]},
         {four_nodes_registry, [shuffle], [
             four_nodes_concurrency
@@ -2157,6 +2161,100 @@ three_nodes_resolver_keeps_neither_while_process_dies(Config) ->
     undefined = rpc:call(SlaveNode1, syn, lookup, [scope_bc, "proc"]),
     undefined = rpc:call(SlaveNode2, syn, lookup, [scope_bc, "proc"]).
 
+three_nodes_process_dies_before_sending_its_list(Config) ->
+    %% as above, but the process on slave 1 dies before slave 1 sends its list: there is no conflict
+    %% for the resolver, and both slaves keep the process of slave 2
+
+    SlaveNode1 = proplists:get_value(syn_slave_1, Config),
+    SlaveNode2 = proplists:get_value(syn_slave_2, Config),
+
+    ok = rpc:call(SlaveNode1, syn, start, []),
+    ok = rpc:call(SlaveNode2, syn, start, []),
+    rpc:call(SlaveNode1, syn, set_event_handler, [syn_test_event_handler_resolution]),
+    rpc:call(SlaveNode2, syn, set_event_handler, [syn_test_event_handler_resolution]),
+    ok = rpc:call(SlaveNode1, syn, add_node_to_scopes, [[scope_bc]]),
+    ok = rpc:call(SlaveNode2, syn, add_node_to_scopes, [[scope_bc]]),
+    syn_test_suite_helper:assert_scope_subcluster(registry, SlaveNode1, scope_bc, [SlaveNode2]),
+    syn_test_suite_helper:assert_scope_subcluster(registry, SlaveNode2, scope_bc, [SlaveNode1]),
+    ScopePid1 = rpc:call(SlaveNode1, erlang, whereis, [syn_registry_scope_bc]),
+    ScopePid2 = rpc:call(SlaveNode2, erlang, whereis, [syn_registry_scope_bc]),
+
+    %% split the slaves and register the same name on both sides
+    rpc:call(SlaveNode1, syn_test_suite_helper, disconnect_node, [SlaveNode2]),
+    syn_test_suite_helper:assert_scope_subcluster(registry, SlaveNode1, scope_bc, []),
+    syn_test_suite_helper:assert_scope_subcluster(registry, SlaveNode2, scope_bc, []),
+    TestPid = self(),
+    PidOn1 = syn_test_suite_helper:start_process(SlaveNode1),
+    PidOn2 = syn_test_suite_helper:start_process(SlaveNode2),
+    ok = rpc:call(SlaveNode1, syn, register, [scope_bc, "proc", PidOn1, {recipient, TestPid, crash}]),
+    ok = rpc:call(SlaveNode2, syn, register, [scope_bc, "proc", PidOn2, {recipient, TestPid, crash}]),
+    syn_test_suite_helper:assert_received_messages([
+        {on_process_registered, SlaveNode1, scope_bc, "proc", PidOn1, crash, normal},
+        {on_process_registered, SlaveNode2, scope_bc, "proc", PidOn2, crash, normal}
+    ]),
+
+    %% hold both scope processes with empty queues, then reconnect
+    _ = sys:get_state(ScopePid1),
+    _ = sys:get_state(ScopePid2),
+    ok = sys:suspend(ScopePid1),
+    ok = sys:suspend(ScopePid2),
+    true = rpc:call(SlaveNode1, syn_test_suite_helper, connect_node, [SlaveNode2]),
+    wait_for_message_queue_len(ScopePid1, 1),
+    wait_for_message_queue_len(ScopePid2, 1),
+
+    %% the process on slave 1 dies, slave 1 handles that before the discover of slave 2
+    syn_test_suite_helper:kill_process(PidOn1),
+    wait_for_message_queue_len(ScopePid1, 2),
+    ok = sys:resume(ScopePid2),
+    wait_for_message_queue_len(ScopePid1, 3),
+    ok = sys:resume(ScopePid1),
+
+    syn_test_suite_helper:assert_received_messages([
+        {on_process_unregistered, SlaveNode1, scope_bc, "proc", PidOn1, crash, killed},
+        {on_process_registered, SlaveNode1, scope_bc, "proc", PidOn2, crash, {syn_remote_scope_node_up, scope_bc, SlaveNode2}}
+    ]),
+    {PidOn2, {recipient, TestPid, crash}} = rpc:call(SlaveNode1, syn, lookup, [scope_bc, "proc"]),
+    {PidOn2, {recipient, TestPid, crash}} = rpc:call(SlaveNode2, syn, lookup, [scope_bc, "proc"]).
+
+three_nodes_resolver_runs_once_on_each_owner(Config) ->
+    %% after a net split the conflict gets resolved on the two nodes that run the processes,
+    %% once each, and not on the node that sees both of them
+
+    SlaveNode1 = proplists:get_value(syn_slave_1, Config),
+    SlaveNode2 = proplists:get_value(syn_slave_2, Config),
+
+    ok = syn:start(),
+    ok = rpc:call(SlaveNode1, syn, start, []),
+    ok = rpc:call(SlaveNode2, syn, start, []),
+    syn:set_event_handler(syn_test_event_handler_resolution),
+    rpc:call(SlaveNode1, syn, set_event_handler, [syn_test_event_handler_resolution]),
+    rpc:call(SlaveNode2, syn, set_event_handler, [syn_test_event_handler_resolution]),
+
+    TestPid = self(),
+    Meta = {recipient, TestPid, report},
+    {_PidOn1, PidOn2} = register_conflict_in_partial_netsplit(SlaveNode1, SlaveNode2, "proc", Meta, Meta),
+
+    %% re-join
+    rpc:call(SlaveNode1, syn_test_suite_helper, connect_node, [SlaveNode2]),
+    syn_test_suite_helper:assert_scope_subcluster(registry, SlaveNode1, scope_all, [node(), SlaveNode2]),
+    syn_test_suite_helper:assert_scope_subcluster(registry, SlaveNode2, scope_all, [node(), SlaveNode1]),
+
+    %% the later registration is kept
+    syn_test_suite_helper:assert_wait(
+        {PidOn2, Meta},
+        fun() -> rpc:call(SlaveNode1, syn, lookup, [scope_all, "proc"]) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        {PidOn2, Meta},
+        fun() -> rpc:call(SlaveNode2, syn, lookup, [scope_all, "proc"]) end
+    ),
+    syn_test_suite_helper:assert_wait(
+        {PidOn2, Meta},
+        fun() -> syn:lookup(scope_all, "proc") end
+    ),
+
+    [SlaveNode1, SlaveNode2] = lists:sort(receive_resolver_runs(scope_all, "proc")).
+
 four_nodes_concurrency(Config) ->
     %% get slaves
     SlaveNode1 = proplists:get_value(syn_slave_1, Config),
@@ -2347,6 +2445,14 @@ start_scope_stale(Node) ->
     syn_test_suite_helper:assert_scope_subcluster(registry, node(), scope_stale, [Node]),
     syn_test_suite_helper:assert_scope_subcluster(registry, Node, scope_stale, [node()]),
     whereis(syn_registry_scope_stale).
+
+%% the nodes the resolver ran on for Name, until it hasn't run for a second
+receive_resolver_runs(Scope, Name) ->
+    receive
+        {resolve_registry_conflict, Node, Scope, Name} -> [Node | receive_resolver_runs(Scope, Name)]
+    after 1000 ->
+        []
+    end.
 
 wait_for_message_queue_len(Pid, Len) ->
     syn_test_suite_helper:assert_wait(
