@@ -626,10 +626,11 @@ reconcile_remote_registry_snapshot(Node, RegistryTuplesOfRemoteNode, #state{
             ok;
 
         _ ->
-            SnapshotNames = maps:from_list([{Name, true} || {Name, _Pid, _Meta, _Time} <- RegistryTuplesOfRemoteNode]),
+            %% compare pids too: an entry whose name the snapshot has with another pid is stale, whatever its time
+            SnapshotPids = maps:from_list([{Name, Pid} || {Name, Pid, _Meta, _Time} <- RegistryTuplesOfRemoteNode]),
             SnapshotTime = lists:foldl(fun({_, _, _, Time}, Acc) -> max(Time, Acc) end, 0, RegistryTuplesOfRemoteNode),
             lists:foreach(fun({Name, Pid, Meta, Time, MRef}) ->
-                case is_map_key(Name, SnapshotNames) orelse is_newer_caller_entry(MRef, Time, SnapshotTime) of
+                case maps:get(Name, SnapshotPids, undefined) =:= Pid orelse is_newer_caller_entry(MRef, Time, SnapshotTime) of
                     true ->
                         ok;
 
@@ -668,12 +669,12 @@ handle_registry_sync(Name, Pid, Meta, Time, Reason, #state{
             %% callback
             syn_event_handler:call_event_handler(on_process_registered, [Scope, Name, Pid, Meta, Reason]);
 
-        {_, Pid, _, TableTime, _, _} when Time < TableTime ->
-            %% same pid, older data: ignore
+        {_, Pid, _, TableTime, caller, _} when Time < TableTime ->
+            %% same pid, older than what this node wrote from the reply to its own call: ignore
             ok;
 
         {_, Pid, TableMeta, _, MRef, _} ->
-            %% same pid, same or more recent data
+            %% same pid, more recent (because it comes from the same node, which means that it's sequential)
             %% maybe updated meta or time only
             add_to_local_table(Name, Pid, Meta, Time, MRef, TableByName, TableByPid),
             %% callback (call only if meta update)

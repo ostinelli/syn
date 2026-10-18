@@ -52,6 +52,7 @@
     three_nodes_ack_sync_reconciles_large_snapshot/1,
     three_nodes_stale_snapshot_does_not_undo_remote_register/1,
     three_nodes_stale_snapshot_does_not_undo_remote_update/1,
+    three_nodes_clock_going_backwards/1,
     three_nodes_ack_sync_from_unknown_node_keeps_remote/1,
     three_nodes_ack_sync_from_unknown_node_resolution_reaches_peer/1,
     three_nodes_resolver_keeps_neither_while_process_dies/1
@@ -116,6 +117,7 @@ groups() ->
             three_nodes_ack_sync_reconciles_large_snapshot,
             three_nodes_stale_snapshot_does_not_undo_remote_register,
             three_nodes_stale_snapshot_does_not_undo_remote_update,
+            three_nodes_clock_going_backwards,
             three_nodes_ack_sync_from_unknown_node_keeps_remote,
             three_nodes_ack_sync_from_unknown_node_resolution_reaches_peer,
             three_nodes_resolver_keeps_neither_while_process_dies
@@ -1952,6 +1954,28 @@ three_nodes_stale_snapshot_does_not_undo_remote_update(Config) ->
     {Pid, new_meta} = syn:lookup(scope_stale, "proc"),
     {Pid, new_meta} = rpc:call(SlaveNode1, syn, lookup, [scope_stale, "proc"]).
 
+three_nodes_clock_going_backwards(Config) ->
+    %% times come from the clock of each node, which can step backwards: what a node sends about
+    %% its own processes is applied in the order it arrives, whatever the time
+
+    SlaveNode1 = proplists:get_value(syn_slave_1, Config),
+    ScopePid = start_scope_stale(SlaveNode1),
+    RemoteScopePid = rpc:call(SlaveNode1, erlang, whereis, [syn_registry_scope_stale]),
+
+    OldPid = syn_test_suite_helper:start_process(SlaveNode1),
+    NewPid = syn_test_suite_helper:start_process(SlaveNode1),
+
+    %% a snapshot with the name on another process, with an older time
+    ScopePid ! {'3.0', ack_sync, RemoteScopePid, [{"proc", OldPid, old, 200}]},
+    ScopePid ! {'3.0', ack_sync, RemoteScopePid, [{"proc", NewPid, new, 100}]},
+    _ = sys:get_state(ScopePid),
+    {NewPid, new} = syn:lookup(scope_stale, "proc"),
+
+    %% an update of the same process, with an older time
+    ScopePid ! {'3.0', sync_register, "proc", NewPid, newer, 50, normal},
+    _ = sys:get_state(ScopePid),
+    {NewPid, newer} = syn:lookup(scope_stale, "proc").
+
 three_nodes_ack_sync_from_unknown_node_keeps_remote(Config) ->
     %% The local node sees both slaves, which cannot see each other. The name is registered
     %% on slave 1 first and on slave 2 later, so the local node holds the process on slave 2.
@@ -2313,6 +2337,16 @@ join_with_ack_sync_first(Node, PeerNode, Name) ->
     PeerScopePid ! {'3.0', discover, ScopePid},
     syn_test_suite_helper:assert_scope_subcluster(registry, PeerNode, scope_all, [node(), Node]),
     ok = sys:resume(ScopePid).
+
+%% start syn and add scope_stale on this node and on Node, returns the scope process of this node
+start_scope_stale(Node) ->
+    ok = syn:start(),
+    ok = rpc:call(Node, syn, start, []),
+    ok = syn:add_node_to_scopes([scope_stale]),
+    ok = rpc:call(Node, syn, add_node_to_scopes, [[scope_stale]]),
+    syn_test_suite_helper:assert_scope_subcluster(registry, node(), scope_stale, [Node]),
+    syn_test_suite_helper:assert_scope_subcluster(registry, Node, scope_stale, [node()]),
+    whereis(syn_registry_scope_stale).
 
 wait_for_message_queue_len(Pid, Len) ->
     syn_test_suite_helper:assert_wait(
