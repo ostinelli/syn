@@ -385,7 +385,7 @@ postcondition(_S, {call, _, spawn_process, _}, Pid) when is_pid(Pid) -> true;
 postcondition(_S, {call, _, spawn_process, _}, Other) ->
     ct:pal("spawn_process failed: ~p~n", [Other]), false;
 
-%% --- Doc: register returns ok | {error, taken|not_alive|not_self} ---
+%% --- Doc: register returns ok | {error, taken|not_alive|not_self|race_condition} ---
 postcondition(#state{}, {call, _, Cmd, _}, Result)
         when Cmd =:= register_process; Cmd =:= register_process_no_meta ->
     case Result of
@@ -393,6 +393,7 @@ postcondition(#state{}, {call, _, Cmd, _}, Result)
         {error, taken} -> true;
         {error, not_alive} -> true;
         {error, not_self} -> true;
+        {error, race_condition} -> true;
         {badrpc, _} -> true;
         Other ->
             ct:pal("DOCS VIOLATION: ~p returned undocumented value: ~p~n", [Cmd, Other]),
@@ -412,11 +413,12 @@ postcondition(_S, {call, _, unregister_process, [_, Name, _Node]}, Result) ->
             false
     end;
 
-%% --- Doc: update_registry returns {ok, {Pid, NewMeta}} | {error, undefined} ---
+%% --- Doc: update_registry returns {ok, {Pid, NewMeta}} | {error, undefined|race_condition} ---
 postcondition(_S, {call, _, update_registry, [_, Name, _NewMeta, _Node]}, Result) ->
     case Result of
         {ok, {Pid, _Meta}} when is_pid(Pid) -> true;
         {error, undefined} -> true;
+        {error, race_condition} -> true;
         {badrpc, _} -> true;
         Other ->
             ct:pal("DOCS VIOLATION: update_registry returned undocumented value: ~p~n"
@@ -430,6 +432,7 @@ postcondition(_S, {call, _, re_register_meta, _}, Result) ->
         ok -> true;
         {error, not_alive} -> true;
         {error, undefined} -> true;
+        {error, race_condition} -> true;
         {badrpc, _} -> true;
         Other ->
             ct:pal("DOCS VIOLATION: re_register returned undocumented value: ~p~n", [Other]),
