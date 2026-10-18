@@ -57,6 +57,7 @@
     three_nodes_scope_down_does_not_undo_remote_register/1,
     three_nodes_crossed_remote_registers_resolve_conflict/1,
     three_nodes_remote_register_from_scope_process/1,
+    three_nodes_legacy_node_gets_direct_calls/1,
     three_nodes_clock_going_backwards/1,
     three_nodes_ack_sync_from_unknown_node_keeps_remote/1,
     three_nodes_ack_sync_from_unknown_node_resolution_reaches_peer/1,
@@ -129,6 +130,7 @@ groups() ->
             three_nodes_scope_down_does_not_undo_remote_register,
             three_nodes_crossed_remote_registers_resolve_conflict,
             three_nodes_remote_register_from_scope_process,
+            three_nodes_legacy_node_gets_direct_calls,
             three_nodes_clock_going_backwards,
             three_nodes_ack_sync_from_unknown_node_keeps_remote,
             three_nodes_ack_sync_from_unknown_node_resolution_reaches_peer,
@@ -2087,29 +2089,67 @@ three_nodes_crossed_remote_registers_resolve_conflict(Config) ->
     ).
 
 three_nodes_remote_register_from_scope_process(Config) ->
-    %% code running in our scope process, like a callback, can't wait for that process to apply
-    %% the result of a call for a process of the slave: the slave replies to it directly
+    %% code running in our scope process, like a callback, can't wait for that process to apply the result of
+    %% a call for a process of the slave: the slave replies to it right away, and our scope process applies
+    %% the result after everything the slave sent it before
 
     SlaveNode1 = proplists:get_value(syn_slave_1, Config),
     ScopePid = start_scope_stale(SlaveNode1),
 
     Pid = syn_test_suite_helper:start_process(SlaveNode1),
     TestPid = self(),
+
+    %% the result is applied once the scope process is done with the callback
     _ = sys:replace_state(ScopePid, fun(State) ->
-        TestPid ! {registered, syn:register(scope_stale, "proc", Pid, meta)},
+        Result = syn:register(scope_stale, "proc", Pid, meta),
+        TestPid ! {registered, Result, syn:lookup(scope_stale, "proc")},
         State
     end),
-    ok = receive {registered, Registered} -> Registered end,
+    {ok, undefined} = receive {registered, Registered, LookupInCallback} -> {Registered, LookupInCallback} end,
+    _ = sys:get_state(ScopePid),
     {Pid, meta} = syn:lookup(scope_stale, "proc"),
     {Pid, meta} = rpc:call(SlaveNode1, syn, lookup, [scope_stale, "proc"]),
 
+    %% an older snapshot of the slave waits in the queue of our scope process, then it unregisters
+    {RemoteScopePid, Snapshot} = get_remote_snapshot(SlaveNode1, syn_registry_scope_stale),
+    ok = sys:suspend(ScopePid),
+    ScopePid ! {'3.0', ack_sync, RemoteScopePid, Snapshot},
     _ = sys:replace_state(ScopePid, fun(State) ->
         TestPid ! {unregistered, syn:unregister(scope_stale, "proc")},
         State
     end),
     ok = receive {unregistered, Unregistered} -> Unregistered end,
+    ok = sys:resume(ScopePid),
+    _ = sys:get_state(ScopePid),
     undefined = syn:lookup(scope_stale, "proc"),
     undefined = rpc:call(SlaveNode1, syn, lookup, [scope_stale, "proc"]).
+
+three_nodes_legacy_node_gets_direct_calls(Config) ->
+    %% a node running a version that doesn't know the ordered calls gets direct ones, until it disconnects
+
+    SlaveNode1 = proplists:get_value(syn_slave_1, Config),
+    start_scope_stale(SlaveNode1),
+    TableByName = syn_backbone:get_table_name(syn_registry_by_name, scope_stale),
+
+    Pid = syn_test_suite_helper:start_process(SlaveNode1),
+
+    %% as if the slave had answered an ordered call with undefined
+    true = syn_backbone:save_legacy_node(SlaveNode1),
+    ok = syn:register(scope_stale, "proc", Pid, meta),
+    [{"proc", Pid, meta, _, caller, SlaveNode1}] = ets:lookup(TableByName, "proc"),
+    ok = syn:unregister(scope_stale, "proc"),
+
+    %% forgotten when it disconnects
+    syn_test_suite_helper:disconnect_node(SlaveNode1),
+    syn_test_suite_helper:assert_wait(
+        false,
+        fun() -> syn_backbone:is_legacy_node(SlaveNode1) end
+    ),
+    true = syn_test_suite_helper:connect_node(SlaveNode1),
+    syn_test_suite_helper:assert_scope_subcluster(registry, node(), scope_stale, [SlaveNode1]),
+    syn_test_suite_helper:assert_scope_subcluster(registry, SlaveNode1, scope_stale, [node()]),
+    ok = syn:register(scope_stale, "proc", Pid, meta),
+    [{"proc", Pid, meta, _, undefined, SlaveNode1}] = ets:lookup(TableByName, "proc").
 
 three_nodes_clock_going_backwards(Config) ->
     %% times come from the clock of each node, which can step backwards: what a node sends about

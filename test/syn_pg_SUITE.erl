@@ -2177,27 +2177,38 @@ three_nodes_scope_down_does_not_undo_remote_join(Config) ->
     [{Pid, meta}] = rpc:call(SlaveNode1, syn, members, [scope_stale, "group"]).
 
 three_nodes_remote_join_from_scope_process(Config) ->
-    %% code running in our scope process, like a callback, can't wait for that process to apply
-    %% the result of a call for a process of the slave: the slave replies to it directly
+    %% code running in our scope process, like a callback, can't wait for that process to apply the result of
+    %% a call for a process of the slave: the slave replies to it right away, and our scope process applies
+    %% the result after everything the slave sent it before
 
     SlaveNode1 = proplists:get_value(syn_slave_1, Config),
     ScopePid = start_scope_stale(SlaveNode1),
 
     Pid = syn_test_suite_helper:start_process(SlaveNode1),
     TestPid = self(),
+
+    %% the result is applied once the scope process is done with the callback
     _ = sys:replace_state(ScopePid, fun(State) ->
-        TestPid ! {joined, syn:join(scope_stale, "group", Pid, meta)},
+        Result = syn:join(scope_stale, "group", Pid, meta),
+        TestPid ! {joined, Result, syn:members(scope_stale, "group")},
         State
     end),
-    ok = receive {joined, Joined} -> Joined end,
+    {ok, []} = receive {joined, Joined, MembersInCallback} -> {Joined, MembersInCallback} end,
+    _ = sys:get_state(ScopePid),
     [{Pid, meta}] = syn:members(scope_stale, "group"),
     [{Pid, meta}] = rpc:call(SlaveNode1, syn, members, [scope_stale, "group"]),
 
+    %% an older snapshot of the slave waits in the queue of our scope process, then it leaves
+    {RemoteScopePid, Snapshot} = get_remote_snapshot(SlaveNode1, syn_pg_scope_stale),
+    ok = sys:suspend(ScopePid),
+    ScopePid ! {'3.0', ack_sync, RemoteScopePid, Snapshot},
     _ = sys:replace_state(ScopePid, fun(State) ->
         TestPid ! {left, syn:leave(scope_stale, "group", Pid)},
         State
     end),
     ok = receive {left, Left} -> Left end,
+    ok = sys:resume(ScopePid),
+    _ = sys:get_state(ScopePid),
     [] = syn:members(scope_stale, "group"),
     [] = rpc:call(SlaveNode1, syn, members, [scope_stale, "group"]).
 

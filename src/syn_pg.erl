@@ -189,7 +189,7 @@ join_or_update(Scope, GroupName, Pid, MetaOrFun) ->
 
         _ ->
             Node = node(Pid),
-            case Node =/= node() andalso not syn_gen_scope:is_scope_process(?MODULE, Scope) of
+            case Node =/= node() of
                 true -> join_or_update_ordered(Scope, Node, GroupName, Pid, MetaOrFun);
                 false -> join_or_update_direct(Scope, Node, GroupName, Pid, MetaOrFun)
             end
@@ -200,7 +200,7 @@ join_or_update(Scope, GroupName, Pid, MetaOrFun) ->
 -spec join_or_update_ordered(Scope :: atom(), Node :: node(), GroupName :: term(), Pid :: pid(), MetaOrFun :: term() | function()) ->
     {ok, {Pid :: pid(), Meta :: term()}} | {error, Reason :: term()}.
 join_or_update_ordered(Scope, Node, GroupName, Pid, MetaOrFun) ->
-    case syn_gen_scope:call(?MODULE, Node, Scope, {'3.0', join_or_update_on_node_ordered, node(), GroupName, Pid, MetaOrFun}) of
+    case syn_gen_scope:call_ordered(?MODULE, Node, Scope, {'3.0', join_or_update_on_node_ordered, node(), GroupName, Pid, MetaOrFun}) of
         {ok, {Pid, Meta}} ->
             {ok, {Pid, Meta}};
 
@@ -215,8 +215,8 @@ join_or_update_ordered(Scope, Node, GroupName, Pid, MetaOrFun) ->
             join_or_update_direct(Scope, Node, GroupName, Pid, MetaOrFun)
     end.
 
-%% the process' node replies to the caller directly: used for local processes, from the scope process itself
-%% (which can't wait for its own reply) and with nodes that don't know the ordered call
+%% the process' node replies to the caller directly: used for local processes, and with nodes that don't know
+%% the ordered call
 -spec join_or_update_direct(Scope :: atom(), Node :: node(), GroupName :: term(), Pid :: pid(), MetaOrFun :: term() | function()) ->
     {ok, {Pid :: pid(), Meta :: term()}} | {error, Reason :: term()}.
 join_or_update_direct(Scope, Node, GroupName, Pid, MetaOrFun) ->
@@ -252,7 +252,7 @@ leave(Scope, GroupName, Pid) ->
 
         TableByName ->
             Node = node(Pid),
-            case Node =/= node() andalso not syn_gen_scope:is_scope_process(?MODULE, Scope) of
+            case Node =/= node() of
                 true -> leave_ordered(Scope, Node, GroupName, Pid, TableByName);
                 false -> leave_direct(Scope, Node, GroupName, Pid, TableByName)
             end
@@ -261,7 +261,7 @@ leave(Scope, GroupName, Pid) ->
 -spec leave_ordered(Scope :: atom(), Node :: node(), GroupName :: term(), Pid :: pid(), TableByName :: atom()) ->
     ok | {error, Reason :: term()}.
 leave_ordered(Scope, Node, GroupName, Pid, TableByName) ->
-    case syn_gen_scope:call(?MODULE, Node, Scope, {'3.0', leave_on_node_ordered, node(), GroupName, Pid}) of
+    case syn_gen_scope:call_ordered(?MODULE, Node, Scope, {'3.0', leave_on_node_ordered, node(), GroupName, Pid}) of
         ok ->
             ok;
 
@@ -407,17 +407,16 @@ handle_call({'3.0', join_or_update_on_node, RequesterNode, GroupName, Pid, MetaO
             {reply, Error, State}
     end;
 
-handle_call({'3.0', join_or_update_on_node_ordered, RequesterNode, GroupName, Pid, MetaOrFun}, From, State) ->
+handle_call({'3.0', join_or_update_on_node_ordered, RequesterNode, GroupName, Pid, MetaOrFun, ReplyWhen}, From, State) ->
     case join_or_update_on_node(RequesterNode, GroupName, Pid, MetaOrFun, State) of
         {ok, {_, _, Meta, Time}} ->
-            %% the requester's scope process applies it after everything sent to it before, then replies
-            syn_gen_scope:send_to_node(RequesterNode, {'3.0', sync_join_reply, GroupName, Pid, Meta, Time, From}, State),
-            {noreply, State};
+            Message = {'3.0', sync_join_reply, GroupName, Pid, Meta, Time},
+            syn_gen_scope:send_ordered_result(RequesterNode, Message, {ok, {Pid, Meta}}, ReplyWhen, From, State);
 
         {noop, Meta, Time} ->
             %% sent anyway, the requester may be missing the entry
-            syn_gen_scope:send_to_node(RequesterNode, {'3.0', sync_join_reply, GroupName, Pid, Meta, Time, From}, State),
-            {noreply, State};
+            Message = {'3.0', sync_join_reply, GroupName, Pid, Meta, Time},
+            syn_gen_scope:send_ordered_result(RequesterNode, Message, {ok, {Pid, Meta}}, ReplyWhen, From, State);
 
         Error ->
             {reply, Error, State}
@@ -431,12 +430,11 @@ handle_call({'3.0', leave_on_node, RequesterNode, GroupName, Pid}, _From, #state
         {error, Reason} -> {reply, {error, Reason}, State}
     end;
 
-handle_call({'3.0', leave_on_node_ordered, RequesterNode, GroupName, Pid}, From, State) ->
+handle_call({'3.0', leave_on_node_ordered, RequesterNode, GroupName, Pid, ReplyWhen}, From, State) ->
     case leave_on_node(RequesterNode, GroupName, Pid, State) of
         {ok, Meta} ->
-            %% the requester's scope process applies it after everything sent to it before, then replies
-            syn_gen_scope:send_to_node(RequesterNode, {'3.0', sync_leave_reply, GroupName, Pid, Meta, From}, State),
-            {noreply, State};
+            Message = {'3.0', sync_leave_reply, GroupName, Pid, Meta},
+            syn_gen_scope:send_ordered_result(RequesterNode, Message, ok, ReplyWhen, From, State);
 
         {error, Reason} ->
             {reply, {error, Reason}, State}
@@ -474,7 +472,7 @@ handle_info({'3.0', sync_join_reply, GroupName, Pid, Meta, Time, From}, #state{n
             %% node not yet discovered, its ack_sync brings the entry
             ok
     end,
-    gen_server:reply(From, {ok, {Pid, Meta}}),
+    syn_gen_scope:reply_ordered(From, {ok, {Pid, Meta}}),
     {noreply, State};
 
 handle_info({'3.0', sync_leave, GroupName, Pid, Meta, Reason}, State) ->
@@ -483,7 +481,7 @@ handle_info({'3.0', sync_leave, GroupName, Pid, Meta, Reason}, State) ->
 
 handle_info({'3.0', sync_leave_reply, GroupName, Pid, Meta, From}, State) ->
     handle_pg_leave_sync(GroupName, Pid, Meta, normal, State),
-    gen_server:reply(From, ok),
+    syn_gen_scope:reply_ordered(From, ok),
     {noreply, State};
 
 handle_info({'DOWN', _MRef, process, Pid, Reason}, #state{

@@ -32,12 +32,14 @@
     start_link/3,
     subcluster_nodes/2,
     call/3, call/4,
-    is_scope_process/2
+    call_ordered/4,
+    reply_ordered/2
 ]).
 -export([
     broadcast/2,
     broadcast/3,
-    send_to_node/3
+    send_to_node/3,
+    send_ordered_result/6
 ]).
 
 %% gen_server callbacks
@@ -115,13 +117,36 @@ call(Handler, Node, Scope, Message) ->
             end
     end.
 
-%% the calling process is the local scope process, i.e. code running in a callback
--spec is_scope_process(Handler :: module(), Scope :: atom()) -> boolean().
-is_scope_process(Handler, Scope) ->
-    case get_process_name_for_scope(Handler, Scope) of
-        undefined -> false;
-        ProcessName -> whereis(ProcessName) =:= self()
+%% a call for a process on another node, whose result the local scope process applies in order with everything else
+%% that node sends it, see send_ordered_result/6: undefined if that node runs a version that doesn't know the call
+-spec call_ordered(Handler :: module(), Node :: atom(), Scope :: atom(), Message :: tuple()) -> Response :: term().
+call_ordered(Handler, Node, Scope, Message) ->
+    case syn_backbone:is_legacy_node(Node) of
+        true ->
+            undefined;
+
+        false ->
+            %% the scope process itself can't wait for its own reply: it gets it right away,
+            %% and applies the result when it gets to it
+            ReplyWhen = case is_scope_process(Handler, Scope) of
+                true -> handled;
+                false -> applied
+            end,
+            case call(Handler, Node, Scope, erlang:append_element(Message, ReplyWhen)) of
+                undefined ->
+                    %% that node logs the unknown call, ask it only once
+                    syn_backbone:save_legacy_node(Node),
+                    undefined;
+
+                Response ->
+                    Response
+            end
     end.
+
+%% replies to the caller of an ordered call, unless it got its reply already
+-spec reply_ordered(From :: {pid(), Tag :: term()} | undefined, Reply :: term()) -> ok.
+reply_ordered(undefined, _Reply) -> ok;
+reply_ordered(From, Reply) -> gen_server:reply(From, Reply).
 
 %% ===================================================================
 %% In-Process API
@@ -137,6 +162,23 @@ broadcast(Message, ExcludedNodes, #state{sender_pid = SenderPid, process_name = 
 -spec send_to_node(RemoteNode :: node(), Message :: term(), #state{}) -> any().
 send_to_node(RemoteNode, Message, #state{sender_pid = SenderPid, process_name = ProcessName}) ->
     SenderPid ! {send_single, RemoteNode, Message, ProcessName}.
+
+%% the result of an ordered call goes to the scope process of the requester after everything sent to it before,
+%% with From appended: that process applies it and then replies, unless the call came from itself and gets Reply now
+-spec send_ordered_result(
+    RequesterNode :: node(),
+    Message :: tuple(),
+    Reply :: term(),
+    ReplyWhen :: applied | handled,
+    From :: {pid(), Tag :: term()},
+    #state{}
+) -> {noreply, #state{}} | {reply, Reply :: term(), #state{}}.
+send_ordered_result(RequesterNode, Message, _Reply, applied, From, State) ->
+    send_to_node(RequesterNode, erlang:append_element(Message, From), State),
+    {noreply, State};
+send_ordered_result(RequesterNode, Message, Reply, handled, _From, State) ->
+    send_to_node(RequesterNode, erlang:append_element(Message, undefined), State),
+    {reply, Reply, State}.
 
 %% ===================================================================
 %% Callbacks
@@ -343,6 +385,14 @@ code_change(_OldVsn, State, _Extra) ->
 -spec get_process_name_for_scope(Handler :: module(), Scope :: atom()) -> ProcessName :: atom() | undefined.
 get_process_name_for_scope(Handler, Scope) ->
     syn_backbone:get_process_name({Handler, Scope}).
+
+%% the calling process is the local scope process, i.e. code running in a callback
+-spec is_scope_process(Handler :: module(), Scope :: atom()) -> boolean().
+is_scope_process(Handler, Scope) ->
+    case get_process_name_for_scope(Handler, Scope) of
+        undefined -> false;
+        ProcessName -> whereis(ProcessName) =:= self()
+    end.
 
 -spec sender_loop() -> terminated.
 sender_loop() ->

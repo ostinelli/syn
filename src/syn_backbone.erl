@@ -32,6 +32,7 @@
 -export([create_tables_for_scope/1]).
 -export([get_table_name/2]).
 -export([save_process_name/2, get_process_name/1]).
+-export([save_legacy_node/1, is_legacy_node/1]).
 -export([is_strict_mode/0]).
 
 %% gen_server callbacks
@@ -71,6 +72,15 @@ get_process_name(Key) ->
         [] -> undefined
     end.
 
+%% a node running a version of Syn that doesn't know the ordered calls, until it disconnects
+-spec save_legacy_node(Node :: node()) -> true.
+save_legacy_node(Node) ->
+    true = ets:insert(syn_legacy_nodes, {Node}).
+
+-spec is_legacy_node(Node :: node()) -> boolean().
+is_legacy_node(Node) ->
+    ets:member(syn_legacy_nodes, Node).
+
 -spec get_table_name(TableId :: atom(), Scope :: atom()) -> TableName :: atom() | undefined.
 get_table_name(TableId, Scope) ->
     case ets:lookup(syn_table_names, {TableId, Scope}) of
@@ -98,6 +108,9 @@ init([]) ->
     %% create table names table
     ets:new(syn_table_names, [set, public, named_table, {read_concurrency, true}] ++ ?ETS_OPTIMIZATIONS),
     ets:new(syn_process_names, [set, public, named_table, {read_concurrency, true}] ++ ?ETS_OPTIMIZATIONS),
+    ets:new(syn_legacy_nodes, [set, public, named_table, {read_concurrency, true}] ++ ?ETS_OPTIMIZATIONS),
+    %% monitor nodes, to forget legacy ones when they disconnect
+    ok = net_kernel:monitor_nodes(true),
     %% init
     {ok, #{}}.
 
@@ -141,6 +154,13 @@ handle_cast(Msg, State) ->
     {noreply, State :: map()} |
     {noreply, State :: map(), Timeout :: non_neg_integer()} |
     {stop, Reason :: term(), State :: map()}.
+handle_info({nodedown, Node}, State) ->
+    true = ets:delete(syn_legacy_nodes, Node),
+    {noreply, State};
+
+handle_info({nodeup, _Node}, State) ->
+    {noreply, State};
+
 handle_info(Info, State) ->
     ?LOG_WARNING(#{event => unknown_info, msg => Info}),
     {noreply, State}.

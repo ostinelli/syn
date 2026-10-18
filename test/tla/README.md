@@ -73,15 +73,16 @@ to the other nodes, but not to the calling node. The calling node gets the resul
 Its scope process applies it like a sync message, conflict resolution included, and only then does
 the call return: a lookup on the calling node right after the call sees it, and nothing the other
 node sent before can undo it. If the calling node resolves a conflict on the name that doesn't keep
-the process, the call returns `{error, race_condition}`.
+the process, the call returns `{error, race_condition}`. A call made from a scope process itself (i.e.
+from a callback) can't wait for that process: it gets its reply right away, and the scope process
+applies the result in the same way once it's done with the callback.
 
 In the model, `Register` and `Unregister` can be called from the node that runs the process or from
 any node that can see it.
 
 When the calling node writes the result into its own table itself, outside of its scope process, the
-write isn't lined up with what the other node sends to that scope. That is what happens with calls
-made from a scope process itself (i.e. from a callback, which can't wait for its own scope process),
-and with nodes running a version that doesn't support the reply above. In those cases an older
+write isn't lined up with what the other node sends to that scope. That is what happens with nodes
+running a version that doesn't support the reply above, until they are upgraded. In those cases an older
 `ack_sync` snapshot still waiting in the calling node's scope queue can't remove a name registered
 from another node: the calling node marks what it writes from a reply, and reconciliation keeps a
 marked entry that is newer than everything in the snapshot, since the snapshot can't know about it yet.

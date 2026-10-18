@@ -131,7 +131,7 @@ register_or_update(Scope, Name, Pid, MetaOrFun) ->
 
         _ ->
             Node = node(Pid),
-            case Node =/= node() andalso not syn_gen_scope:is_scope_process(?MODULE, Scope) of
+            case Node =/= node() of
                 true -> register_or_update_ordered(Scope, Node, Name, Pid, MetaOrFun);
                 false -> register_or_update_direct(Scope, Node, Name, Pid, MetaOrFun)
             end
@@ -142,7 +142,7 @@ register_or_update(Scope, Name, Pid, MetaOrFun) ->
 -spec register_or_update_ordered(Scope :: atom(), Node :: node(), Name :: term(), Pid :: pid(), MetaOrFun :: term() | function()) ->
     {ok, {Pid :: pid(), Meta :: term()}} | {error, Reason :: term()}.
 register_or_update_ordered(Scope, Node, Name, Pid, MetaOrFun) ->
-    case syn_gen_scope:call(?MODULE, Node, Scope, {'3.0', register_or_update_on_node_ordered, node(), Name, Pid, MetaOrFun}) of
+    case syn_gen_scope:call_ordered(?MODULE, Node, Scope, {'3.0', register_or_update_on_node_ordered, node(), Name, Pid, MetaOrFun}) of
         {ok, {Pid, Meta}} ->
             {ok, {Pid, Meta}};
 
@@ -157,8 +157,8 @@ register_or_update_ordered(Scope, Node, Name, Pid, MetaOrFun) ->
             register_or_update_direct(Scope, Node, Name, Pid, MetaOrFun)
     end.
 
-%% the process' node replies to the caller directly: used for local processes, from the scope process itself
-%% (which can't wait for its own reply) and with nodes that don't know the ordered call
+%% the process' node replies to the caller directly: used for local processes, and with nodes that don't know
+%% the ordered call
 -spec register_or_update_direct(Scope :: atom(), Node :: node(), Name :: term(), Pid :: pid(), MetaOrFun :: term() | function()) ->
     {ok, {Pid :: pid(), Meta :: term()}} | {error, Reason :: term()}.
 register_or_update_direct(Scope, Node, Name, Pid, MetaOrFun) ->
@@ -200,7 +200,7 @@ unregister(Scope, Name) ->
 
                 {Name, Pid, Meta, _, _, _} ->
                     Node = node(Pid),
-                    case Node =/= node() andalso not syn_gen_scope:is_scope_process(?MODULE, Scope) of
+                    case Node =/= node() of
                         true -> unregister_ordered(Scope, Node, Name, Pid, Meta, TableByName);
                         false -> unregister_direct(Scope, Node, Name, Pid, Meta, TableByName)
                     end
@@ -210,7 +210,7 @@ unregister(Scope, Name) ->
 -spec unregister_ordered(Scope :: atom(), Node :: node(), Name :: term(), Pid :: pid(), Meta :: term(), TableByName :: atom()) ->
     ok | {error, Reason :: term()}.
 unregister_ordered(Scope, Node, Name, Pid, Meta, TableByName) ->
-    case syn_gen_scope:call(?MODULE, Node, Scope, {'3.0', unregister_on_node_ordered, node(), Name, Pid}) of
+    case syn_gen_scope:call_ordered(?MODULE, Node, Scope, {'3.0', unregister_on_node_ordered, node(), Name, Pid}) of
         ok ->
             ok;
 
@@ -310,17 +310,16 @@ handle_call({'3.0', register_or_update_on_node, RequesterNode, Name, Pid, MetaOr
             {reply, Error, State}
     end;
 
-handle_call({'3.0', register_or_update_on_node_ordered, RequesterNode, Name, Pid, MetaOrFun}, From, State) ->
+handle_call({'3.0', register_or_update_on_node_ordered, RequesterNode, Name, Pid, MetaOrFun, ReplyWhen}, From, State) ->
     case register_or_update_on_node(RequesterNode, Name, Pid, MetaOrFun, State) of
         {ok, {_, _, Meta, Time}} ->
-            %% the requester's scope process applies it after everything sent to it before, then replies
-            syn_gen_scope:send_to_node(RequesterNode, {'3.0', sync_register_reply, Name, Pid, Meta, Time, From}, State),
-            {noreply, State};
+            Message = {'3.0', sync_register_reply, Name, Pid, Meta, Time},
+            syn_gen_scope:send_ordered_result(RequesterNode, Message, {ok, {Pid, Meta}}, ReplyWhen, From, State);
 
         {noop, Meta, Time} ->
             %% sent anyway, the requester may be missing the entry
-            syn_gen_scope:send_to_node(RequesterNode, {'3.0', sync_register_reply, Name, Pid, Meta, Time, From}, State),
-            {noreply, State};
+            Message = {'3.0', sync_register_reply, Name, Pid, Meta, Time},
+            syn_gen_scope:send_ordered_result(RequesterNode, Message, {ok, {Pid, Meta}}, ReplyWhen, From, State);
 
         Error ->
             {reply, Error, State}
@@ -334,12 +333,11 @@ handle_call({'3.0', unregister_on_node, RequesterNode, Name, Pid}, _From, #state
         {error, Reason} -> {reply, {error, Reason}, State}
     end;
 
-handle_call({'3.0', unregister_on_node_ordered, RequesterNode, Name, Pid}, From, State) ->
+handle_call({'3.0', unregister_on_node_ordered, RequesterNode, Name, Pid, ReplyWhen}, From, State) ->
     case unregister_on_node(RequesterNode, Name, Pid, State) of
         {ok, Meta} ->
-            %% the requester's scope process applies it after everything sent to it before, then replies
-            syn_gen_scope:send_to_node(RequesterNode, {'3.0', sync_unregister_reply, Name, Pid, Meta, From}, State),
-            {noreply, State};
+            Message = {'3.0', sync_unregister_reply, Name, Pid, Meta},
+            syn_gen_scope:send_ordered_result(RequesterNode, Message, ok, ReplyWhen, From, State);
 
         {error, Reason} ->
             {reply, {error, Reason}, State}
@@ -388,7 +386,7 @@ handle_info({'3.0', sync_register_reply, Name, Pid, Meta, Time, From}, #state{
             %% node not yet discovered, its ack_sync brings the entry
             {ok, {Pid, Meta}}
     end,
-    gen_server:reply(From, Reply),
+    syn_gen_scope:reply_ordered(From, Reply),
     {noreply, State};
 
 handle_info({'3.0', sync_unregister, Name, Pid, Meta, Reason}, State) ->
@@ -397,7 +395,7 @@ handle_info({'3.0', sync_unregister, Name, Pid, Meta, Reason}, State) ->
 
 handle_info({'3.0', sync_unregister_reply, Name, Pid, Meta, From}, State) ->
     handle_registry_unregister_sync(Name, Pid, Meta, normal, State),
-    gen_server:reply(From, ok),
+    syn_gen_scope:reply_ordered(From, ok),
     {noreply, State};
 
 handle_info({'DOWN', _MRef, process, Pid, Reason}, #state{
