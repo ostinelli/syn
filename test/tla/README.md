@@ -72,8 +72,9 @@ to the other nodes, but not to the calling node. The calling node gets the resul
 `register_reply` / `unregister_reply`, through the same queue as everything else that node sends it.
 Its scope process applies it like a sync message, conflict resolution included, and only then does
 the call return: a lookup on the calling node right after the call sees it, and nothing the other
-node sent before can undo it. If the calling node resolves a conflict on the name that doesn't keep
-the process, the call returns `{error, race_condition}`. A call made from a scope process (i.e. from a
+node sent before can undo it. If the calling node keeps the name on another process, because it
+resolved a conflict against this one or has a more recent registration of it, the call returns
+`{error, race_condition}`. A call made from a scope process (i.e. from a
 callback) can't wait for one: it gets its reply right away, and the scope process of the calling node
 applies the result in the same way when it gets to it.
 

@@ -369,31 +369,19 @@ handle_info({'3.0', sync_register, Name, Pid, Meta, Time, Reason}, #state{nodes_
     {noreply, State};
 
 handle_info({'3.0', sync_register_reply, Name, Pid, Meta, Time, From}, #state{
-    scope = Scope,
     table_by_name = TableByName,
-    table_by_pid = TableByPid,
     nodes_map = NodesMap
 } = State) ->
     Reply = case maps:is_key(node(Pid), NodesMap) of
         true ->
-            case find_registry_entry_by_name(Name, TableByName) of
-                {_, TablePid, TableMeta, _, _, TableNode} when TablePid =/= Pid, TableNode =/= node() ->
-                    %% the name is on a process of another node here, whatever its time: the owner of this one
-                    %% has just registered it, and this is the only message about it that reaches this node, so
-                    %% the other process' node has dropped it, or resolves the conflict with the owner and tells all
-                    update_local_table(Name, TablePid, {Pid, Meta, Time, undefined}, TableByName, TableByPid),
-                    syn_event_handler:call_event_handler(on_process_unregistered, [Scope, Name, TablePid, TableMeta, normal]),
-                    syn_event_handler:call_event_handler(on_process_registered, [Scope, Name, Pid, Meta, normal]);
-
-                _ ->
-                    handle_registry_sync(Name, Pid, Meta, Time, normal, State)
-            end,
+            handle_registry_sync(Name, Pid, Meta, Time, normal, State),
             case find_registry_entry_by_name(Name, TableByName) of
                 {Name, Pid, _, _, _, _} ->
                     {ok, {Pid, Meta}};
 
                 _ ->
-                    %% a conflict resolved here did not keep it
+                    %% this node keeps the name on another process: it resolved a conflict against this one,
+                    %% or has a more recent registration of it
                     {error, race_condition}
             end;
 

@@ -59,7 +59,7 @@
     three_nodes_remote_register_from_scope_process/1,
     three_nodes_remote_register_from_another_scope_process/1,
     three_nodes_remote_register_with_undiscovered_node/1,
-    three_nodes_remote_register_over_entry_of_another_node/1,
+    three_nodes_remote_register_loses_conflict_resolved_elsewhere/1,
     three_nodes_legacy_node_gets_direct_calls/1,
     three_nodes_clock_going_backwards/1,
     three_nodes_ack_sync_from_unknown_node_keeps_remote/1,
@@ -135,7 +135,7 @@ groups() ->
             three_nodes_remote_register_from_scope_process,
             three_nodes_remote_register_from_another_scope_process,
             three_nodes_remote_register_with_undiscovered_node,
-            three_nodes_remote_register_over_entry_of_another_node,
+            three_nodes_remote_register_loses_conflict_resolved_elsewhere,
             three_nodes_legacy_node_gets_direct_calls,
             three_nodes_clock_going_backwards,
             three_nodes_ack_sync_from_unknown_node_keeps_remote,
@@ -2178,10 +2178,10 @@ three_nodes_remote_register_with_undiscovered_node(Config) ->
     syn_test_suite_helper:assert_scope_subcluster(registry, SlaveNode1, scope_stale, [node()]),
     {Pid, meta} = rpc:call(SlaveNode1, syn, lookup, [scope_stale, "proc"]).
 
-three_nodes_remote_register_over_entry_of_another_node(Config) ->
-    %% we have the name on a process of slave 2 that slave 2 has dropped already, with a time from a clock
-    %% ahead of slave 1's, and we register it for a process of slave 1: its result is the only message about
-    %% it that reaches us, so we apply it whatever the time
+three_nodes_remote_register_loses_conflict_resolved_elsewhere(Config) ->
+    %% slave 1 registers the name for us on its process while slave 2 registers it on its own: slave 2 resolves
+    %% the conflict and its result reaches us before the reply of slave 1, which then unregisters its process.
+    %% Like every other node, we keep the more recent registration, and the call returns race_condition
 
     SlaveNode1 = proplists:get_value(syn_slave_1, Config),
     SlaveNode2 = proplists:get_value(syn_slave_2, Config),
@@ -2199,18 +2199,19 @@ three_nodes_remote_register_over_entry_of_another_node(Config) ->
 
     PidOn1 = syn_test_suite_helper:start_process(SlaveNode1),
     PidOn2 = syn_test_suite_helper:start_process(SlaveNode2),
-    Later = erlang:system_time() + erlang:convert_time_unit(60, second, native),
-    ScopePid ! {'3.0', sync_register, "proc", PidOn2, old, Later, normal},
-    _ = sys:get_state(ScopePid),
-    {PidOn2, old} = syn:lookup(scope_all, "proc"),
 
-    ok = syn:register(scope_all, "proc", PidOn1, new),
-    {PidOn1, new} = syn:lookup(scope_all, "proc"),
-    {PidOn1, new} = rpc:call(SlaveNode1, syn, lookup, [scope_all, "proc"]),
-    syn_test_suite_helper:assert_wait(
-        {PidOn1, new},
-        fun() -> rpc:call(SlaveNode2, syn, lookup, [scope_all, "proc"]) end
-    ).
+    %% the resolution of slave 2, the reply of slave 1, and the unregister of its process, in this order
+    ok = sys:suspend(ScopePid),
+    Later = erlang:system_time() + erlang:convert_time_unit(60, second, native),
+    ScopePid ! {'3.0', sync_register, "proc", PidOn2, on_2, Later, syn_conflict_resolution},
+    CallRef = syn_test_suite_helper:run_async(fun() -> syn:register(scope_all, "proc", PidOn1, on_1) end),
+    wait_for_message_queue_len(ScopePid, 2),
+    ScopePid ! {'3.0', sync_unregister, "proc", PidOn1, on_1, syn_conflict_resolution},
+    ok = sys:resume(ScopePid),
+
+    {error, race_condition} = syn_test_suite_helper:wait_async(CallRef),
+    _ = sys:get_state(ScopePid),
+    {PidOn2, on_2} = syn:lookup(scope_all, "proc").
 
 three_nodes_legacy_node_gets_direct_calls(Config) ->
     %% a node running a version that doesn't know the ordered calls gets direct ones, until it disconnects
