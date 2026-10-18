@@ -397,9 +397,18 @@ handle_continue(after_init, #state{
 %% Terminate
 %% ----------------------------------------------------------------------------------------------------------
 -spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()), #state{}) -> any().
-terminate(Reason, #state{handler_log_name = HandlerLogName, scope = Scope}) ->
+terminate(Reason, #state{handler_log_name = HandlerLogName, scope = Scope, sender_pid = SenderPid}) ->
     ?LOG_NOTICE(#{handler => HandlerLogName, scope => Scope,
-                 event => terminate, reason => Reason}).
+                 event => terminate, reason => Reason}),
+    %% the sender sends what it has queued and stops before this process goes,
+    %% so that the other nodes get all of it before its DOWN
+    MRef = monitor(process, SenderPid),
+    SenderPid ! terminate,
+    receive
+        {'DOWN', MRef, process, SenderPid, _} -> ok
+    after 5000 ->
+        ok
+    end.
 
 %% ----------------------------------------------------------------------------------------------------------
 %% Convert process state when code is changed.

@@ -36,7 +36,8 @@
     one_node_via_register_unregister/1,
     one_node_via_register_unregister_with_metadata/1,
     one_node_strict_mode/1,
-    one_node_repeated_restart/1
+    one_node_repeated_restart/1,
+    one_node_scope_stop_stops_sender/1
 ]).
 -export([
     three_nodes_discover/1,
@@ -112,7 +113,8 @@ groups() ->
             one_node_via_register_unregister,
             one_node_via_register_unregister_with_metadata,
             one_node_strict_mode,
-            one_node_repeated_restart
+            one_node_repeated_restart,
+            one_node_scope_stop_stops_sender
         ]},
         {three_nodes_registry, [shuffle], [
             three_nodes_discover,
@@ -334,6 +336,20 @@ one_node_repeated_restart(_Config) ->
         gen_server:stop(Pid)
     end,
     lists:foreach(StartStop, lists:duplicate(RepeatCount, 0)).
+
+one_node_scope_stop_stops_sender(_Config) ->
+    %% the sender of a scope process sends what it has queued and stops with it, so that other nodes get its
+    %% messages before its DOWN, and none from it once a new scope process has replaced it
+
+    ok = syn:start(),
+    ok = syn:add_node_to_scopes([scope]),
+    ScopePid = whereis(syn_registry_scope),
+    {links, Links} = process_info(ScopePid, links),
+    [SenderPid] = [Pid || Pid <- Links, is_pid(Pid),
+        process_info(Pid, initial_call) =:= {initial_call, {syn_gen_scope, sender_loop, 0}}],
+    MRef = monitor(process, SenderPid),
+    ok = gen_server:stop(ScopePid),
+    receive {'DOWN', MRef, process, SenderPid, normal} -> ok after 5000 -> ct:fail(sender_still_alive) end.
 
 three_nodes_discover(Config) ->
     %% get slaves
