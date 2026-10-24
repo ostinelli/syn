@@ -105,6 +105,12 @@ Ensure that `syn` is started with your application, for example by adding it in 
 ]}.
 ```
 
+### Upgrading from 3.4 or earlier
+Nodes running Syn 3.5 don't sync with nodes running earlier versions: each side ignores the other's messages, so a
+cluster with both splits into one group per version, each with its own registry and process groups. Upgrade all the
+nodes of a cluster together. The API and the callbacks are unchanged; see the release notes for the few callbacks that
+can now fire in a different order during a registry conflict.
+
 ## Quickstart
 
 ### Registry

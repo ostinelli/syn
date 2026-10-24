@@ -231,7 +231,7 @@ register(Scope, Name, Pid) ->
 %% <li>`not_self': the method is being called from a process other than `self()',
 %% but <a href="options.html#strict_mode">`strict_mode'</a> is enabled.</li>
 %% <li>`race_condition': the `pid()' runs on another node, and meanwhile the name got registered with another process,
-%% which the local node keeps. This is a rare occasion.</li>
+%% which the local node shows instead. This is a rare occasion.</li>
 %% </ul>
 %%
 %% <h2>Examples</h2>
@@ -293,7 +293,7 @@ register(Scope, Name, Pid, Meta) ->
 %% <ul>
 %% <li>`undefined': The Name cannot be found.</li>
 %% <li>`race_condition': the `pid()' runs on another node, and meanwhile the name got registered with another process,
-%% which the local node keeps. This is a rare occasion.</li>
+%% which the local node shows instead. This is a rare occasion.</li>
 %% </ul>
 %%
 %% Note: an error in the update fun will be raised in the calling process.

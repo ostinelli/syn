@@ -75,7 +75,19 @@
 %%
 %% Important Note: the conflict resolution method will be called on the two nodes where the conflicting processes are running on.
 %% Therefore, this method MUST be defined in the same way across all nodes of the cluster and have the same effect
-%% regardless of the node it is run on, or you will experience unexpected results.
+%% regardless of the node it is run on, or you will experience unexpected results. Each of the two nodes decides on its
+%% own, possibly more than once while the conflict settles, and passes the two registrations in a different order: given
+%% the same two registrations, in either order, the method must keep the same process. If it doesn't, both nodes can end
+%% up keeping their own process.
+%%
+%% A process that wins survives if what the method compares doesn't change during the conflict. Syn's default rule
+%% compares registration times, which only fails if a clock moves backwards; comparing a start time stored in the metadata
+%% when registering works too. If what it compares changes during the conflict, for example a metadata update with a rule
+%% based on the metadata, both nodes can end up dropping their process, and the name is then free on every node.
+%%
+%% While a conflict settles, a node that runs neither process shows the most recent registration, and switches to the
+%% kept one once the other node drops its own. When the method keeps neither process, a node can briefly show one of them
+%% before both are dropped, and its callbacks report that.
 %%
 %% <h3>Examples</h3>
 %% The following callback module implements the `on_process_unregistered/5' and the `on_process_left/5' callbacks.
