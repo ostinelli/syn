@@ -243,7 +243,7 @@ ensure_event_handler_loaded() ->
     %% get handler
     CustomEventHandler = get_custom_event_handler(),
     %% ensure that is it loaded (not using code:ensure_loaded/1 to support embedded mode)
-    catch CustomEventHandler:module_info(exports),
+    try CustomEventHandler:module_info(exports) catch _:_ -> ok end,
     ok.
 
 %% @private
