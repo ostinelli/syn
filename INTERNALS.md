@@ -39,11 +39,14 @@ compares, the result goes out before the node drops the name, so that the callin
 after it was dropped.
 
 If the process' node doesn't know the scope process of the calling node, it first sends it its local data and asks for
-the calling node's data, so that the two nodes know each other by the time the result gets there.
+the calling node's data, so that the two nodes know each other by the time the result gets there. If the calling node
+still doesn't know the scope process of the process' node when the result gets there, it doesn't apply it and the call
+returns success: the data of that node reaches it with its snapshot.
 
 If the call is made from a scope process (i.e. from a callback), that process can't wait for one: the process' node
 replies to it right away, and the scope process of the calling node applies the result in the same way when it gets to it.
-Such a call returns the result of the process' node, and never `race_condition`.
+Such a call returns the result of the process' node: `race_condition` then only comes from the process' node itself,
+for example for an unregister of a name it holds for another process.
 
 ## Scope Subclusters
 Syn implements Scopes, which are a way to create namespaced, logical overlay networks running on top of the Erlang
@@ -78,10 +81,15 @@ the following happens:
 #### Messages
   * Everything a scope process sends to other nodes goes through its sender process, so that another node gets it in
     the order it was sent.
-  * Syn never opens a connection between nodes: a message to a node that isn't connected is dropped, and that node gets
-    the data again when it connects.
+  * Syn's scope processes don't open connections between nodes: a message to a node that isn't connected is dropped,
+    and that node gets the data again when it connects. There is one narrow exception: if the connection drops between
+    the moment a scope process checks it and the moment it starts monitoring the other node's scope process, Erlang
+    connects the two nodes again. A call made through the API for a process on another node connects the nodes, as any
+    call does.
   * Every message carries the scope process that sent it. A node only applies messages from the scope process it knows
-    for that node, so that nothing a scope process sent before restarting gets applied after.
+    for that node: once it knows the new scope process of a node that restarted, it ignores what the old one sent. A
+    late message from the old one can still make the node take it for a while; the old one's DOWN then makes the node
+    ask that node for its data again.
   * Messages are tagged with the version of the protocol, `'3.5'`, so that nodes running a version of Syn with another
     protocol ignore each other.
 

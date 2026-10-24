@@ -51,6 +51,10 @@
 %% <li> `undefined' for `on_process_unregistered/5' and `on_process_left/5' when the processes died while the
 %%      scope process had crashed.</li>
 %% </ul>
+%% When a name is registered on more than one node, for example after a net split, a node shows one of the
+%% registrations and keeps the others aside. If the one it shows goes, the next one takes its place, and
+%% `on_process_registered/5' for it gets the same reason as `on_process_unregistered/5' for the one that went:
+%% a crash reason, `{syn_remote_scope_node_down, Scope, Node}', and so on.
 %% While all callbacks do not have a direct effect on Syn (their return value is ignored), a special case is the callback
 %% `resolve_registry_conflict/4'. If specified, this is the method that will be used to resolve registry conflicts when detected.
 %%
@@ -80,10 +84,12 @@
 %% the same two registrations, in either order, the method must keep the same process. If it doesn't, both nodes can end
 %% up keeping their own process.
 %%
-%% A process that wins survives if what the method compares doesn't change during the conflict. Syn's default rule
-%% compares registration times, which only fails if a clock moves backwards; comparing a start time stored in the metadata
-%% when registering works too. If what it compares changes during the conflict, for example a metadata update with a rule
-%% based on the metadata, both nodes can end up dropping their process, and the name is then free on every node.
+%% A process that wins survives if the method always puts the processes in the same order, without ties and without
+%% three processes each beating another, if what it compares doesn't change during the conflict, and if the process
+%% isn't dropped for another reason, for example by losing a conflict over another name it is registered under. Syn's
+%% default rule compares registration times, which only fails if a clock moves backwards; comparing a start time stored
+%% in the metadata when registering works too. Otherwise, for example after a metadata update with a rule based on the
+%% metadata, both nodes can end up dropping their process, and the name is then free on every node.
 %%
 %% While a conflict settles, a node that runs neither process shows the most recent registration, and switches to the
 %% kept one once the other node drops its own. When the method keeps neither process, a node can briefly show one of them
