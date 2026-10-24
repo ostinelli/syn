@@ -19,8 +19,8 @@ The rules it follows are the ones described in `INTERNALS.md` at the root of the
   when the connection drops. Nothing else is ordered: messages from different nodes, "went away" notices (DOWN) and
   "connected" notices (nodeup) can arrive in any order, late included.
 - **Connections.** A connection can drop: what is already in a mailbox stays, what is on the wire is lost, and what a
-  sender hasn't sent yet waits in its queue and is lost if it gets sent before the connection is back. Syn never opens
-  a connection itself, and ignores a handshake from a node it isn't connected to.
+  sender hasn't sent yet waits in its queue and is lost if it gets sent before the connection is back. A connection can
+  come back at any moment, whatever reopens it. A scope process ignores a handshake from a node it isn't connected to.
 - **Scope process restarts.** A scope process can crash, and a new one starts later. In between, messages sent to that
   node are lost. The crash loses its mailbox and what its sender hadn't sent; the claims of the node's own processes
   survive, as Syn's tables do. Nodes find each other again by asking for each other's data (`discover`) and sending it

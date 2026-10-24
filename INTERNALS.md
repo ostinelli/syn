@@ -86,8 +86,9 @@ the following happens:
   * Syn's scope processes don't open connections between nodes: a message to a node that isn't connected is dropped,
     and that node gets the data again when it connects. There is one narrow exception: if the connection drops between
     the moment a scope process checks it and the moment it starts monitoring the other node's scope process, Erlang
-    connects the two nodes again. A call made through the API for a process on another node connects the nodes, as any
-    call does.
+    connects the two nodes again, as it does whenever any process sends something to a node it isn't connected to. With
+    the kernel parameter `dist_auto_connect` set to `once`, Erlang doesn't reconnect nodes on its own, and this can't
+    happen. A call made through the API for a process on another node connects the nodes, as any call does.
   * Every message carries the scope process that sent it. A node only applies messages from the scope process it knows
     for that node: once it knows the new scope process of a node that restarted, it ignores what the old one sent. A
     late message from the old one can still make the node take it for a while; the old one's DOWN then makes the node

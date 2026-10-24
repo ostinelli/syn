@@ -108,7 +108,8 @@ Ensure that `syn` is started with your application, for example by adding it in 
 ### Running different versions together
 Nodes sync only with nodes running the same version of Syn's protocol: a node running Syn 3.5 and a node running an
 earlier version ignore each other's messages, so a cluster with both splits into one group per version, each with its
-own registry and process groups. Upgrade all the nodes of a cluster together.
+own registry and process groups. A call for a process on a node running the other version fails, and each node logs a
+warning for every message it gets from the other version. Upgrade all the nodes of a cluster together.
 
 ## Quickstart
 
