@@ -524,9 +524,15 @@ unregister_on_node(RequesterNode, Name, Pid, #state{
 ) -> {ok, Meta :: term(), Time :: integer()}.
 do_register_on_node(Name, Pid, Meta, MRef, RequesterNode, State) ->
     Time = erlang:system_time(),
-    Stored = read(Name, State),
-    {_, Others} = claims(Stored),
-    store(Name, {{Pid, Meta, Time, MRef}, Others}, normal, Stored, State),
+    case read(Name, State) of
+        {Before, []} ->
+            %% no other node holds the name: what this node shows is its own registration
+            show(Name, Before, {Pid, Meta, Time, MRef}, normal, State);
+
+        Stored ->
+            {_, Others} = claims(Stored),
+            store(Name, {{Pid, Meta, Time, MRef}, Others}, normal, Stored, State)
+    end,
     syn_gen_scope:broadcast({'3.5', sync_register, self(), Name, Pid, Meta, Time, normal}, [RequesterNode], State),
     {ok, Meta, Time}.
 
@@ -534,40 +540,62 @@ do_register_on_node(Name, Pid, Meta, MRef, RequesterNode, State) ->
 -spec withdraw(Name :: term(), Pid :: pid(), Meta :: term(), Reason :: term(), ExcludedNodes :: [node()], #state{}) ->
     any().
 withdraw(Name, Pid, Meta, Reason, ExcludedNodes, State) ->
-    Stored = read(Name, State),
-    {_, Others} = claims(Stored),
-    store(Name, {undefined, Others}, Reason, Stored, State),
+    case read(Name, State) of
+        {Before, []} ->
+            %% no other node holds the name: nothing to show instead
+            show(Name, Before, undefined, Reason, State);
+
+        Stored ->
+            {_, Others} = claims(Stored),
+            store(Name, {undefined, Others}, Reason, Stored, State)
+    end,
     syn_gen_scope:broadcast({'3.5', sync_unregister, self(), Name, Pid, Meta, Reason}, ExcludedNodes, State).
 
 %% Pid's node holds Pid under Name, with Meta and Time
 -spec put_claim(Name :: term(), Pid :: pid(), Meta :: term(), Time :: integer(), Reason :: term(), #state{}) -> any().
 put_claim(Name, Pid, Meta, Time, Reason, State) ->
-    Stored = read(Name, State),
-    {Own, Others} = claims(Stored),
     Node = node(Pid),
-    Claim = {Pid, Meta, Time},
-    case maps:find(Node, Others) of
-        {ok, Claim} ->
+    case read(Name, State) of
+        {{_, Pid, Meta, Time, _, _}, _} ->
             %% nothing changed
             ok;
 
-        _ ->
-            store(Name, {Own, Others#{Node => Claim}}, Reason, Stored, State),
-            case Own of
-                undefined -> ok;
-                _ -> resolve(Name, [Node], State)
+        {Before, []} when Before =:= undefined; element(6, Before) =:= Node ->
+            %% no other node holds the name: what this node shows is this registration
+            show(Name, Before, {Pid, Meta, Time, undefined}, Reason, State);
+
+        Stored ->
+            {Own, Others} = claims(Stored),
+            Claim = {Pid, Meta, Time},
+            case maps:find(Node, Others) of
+                {ok, Claim} ->
+                    %% nothing changed
+                    ok;
+
+                _ ->
+                    store(Name, {Own, Others#{Node => Claim}}, Reason, Stored, State),
+                    case Own of
+                        undefined -> ok;
+                        _ -> resolve(Name, [Node], State)
+                    end
             end
     end.
 
 %% Pid's node doesn't hold Pid under Name anymore
 -spec drop_claim(Name :: term(), Pid :: pid(), Reason :: term(), #state{}) -> any().
 drop_claim(Name, Pid, Reason, State) ->
-    Stored = read(Name, State),
-    {Own, Others} = claims(Stored),
-    Node = node(Pid),
-    case maps:find(Node, Others) of
-        {ok, {Pid, _, _}} -> store(Name, {Own, maps:remove(Node, Others)}, Reason, Stored, State);
-        _ -> ok
+    case read(Name, State) of
+        {{_, Pid, _, _, _, _} = Before, []} ->
+            %% no other node holds the name: nothing to show instead
+            show(Name, Before, undefined, Reason, State);
+
+        Stored ->
+            {Own, Others} = claims(Stored),
+            Node = node(Pid),
+            case maps:find(Node, Others) of
+                {ok, {Pid, _, _}} -> store(Name, {Own, maps:remove(Node, Others)}, Reason, Stored, State);
+                _ -> ok
+            end
     end.
 
 %% what this node stores for Name: the entry it shows, and the registrations of other nodes it keeps aside
@@ -604,11 +632,7 @@ claimed_by_node(Node, #state{table_by_name = TableByName} = State) ->
     Stored :: {Shown :: syn_registry_entry() | undefined, Aside :: [aside_entry()]},
     #state{}
 ) -> any().
-store(Name, {Own, Others}, Reason, {Before, BeforeAside}, #state{
-    scope = Scope,
-    table_by_name = TableByName,
-    table_by_pid = TableByPid
-} = State) ->
+store(Name, {Own, Others}, Reason, {Before, BeforeAside}, State) ->
     Shown = case Own of
         undefined -> newest(Others);
         _ -> Own
@@ -630,7 +654,21 @@ store(Name, {Own, Others}, Reason, {Before, BeforeAside}, #state{
             [true = ets:delete_object(AsideTable, Entry) || Entry <- BeforeAside, not maps:is_key(Entry, AsideSet)],
             [true = ets:insert(AsideTable, Entry) || Entry <- Aside, not maps:is_key(Entry, BeforeAsideSet)]
     end,
-    %% shown
+    show(Name, Before, Shown, Reason, State).
+
+%% puts Shown in the tables in place of Before, the entry this node showed for Name, and calls the callbacks for the change
+-spec show(
+    Name :: term(),
+    Before :: syn_registry_entry() | undefined,
+    Shown :: {Pid :: pid(), Meta :: term(), Time :: integer(), MRef :: reference() | undefined} | undefined,
+    Reason :: term(),
+    #state{}
+) -> any().
+show(Name, Before, Shown, Reason, #state{
+    scope = Scope,
+    table_by_name = TableByName,
+    table_by_pid = TableByPid
+}) ->
     case {Before, Shown} of
         {undefined, undefined} ->
             ok;
