@@ -708,7 +708,7 @@ purge_pg_for_remote_node(Scope, Node, TableByName, TableByPid) when Node =/= nod
     ets:match_delete(TableByName, {{'_', '_'}, '_', '_', '_', Node}),
     ets:match_delete(TableByPid, {{'_', '_'}, '_', '_', '_', Node}).
 
-%% the snapshot of a node replaces what this node had from it: the entries it doesn't have anymore go
+%% the full data of a node replaces what this node had from it: the entries it doesn't have anymore go
 -spec reconcile_remote_pg_snapshot(Node :: node(), [syn_pg_tuple()], #state{}) -> ok.
 reconcile_remote_pg_snapshot(Node, PgTuplesOfRemoteNode, #state{
     scope = Scope,

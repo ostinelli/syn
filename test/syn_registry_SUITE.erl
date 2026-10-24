@@ -60,11 +60,13 @@
     three_nodes_remote_register_from_scope_process/1,
     three_nodes_remote_register_from_another_scope_process/1,
     three_nodes_remote_register_with_undiscovered_node/1,
+    three_nodes_remote_register_from_hidden_node/1,
     three_nodes_remote_register_loses_conflict_resolved_elsewhere/1,
     three_nodes_ignored_registration_shown_when_newer_one_goes/1,
     three_nodes_replaced_registration_shown_when_newer_one_goes/1,
     three_nodes_kept_aside_registration_dropped_by_its_node/1,
     three_nodes_kept_aside_registration_shown_when_other_node_goes/1,
+    three_nodes_registration_set_aside_takes_over_with_reason/1,
     three_nodes_remote_register_while_other_registration_shown/1,
     three_nodes_remote_update_loses_conflict/1,
     three_nodes_resolution_kills_process_with_two_names/1,
@@ -145,11 +147,13 @@ groups() ->
             three_nodes_remote_register_from_scope_process,
             three_nodes_remote_register_from_another_scope_process,
             three_nodes_remote_register_with_undiscovered_node,
+            three_nodes_remote_register_from_hidden_node,
             three_nodes_remote_register_loses_conflict_resolved_elsewhere,
             three_nodes_ignored_registration_shown_when_newer_one_goes,
             three_nodes_replaced_registration_shown_when_newer_one_goes,
             three_nodes_kept_aside_registration_dropped_by_its_node,
             three_nodes_kept_aside_registration_shown_when_other_node_goes,
+            three_nodes_registration_set_aside_takes_over_with_reason,
             three_nodes_remote_register_while_other_registration_shown,
             three_nodes_remote_update_loses_conflict,
             three_nodes_resolution_kills_process_with_two_names,
@@ -2206,6 +2210,22 @@ three_nodes_remote_register_with_undiscovered_node(Config) ->
     syn_test_suite_helper:assert_scope_subcluster(registry, SlaveNode1, scope_stale, [node()]),
     {Pid, meta} = rpc:call(SlaveNode1, syn, lookup, [scope_stale, "proc"]).
 
+three_nodes_remote_register_from_hidden_node(_Config) ->
+    %% a hidden node doesn't get discovered, but it can register a process of ours: we send it our data with the result,
+    %% so it shows the registration when the call returns
+
+    ok = syn:start(),
+    ok = syn:add_node_to_scopes([scope_hidden]),
+    {PeerPid, HiddenNode} = start_hidden_node(syn_hidden_registry, scope_hidden),
+    try
+        Pid = syn_test_suite_helper:start_process(),
+        ok = rpc:call(HiddenNode, syn, register, [scope_hidden, "proc", Pid, meta]),
+        {Pid, meta} = rpc:call(HiddenNode, syn, lookup, [scope_hidden, "proc"]),
+        {Pid, meta} = syn:lookup(scope_hidden, "proc")
+    after
+        peer:stop(PeerPid)
+    end.
+
 three_nodes_remote_register_loses_conflict_resolved_elsewhere(Config) ->
     %% slave 1 registers the name for us on its process while slave 2 registers it on its own: slave 2 resolves
     %% the conflict and its result reaches us before the reply of slave 1, which then unregisters its process.
@@ -2361,6 +2381,56 @@ three_nodes_kept_aside_registration_shown_when_other_node_goes(Config) ->
     syn_test_suite_helper:disconnect_node(SlaveNode2),
     syn_test_suite_helper:assert_scope_subcluster(registry, node(), scope_all, [SlaveNode1]),
     {PidOn1, on_1} = syn:lookup(scope_all, "proc"),
+
+    %% reconnect for the next tests
+    true = syn_test_suite_helper:connect_node(SlaveNode2),
+    syn_test_suite_helper:assert_cluster(node(), [SlaveNode1, SlaveNode2]).
+
+three_nodes_registration_set_aside_takes_over_with_reason(Config) ->
+    %% we show the name on a process of slave 2 and keep the one of slave 1 aside: when the one of slave 2 goes, the
+    %% callbacks of the one taking its place get the reason it went with
+
+    SlaveNode1 = proplists:get_value(syn_slave_1, Config),
+    SlaveNode2 = proplists:get_value(syn_slave_2, Config),
+    ok = application:set_env(syn, event_handler, syn_test_event_handler_callbacks),
+    ScopePid = start_scope_all(SlaveNode1, SlaveNode2),
+    RemoteScopePid2 = rpc:call(SlaveNode2, erlang, whereis, [syn_registry_scope_all]),
+    TestPid = self(),
+    LocalNode = node(),
+    Meta1 = {recipient, TestPid, on_1},
+    Meta2 = {recipient, TestPid, on_2},
+
+    PidOn1 = syn_test_suite_helper:start_process(SlaveNode1),
+    PidOn2 = syn_test_suite_helper:start_process(SlaveNode2),
+    ok = rpc:call(SlaveNode1, syn, register, [scope_all, "proc", PidOn1, Meta1]),
+    wait_for_registry_entry(node(), scope_all, "proc", PidOn1),
+    ScopePid ! {'3.5', sync_register, RemoteScopePid2, "proc", PidOn2, Meta2, later_time(), normal},
+    _ = sys:get_state(ScopePid),
+    syn_test_suite_helper:assert_received_messages([
+        {on_process_registered, LocalNode, scope_all, "proc", PidOn1, on_1, normal},
+        {on_process_unregistered, LocalNode, scope_all, "proc", PidOn1, on_1, normal},
+        {on_process_registered, LocalNode, scope_all, "proc", PidOn2, on_2, normal}
+    ]),
+
+    %% the process of slave 2 dies
+    ScopePid ! {'3.5', sync_unregister, RemoteScopePid2, "proc", PidOn2, Meta2, killed},
+    syn_test_suite_helper:assert_received_messages([
+        {on_process_unregistered, LocalNode, scope_all, "proc", PidOn2, on_2, killed},
+        {on_process_registered, LocalNode, scope_all, "proc", PidOn1, on_1, killed}
+    ]),
+
+    %% slave 2 goes down
+    ScopePid ! {'3.5', sync_register, RemoteScopePid2, "proc", PidOn2, Meta2, later_time(), normal},
+    syn_test_suite_helper:assert_received_messages([
+        {on_process_unregistered, LocalNode, scope_all, "proc", PidOn1, on_1, normal},
+        {on_process_registered, LocalNode, scope_all, "proc", PidOn2, on_2, normal}
+    ]),
+    syn_test_suite_helper:disconnect_node(SlaveNode2),
+    NodeDown = {syn_remote_scope_node_down, scope_all, SlaveNode2},
+    syn_test_suite_helper:assert_received_messages([
+        {on_process_unregistered, LocalNode, scope_all, "proc", PidOn2, on_2, NodeDown},
+        {on_process_registered, LocalNode, scope_all, "proc", PidOn1, on_1, NodeDown}
+    ]),
 
     %% reconnect for the next tests
     true = syn_test_suite_helper:connect_node(SlaveNode2),
@@ -3013,6 +3083,20 @@ assert_keep_neither_callbacks(SlaveNode1, SlaveNode2, Scope, Name, PidOn1, Meta1
             | Slaves
         ]
     ]).
+
+%% starts a hidden node with syn and Scope on it, connected to this node only
+start_hidden_node(Name, Scope) ->
+    {ok, PeerPid, Node} = peer:start(#{
+        name => Name,
+        args => ["-hidden", "-connect_all", "false", "-kernel", "dist_auto_connect", "never"],
+        connection => 0
+    }),
+    ok = rpc:call(Node, code, add_pathsa, [code:get_path()]),
+    true = net_kernel:connect_node(Node),
+    false = lists:member(Node, nodes()),
+    ok = rpc:call(Node, syn, start, []),
+    ok = rpc:call(Node, syn, add_node_to_scopes, [[Scope]]),
+    {PeerPid, Node}.
 
 %% the scope process ScopePid of Node stops knowing the one of OtherNode, as if it had never discovered it
 forget_scope(Node, ScopePid, OtherNode) ->

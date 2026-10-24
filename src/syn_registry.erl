@@ -60,8 +60,9 @@
 -include_lib("kernel/include/logger.hrl").
 
 %% types
-%% a registration of Name as the node running the process holds it: on that node with the monitor of the process
+%% this node's registration of a name, with the monitor on its process
 -type own_claim() :: {Pid :: pid(), Meta :: term(), Time :: integer(), MRef :: reference()}.
+%% another node's registration of a name, as that node holds it
 -type claim() :: {Pid :: pid(), Meta :: term(), Time :: integer()}.
 %% a registration of another node that this node doesn't show
 -type aside_entry() :: {Name :: term(), Node :: node(), Pid :: pid(), Meta :: term(), Time :: integer()}.
@@ -316,7 +317,7 @@ handle_info({'3.5', sync_register_reply, ScopePid, Name, Pid, Meta, Time, From},
             end;
 
         false ->
-            %% a scope process this node doesn't know (anymore): its snapshot brings the entry
+            %% a scope process this node doesn't know (anymore): the entry comes with its full data
             {ok, {Pid, Meta}}
     end,
     syn_gen_scope:reply_ordered(From, Reply),
@@ -367,7 +368,7 @@ get_local_data(#state{table_by_name = TableByName}) ->
     %% a node always shows its own registrations
     {ok, get_registry_tuples_for_node(node(), TableByName)}.
 
-%% the snapshot of a node replaces what this node had from it
+%% the full data of a node replaces what this node had from it
 -spec save_remote_data(RemoteNode :: node(), RemoteData :: term(), #state{}) -> any().
 save_remote_data(RemoteNode, RegistryTuplesOfRemoteNode, #state{scope = Scope} = State) ->
     Reason = {syn_remote_scope_node_up, Scope, RemoteNode},

@@ -57,6 +57,7 @@
     three_nodes_remote_join_from_scope_process/1,
     three_nodes_remote_join_from_another_scope_process/1,
     three_nodes_remote_join_with_undiscovered_node/1,
+    three_nodes_remote_join_from_hidden_node/1,
     three_nodes_clock_going_backwards/1
 ]).
 -export([
@@ -131,6 +132,7 @@ groups() ->
             three_nodes_remote_join_from_scope_process,
             three_nodes_remote_join_from_another_scope_process,
             three_nodes_remote_join_with_undiscovered_node,
+            three_nodes_remote_join_from_hidden_node,
             three_nodes_clock_going_backwards
         ]},
         {four_nodes_pg, [shuffle], [
@@ -2242,6 +2244,22 @@ three_nodes_remote_join_from_another_scope_process(Config) ->
     ),
     [{Pid, meta}] = rpc:call(SlaveNode1, syn, members, [scope_stale, "group"]).
 
+three_nodes_remote_join_from_hidden_node(_Config) ->
+    %% a hidden node doesn't get discovered, but it can make a process of ours join a group: we send it our data with the
+    %% result, so it has the member when the call returns
+
+    ok = syn:start(),
+    ok = syn:add_node_to_scopes([scope_hidden]),
+    {PeerPid, HiddenNode} = start_hidden_node(syn_hidden_pg, scope_hidden),
+    try
+        Pid = syn_test_suite_helper:start_process(),
+        ok = rpc:call(HiddenNode, syn, join, [scope_hidden, "group", Pid, meta]),
+        [{Pid, meta}] = rpc:call(HiddenNode, syn, members, [scope_hidden, "group"]),
+        [{Pid, meta}] = syn:members(scope_hidden, "group")
+    after
+        peer:stop(PeerPid)
+    end.
+
 three_nodes_remote_join_with_undiscovered_node(Config) ->
     %% the slave gets our call before discovering us, and we haven't discovered it either: it sends us its data
     %% before the result, as for a discover, so we already have the member when the call returns
@@ -2308,6 +2326,20 @@ get_remote_snapshot(Node, ScopeProcessName) ->
     {RemoteScopePid, Snapshot}.
 
 %% start syn and add scope_stale on this node and on Node, returns the scope process of this node
+%% starts a hidden node with syn and Scope on it, connected to this node only
+start_hidden_node(Name, Scope) ->
+    {ok, PeerPid, Node} = peer:start(#{
+        name => Name,
+        args => ["-hidden", "-connect_all", "false", "-kernel", "dist_auto_connect", "never"],
+        connection => 0
+    }),
+    ok = rpc:call(Node, code, add_pathsa, [code:get_path()]),
+    true = net_kernel:connect_node(Node),
+    false = lists:member(Node, nodes()),
+    ok = rpc:call(Node, syn, start, []),
+    ok = rpc:call(Node, syn, add_node_to_scopes, [[Scope]]),
+    {PeerPid, Node}.
+
 %% the scope process ScopePid of Node stops knowing the one of OtherNode, as if it had never discovered it
 forget_scope(Node, ScopePid, OtherNode) ->
     rpc:call(Node, sys, replace_state, [ScopePid, fun(#state{nodes_map = NodesMap} = State) ->

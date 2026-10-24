@@ -435,9 +435,10 @@ get_process_name_for_scope(Handler, Scope) ->
 is_scope_process() ->
     get('$initial_call') =:= {?MODULE, init, 1}.
 
+%% hidden nodes included: they don't get discovered, but they can call a node, which then starts tracking them
 -spec is_connected(Node :: node()) -> boolean().
 is_connected(Node) ->
-    lists:member(Node, nodes()).
+    lists:member(Node, nodes(connected)).
 
 %% starts treating ScopePid as the scope process of its node, and monitors it: if another one was known for that node,
 %% it restarted, so the data that came from it goes, and so does the DOWN still waiting from its monitor.
@@ -464,7 +465,7 @@ adopt(ScopePid, #state{handler = Handler, nodes_map = NodesMap} = State) ->
             disconnected
     end.
 
-%% applies a node's snapshot, which answers any discover sent to it
+%% applies the full data of a node, which also answers a request for it
 -spec save_remote_data(RemoteNode :: node(), Data :: term(), #state{}) -> {noreply, #state{}}.
 save_remote_data(RemoteNode, Data, #state{handler = Handler, asked = Asked} = State) ->
     State1 = State#state{asked = lists:delete(RemoteNode, Asked)},
