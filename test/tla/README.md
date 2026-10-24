@@ -13,8 +13,8 @@ The rules it follows are the ones described in `INTERNALS.md` at the root of the
 - **What a node shows.** A node that holds its own claim for a name shows it. Otherwise it shows the newest claim it
   has a copy of, with node names breaking ties. It never hides a claim because it expects another node to drop it.
 - **Conflicts.** When a node holds a claim for a name and gets a copy of another node's claim for it, it asks the
-  resolver which process keeps the name. If its own loses, it drops it and tells everyone. If its own wins, it does
-  nothing: the other node will drop its own.
+  resolver which process keeps the name, passing it the two claims in node order, as the other node does. If its own
+  loses, it drops it and tells everyone. If its own wins, it does nothing: the other node will drop its own.
 - **Messages.** Messages from one scope process to one node arrive in the order they were sent, unless some are lost
   when the connection drops. Nothing else is ordered: messages from different nodes, "went away" notices (DOWN) and
   "connected" notices (nodeup) can arrive in any order, late included.
@@ -74,6 +74,7 @@ java -XX:+UseParallelGC -cp tla2tools.jar tlc2.TLC -workers auto -deadlock -clea
 | `syn_backward.cfg`             | The default resolver with a clock that moves backwards during the conflict.      |
 | `syn_two_names.cfg`            | Two names, a dropped connection, a process exiting.                              |
 | `syn_cyclic.cfg`               | Three nodes register the same name, and no process beats both others.            |
+| `syn_second.cfg`               | A resolver that keeps the claim it gets second when the two have the same time.  |
 | `syn_restart.cfg`              | A scope process restarts and a connection drops.                                 |
 | `syn_restart_call.cfg`         | Two nodes: a scope process restarts, a connection drops, a call from the other.  |
 | `syn_termination*.cfg`         | Message traffic always stops, in four smaller setups.                            |
@@ -93,6 +94,7 @@ that shows the checks above would catch it.
 | `mutations/withdraw_before_result.cfg`  | The caller of an update hears of the withdrawal before the update.         |
 | `mutations/no_rediscover.cfg`           | A node that loses track of a connected node doesn't ask it for its data again. |
 | `mutations/no_ask_on_adopt.cfg`         | A node that learns of a new scope process through a call doesn't ask for its data. |
+| `mutations/resolve_by_role.cfg`         | Each node passes the other node's claim to the resolver first and its own second. |
 
 Run them like the others, with `-config mutations/<name>.cfg`.
 

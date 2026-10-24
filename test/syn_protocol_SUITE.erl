@@ -37,6 +37,7 @@
     conflict_second_split/1,
     conflict_skew/1,
     conflict_refresh_livelock/1,
+    conflict_tie/1,
     discovery_incarnation_registry/1,
     discovery_incarnation_pg/1,
     ordered_update_withdraw/1,
@@ -62,7 +63,7 @@
 -export([resolve_registry_conflict/4]).
 -include_lib("syn/src/syn.hrl").
 
-all() -> [conflict_normal, conflict_second_split, conflict_skew, conflict_refresh_livelock,
+all() -> [conflict_normal, conflict_second_split, conflict_skew, conflict_refresh_livelock, conflict_tie,
           discovery_incarnation_registry, discovery_incarnation_pg,
           ordered_update_withdraw, scope_update_withdraw, local_update_withdraw,
           late_down_after_resync, snapshot_aside_and_fences, restart_claims,
@@ -272,6 +273,21 @@ conflict_refresh_livelock(Config) ->
     wait(fun() -> lists:all(fun(N) -> view(N) =:= Expected end, [node(), A, B]) end),
     ct:pal("Converged after ~p further FIFO sender instructions, no timestamp refresh", [Deliveries]),
     [] = messages(SA), [] = messages(SB), ok.
+
+%% both owners register the name with the same metadata while apart, and this suite's resolver keeps the second
+%% registration it gets on a tie: both nodes pass the two in the same order, so they keep the same process
+conflict_tie(Config) ->
+    A = proplists:get_value(a, Config), B = proplists:get_value(b, Config),
+    [rpc:call(N, syn, set_event_handler, [?MODULE]) || N <- [node(), A, B]],
+    split(A, B), PA = pid(A), PB = pid(B),
+    ok = rpc:call(A, syn, register, [protocol, x, PA, same]),
+    ok = rpc:call(B, syn, register, [protocol, x, PB, same]),
+    true = rpc:call(A, net_kernel, connect_node, [B]),
+    %% the registration of the node whose name sorts last comes second
+    Kept = case A < B of true -> PB; false -> PA end,
+    wait(fun() -> lists:all(fun(N) -> view(N) =:= {Kept, same} end, [node(), A, B]) end),
+    quiescent([node(), A, B]),
+    {Kept, same} = view(A), {Kept, same} = view(B), {Kept, same} = view(node()).
 
 %% a new scope process' handshake arrives before the old one's DOWN, which Erlang allows: the messages are injected to
 %% get this order every time. The node keeps the new one, then finds the live peer again

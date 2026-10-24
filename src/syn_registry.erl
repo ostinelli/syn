@@ -731,13 +731,14 @@ resolve(Name, Nodes, #state{scope = Scope, table_by_pid = TableByPid} = State) -
                 all -> maps:values(Others);
                 _ -> [Claim || {Node, Claim} <- maps:to_list(Others), lists:member(Node, Nodes)]
             end,
-            Outcomes = lists:map(fun({Pid, Meta, Time}) ->
-                {PidToKeep, KillOtherPid} = syn_event_handler:do_resolve_registry_conflict(
-                    Scope,
-                    Name,
-                    {Pid, Meta, Time},
-                    {TablePid, TableMeta, TableTime}
-                ),
+            Outcomes = lists:map(fun({Pid, Meta, Time} = Claim) ->
+                %% both nodes pass the two registrations in the same order, the one of the node whose name sorts
+                %% first being the first, so that a resolver that only looks at its arguments decides the same on both
+                {First, Second} = case node(Pid) < node(TablePid) of
+                    true -> {Claim, {TablePid, TableMeta, TableTime}};
+                    false -> {{TablePid, TableMeta, TableTime}, Claim}
+                end,
+                {PidToKeep, KillOtherPid} = syn_event_handler:do_resolve_registry_conflict(Scope, Name, First, Second),
                 Keep = case PidToKeep of
                     TablePid -> local;
                     Pid -> remote;

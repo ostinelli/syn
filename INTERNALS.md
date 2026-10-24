@@ -25,7 +25,9 @@ the next one. A node never hides a registration because it expects another node 
 When a node holds a name and learns that another node holds it too, it runs the conflict resolution, see
 [`syn_event_handler`](syn_event_handler.html). If its own process loses, it drops the name, kills the process if the
 default resolution is used, and tells every other node. If its own process wins, it does nothing: the other node drops
-its own. Each of the two nodes decides on its own, so the resolution must keep the same process on both.
+its own. Each of the two nodes decides on its own, so the resolution must keep the same process on both. Both nodes
+pass it the two registrations in the same order, by node name, so that a resolution that only looks at what it gets
+decides the same on both.
 
 ### Calls for a process on another node
 When the operation is called from another node, the result is sent to the scope process of the calling node

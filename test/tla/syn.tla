@@ -22,7 +22,8 @@ CONSTANTS
     Nodes,              \* the nodes running the scope: 1..N, in the order their names sort
     Names,              \* the names that can be registered
     Times,              \* the clock readings a claim can get; any node can get any of them
-    Resolver,           \* how conflicts are decided: "newest", "oldest", "oldest_time", "neither" or "cyclic"
+    Resolver,           \* how conflicts are decided: "newest", "oldest", "oldest_time", "second", "neither" or
+                        \* "cyclic"
     MonotonicClocks,    \* TRUE: updating a claim never gives it an earlier time
     RegisterNodes,      \* the nodes whose processes get registered
     CutPairs,           \* the pairs of nodes whose connection can drop, as sets {n, m}
@@ -40,12 +41,14 @@ CONSTANTS
     RefreshWinner,          \* the node that keeps its process gives it a new time and tells everyone
     WithdrawBeforeResult,   \* the caller of an update hears that the claim was withdrawn before hearing the update
     NoRediscover,           \* a node that loses track of a connected node doesn't ask it for its data again
-    NoAskOnAdopt            \* a node that learns of a new scope process through a call doesn't ask for its data
+    NoAskOnAdopt,           \* a node that learns of a new scope process through a call doesn't ask for its data
+    ResolveByRole           \* a node passes the other node's claim to the resolver first and its own second, instead
+                            \* of passing the two in node order
 
 ASSUME Nodes = 1..Cardinality(Nodes)
 ASSUME RegisterNodes \subseteq Nodes
 ASSUME RestartNodes \subseteq Nodes
-ASSUME Resolver \in {"newest", "oldest", "oldest_time", "neither", "cyclic"}
+ASSUME Resolver \in {"newest", "oldest", "oldest_time", "second", "neither", "cyclic"}
 
 Incs == 1..(MaxRestart + 1)
 NodeSeq == [i \in 1..Cardinality(Nodes) |-> i]
@@ -102,7 +105,9 @@ Shown(n, nm) == ShownIn(own[n], remote[n], n, nm)
 
 -----------------------------------------------------------------------------
 (* Conflicts: which of two processes keeps the name, or NONE for neither. Both nodes involved *)
-(* decide it on their own and must get the same answer.                                      *)
+(* decide it on their own and must get the same answer: they pass the two claims to the      *)
+(* resolver in node order, so that a resolver that depends on the order of its arguments     *)
+(* still decides the same on both.                                                           *)
 
 PidLess(p, q) == p[2] < q[2]
 Beats(a, b) == (a = 2 /\ b = 1) \/ (a = 3 /\ b = 2) \/ (a = 1 /\ b = 3)
@@ -116,9 +121,14 @@ Keep(c, d) ==
       [] Resolver = "oldest_time" ->   \* the older time wins, but an update gives the claim a new time
             IF c.time # d.time THEN (IF c.time < d.time THEN c.pid ELSE d.pid)
             ELSE IF PidLess(c.pid, d.pid) THEN c.pid ELSE d.pid
+      [] Resolver = "second" ->        \* the older time wins, and a tie keeps the claim passed second
+            IF c.time < d.time THEN c.pid ELSE d.pid
       [] Resolver = "neither" -> NONE
       [] Resolver = "cyclic" ->        \* like rock-paper-scissors: node 2 beats 1, 3 beats 2, 1 beats 3
             IF Beats(c.pid[1], d.pid[1]) THEN c.pid ELSE d.pid
+
+\* the decision between the other node's claim c and the deciding node's own claim d
+Decide(c, d) == IF ResolveByRole \/ c.pid[1] < d.pid[1] THEN Keep(c, d) ELSE Keep(d, c)
 
 -----------------------------------------------------------------------------
 (* Each step of a scope process works on a copy of its node's data (St), collects the messages *)
@@ -170,7 +180,7 @@ Withdraw(st, n, nm, why) ==
 Resolve(st, n, nm) ==
     LET others == {m \in Nodes \ {n}: st.remote[m][nm] # NONE}
     IN IF st.own[nm] = NONE \/ others = {} THEN st
-       ELSE IF \A m \in others: Keep(st.remote[m][nm], st.own[nm]) = st.own[nm].pid
+       ELSE IF \A m \in others: Decide(st.remote[m][nm], st.own[nm]) = st.own[nm].pid
             THEN IF RefreshWinner
                  THEN LET c == [st.own[nm] EXCEPT !.time = MaxTime]
                       IN Broadcast([st EXCEPT !.own[nm] = c, !.res = @ + 1], ClaimMsg(n, nm, c), {})
@@ -600,6 +610,7 @@ ResolutionBounded == resMsgs <= counts.created
 SurvivorResolver ==
     \/ Resolver = "oldest"
     \/ Resolver = "newest" /\ (MonotonicClocks \/ Cardinality(Times) = 1)
+    \/ Resolver = "second" /\ Cardinality(Times) = 1
 Survivor ==
     SurvivorResolver /\ Quiet => \A nm \in held \ removed: \E m \in Nodes: own[m][nm] # NONE
 

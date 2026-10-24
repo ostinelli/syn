@@ -81,12 +81,14 @@
 %% Important Note: the conflict resolution method will be called on the two nodes where the conflicting processes are running on.
 %% Therefore, this method MUST be defined in the same way across all nodes of the cluster and have the same effect
 %% regardless of the node it is run on, or you will experience unexpected results. Each of the two nodes decides on its
-%% own, possibly more than once while the conflict settles, and passes the two registrations in a different order: given
-%% the same two registrations, in either order, the method must keep the same process. If it doesn't, both nodes can end
-%% up keeping their own process.
+%% own, possibly more than once while the conflict settles. Both pass the two registrations in the same order: first the
+%% one of the process running on the node whose name sorts first. A method that decides only from its arguments therefore
+%% keeps the same process on both nodes, even if it depends on their order, for example to break a tie. It must not
+%% depend on anything that differs between nodes, such as `node()', the local clock or random numbers: if it does, both
+%% nodes can end up keeping their own process.
 %%
-%% A process that wins survives if the method always puts the processes in the same order, without ties and without
-%% three processes each beating another, if what it compares doesn't change during the conflict, and if the process
+%% A process that wins survives if the method always puts the processes in the same order, without three processes
+%% each beating another, if what it compares doesn't change during the conflict, and if the process
 %% isn't dropped for another reason, for example by losing a conflict over another name it is registered under. Syn's
 %% default rule compares registration times, which only fails if a clock moves backwards; comparing a start time stored
 %% in the metadata when registering works too. Otherwise, for example after a metadata update with a rule based on the
