@@ -27,7 +27,8 @@ When a node holds a name and learns that another node holds it too, it runs the 
 default resolution is used, and tells every other node. If its own process wins, it does nothing: the other node drops
 its own. Each of the two nodes decides on its own, so the resolution must keep the same process on both. Both nodes
 pass it the two registrations in the same order, by node name, so that a resolution that only looks at what it gets
-decides the same on both.
+decides the same on both, given the same versions of the two registrations. While an update of one of them is on its
+way, the two nodes can decide on different versions, and they decide again once it arrives.
 
 ### Calls for a process on another node
 When the operation is called from another node, the result is sent to the scope process of the calling node
@@ -45,9 +46,11 @@ the calling node's data, so that the two nodes know each other by the time the r
 still doesn't know the scope process of the process' node when the result gets there, it doesn't apply it and the call
 returns success: the data of that node reaches it with its snapshot.
 
-If the scope process of the calling node crashes before it applies the result, nothing replies to the caller: the call
-exits after the usual 5 second timeout of a call, although the process' node did the operation. The restarted scope
-process gets the change with that node's snapshot.
+If the scope process of the calling node crashes before it applies the result, the result goes to whichever scope
+process runs under the same name when it gets there. If the restarted one is already running, it handles the result as
+above and replies. If none is running, the result is lost: the call exits after the usual 5 second timeout of a call,
+although the process' node did the operation, and the restarted scope process gets the change with that node's
+snapshot.
 
 If the call is made from a scope process (i.e. from a callback), that process can't wait for one: the process' node
 replies to it right away, and the scope process of the calling node applies the result in the same way when it gets to it.
@@ -91,8 +94,11 @@ the following happens:
     and that node gets the data again when it connects. There is one narrow exception: if the connection drops between
     the moment a scope process checks it and the moment it starts monitoring the other node's scope process, Erlang
     connects the two nodes again, as it does whenever any process sends something to a node it isn't connected to. With
-    the kernel parameter `dist_auto_connect` set to `once`, Erlang doesn't reconnect nodes on its own, and this can't
-    happen. A call made through the API for a process on another node connects the nodes, as any call does.
+    the kernel parameter `dist_auto_connect` set to `once`, Erlang doesn't reconnect two nodes on its own once their
+    connection dropped, and this can't happen.
+  * A call made through the API for a process on another node connects the nodes, as any call does. With
+    `dist_auto_connect` set to `once`, a call for a process on a node whose connection dropped exits with `nodedown`
+    instead, until the nodes get connected explicitly, for example with `net_kernel:connect_node/1`.
   * Every message carries the scope process that sent it. A node only applies messages from the scope process it knows
     for that node: once it knows the new scope process of a node that restarted, it ignores what the old one sent. A
     late message from the old one can still make the node take it for a while; the old one's DOWN then makes the node
