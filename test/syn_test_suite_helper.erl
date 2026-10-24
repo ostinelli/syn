@@ -326,16 +326,32 @@ assert_received_messages_evaluate(MissingMessages, UnexpectedMessages) ->
         [get_line_from_stacktrace(), lists:reverse(MissingMessages), lists:reverse(UnexpectedMessages)]
     ).
 
-%% like assert_received_messages/1, when the messages can be any one of several lists, in any order
+%% like assert_received_messages/1, when the messages can be any one of several lists, in any order: waits until the
+%% messages received match one of them, then takes whatever else comes, since one list can be part of another
 assert_received_messages_one_of(Alternatives) ->
-    Received = receive_messages_until_quiet([]),
-    case lists:any(fun(Messages) -> lists:sort(Messages) =:= lists:sort(Received) end, Alternatives) of
+    Sorted = [lists:sort(Messages) || Messages <- Alternatives],
+    Received = receive_until_one_of(Sorted, [], os:system_time(millisecond)) ++ receive_messages_until_quiet([]),
+    case lists:member(lists:sort(Received), Sorted) of
         true ->
             ok;
 
         false ->
             ct:fail("~n\tReceive messages error (line ~p)~n\tReceived: ~p~n\tExpected one of: ~p~n",
                 [get_line_from_stacktrace(), Received, Alternatives])
+    end.
+
+receive_until_one_of(Sorted, Received, StartAt) ->
+    case lists:member(lists:sort(Received), Sorted) of
+        true ->
+            Received;
+
+        false ->
+            Remaining = max(0, ?DEFAULT_WAIT_TIMEOUT - (os:system_time(millisecond) - StartAt)),
+            receive
+                Message -> receive_until_one_of(Sorted, Received ++ [Message], StartAt)
+            after Remaining ->
+                Received
+            end
     end.
 
 receive_messages_until_quiet(Received) ->

@@ -125,8 +125,8 @@ hold(Pid, Test) ->
     receive resume -> erlang:resume_process(Pid) after 20000 -> ok end.
 resume_sender(_N, Pauser) -> Pauser ! resume, ok.
 messages(Pid) -> {messages, Messages} = rpc:call(node(Pid), erlang, process_info, [Pid, messages]), Messages.
-%% Simulate a skewed clock by changing the owner's timestamp, then broadcasting
-%% through its REAL sender. No production code or operating-system clock changes.
+%% pretends that the clock of the node running P is ahead: changes the time of its registration and sends it to the
+%% other nodes as that node would
 set_owner_time(P, Time) ->
     sys:replace_state(scope(node(), syn_registry), fun(S) ->
         [{x, P, Meta, _, Ref, _}] = ets:lookup(S#state.table_by_name, x),
@@ -165,13 +165,13 @@ conflict(Config, Skew) ->
                     T > erlang:system_time() end);
         false -> ok
     end,
-    %% B has sent its snapshot before this callback. Hold B's losing unregister
-    %% until A's winning broadcast has reached Common. This is legal per-pair FIFO.
+    %% B has sent its snapshot before its resolver runs. The resolver of B waits until the test lets it go, so that A
+    %% handles that snapshot, keeps its process and sends nothing, before B drops its own.
     ok = rpc:call(B, application, set_env, [syn, protocol_gate, self()]),
     OldTime = owner_time(A),
     true = rpc:call(A, net_kernel, connect_node, [B]),
     Blocked = receive {resolver_blocked, SP} -> SP after 5000 -> ct:fail(no_conflict) end,
-    %% Winning must not refresh the time or announce again. Common already has A's claim.
+    %% A keeps its process without giving it a new time or telling the other nodes again
     _ = sys:get_state(scope(A, syn_registry)),
     OldTime = owner_time(A),
     Blocked ! protocol_continue,
@@ -183,9 +183,8 @@ owner_time(N) ->
     S = sys:get_state(scope(N, syn_registry)),
     [{x, _, _, T, _, _}] = rpc:call(N, ets, lookup, [S#state.table_by_name, x]), T.
 
-%% A controllable implementation of sender_loop: preserve every sender's FIFO,
-%% but allow only one receive/dispatch iteration per step. This only restricts
-%% scheduling; payloads and broadcast destinations are unchanged.
+%% a sender that sends its next message only when the test says so, to the same nodes and in the same order as the
+%% real one would
 install_stepped_sender() ->
     S = sys:replace_state(scope(node(), syn_registry), fun(State) ->
         State#state.sender_pid ! terminate,
@@ -223,12 +222,12 @@ conflict_second_split(Config) ->
     wait(fun() -> view(node()) =:= {PB, 2} end),
     SB = rpc:call(B, ?MODULE, install_stepped_sender, []),
     true = rpc:call(A, net_kernel, connect_node, [B]),
-    %% A's discover queues B's snapshot; B's discover gets A's snapshot.
+    %% B's answer to the discover of A waits in B's sender, while B gets the snapshot of A
     wait(fun() -> length(messages(SB)) =:= 2 end),
     step(SB),
     wait(fun() -> view(B) =:= {PA, 1} end),
-    %% B has already lost, but its snapshot has not reached A. A second cut
-    %% loses that packet; Common remains connected to both throughout.
+    %% B has already dropped its process, but its snapshot hasn't reached A: a second cut loses it. Common stays connected
+    %% to both
     split(A, B),
     step(SB), step(SB),
     wait(fun() -> view(node()) =:= {PA, 1} end),
@@ -257,24 +256,22 @@ conflict_refresh_livelock(Config) ->
         element(2,element(3,M)) =:= ack_sync end, messages(SA)) andalso
         lists:any(fun(M) -> element(1,M) =:= send_single andalso
         element(2,element(3,M)) =:= ack_sync end, messages(SB)) end),
-    %% Each snapshot is already queued; both owners update before receiving it.
+    %% both snapshots wait in the senders, and both nodes update their registration before getting the other's
     ok = rpc:call(A, syn, register, [protocol, x, PA, updated_a]),
     ok = rpc:call(B, syn, register, [protocol, x, PB, updated_b]),
     TimeA = owner_time(A), TimeB = owner_time(B),
-    %% Deliver both old snapshots first. Both keep their updated claim without refreshing it.
+    %% both nodes get the other's older snapshot first, and keep their own without giving it a new time
     step(SA), step(SB),
     _ = sys:get_state(scope(A, syn_registry)), _ = sys:get_state(scope(B, syn_registry)),
     TimeA = owner_time(A), TimeB = owner_time(B),
-    Deliveries = pump([SA, SB], 0, 60),
+    Deliveries = pump([SA, SB], [node(), A, B], 0, 0, 60),
     Expected = case TimeA > TimeB of true -> {PA, updated_a}; false -> {PB, updated_b} end,
     wait(fun() -> lists:all(fun(N) -> view(N) =:= Expected end, [node(), A, B]) end),
     ct:pal("Converged after ~p further FIFO sender instructions, no timestamp refresh", [Deliveries]),
     [] = messages(SA), [] = messages(SB), ok.
 
-%% Protocol-level incarnation schedule, NOT a claim of having induced this
-%% ordering in the runtime: a new discover/ack precedes an old scope's DOWN.
-%% a new scope process' handshake arrives before the old one's DOWN: the node keeps the new one, then finds the live
-%% peer again
+%% a new scope process' handshake arrives before the old one's DOWN, an order Erlang allows but doesn't produce in
+%% practice, so the messages are injected: the node keeps the new one, then finds the live peer again
 discovery_incarnation_registry(Config) -> incarnation(Config, syn_registry).
 discovery_incarnation_pg(Config) -> incarnation(Config, syn_pg).
 incarnation(Config, Handler) ->
@@ -296,13 +293,17 @@ quiescent(Ns) ->
     [sys:get_state(scope(N, syn_registry)) || N <- Ns],
     wait(fun() -> lists:all(fun(N) -> messages(scope(N, syn_registry)) =:= []
         andalso messages(sender(N, syn_registry)) =:= [] end, Ns) end).
-pump(Senders, Count, Max) ->
+%% steps the stepped senders until they have nothing to send for a few rounds in a row, each round letting the scope
+%% processes of Nodes handle what reached them; returns how many messages were sent, and fails past Max
+pump(Senders, Nodes, Count, QuietRounds, Max) ->
     timer:sleep(20),
+    [sys:get_state(scope(N, syn_registry)) || N <- Nodes],
     Ready = [S || S <- Senders, messages(S) =/= []],
     case Ready of
-        [] -> Count;
+        [] when QuietRounds >= 3 -> Count;
+        [] -> pump(Senders, Nodes, Count, QuietRounds + 1, Max);
         _ when Count >= Max -> ct:fail({traffic_did_not_stop, Count});
-        _ -> [step(S) || S <- Ready], pump(Senders, Count + length(Ready), Max)
+        _ -> [step(S) || S <- Ready], pump(Senders, Nodes, Count + length(Ready), 0, Max)
     end.
 report(Event) ->
     case application:get_env(syn, protocol_observer) of
@@ -337,8 +338,7 @@ update_withdraw(Config, Kind) ->
     PA = pid(A), PB = pid(B),
     ok = rpc:call(A, syn, register, [protocol, x, PA, 1]),
     wait(fun() -> view(node()) =:= {PA, 1} end),
-    %% Owner A has received B's claim and kept its own. The remote side can
-    %% remain unaware until the queued snapshot reaches it.
+    %% A has the registration of B and keeps its own, while B doesn't know about the one of A yet
     ScopeB = scope(B, syn_registry), ScopeA = scope(A, syn_registry),
     ScopeA ! {'3.5', sync_register, ScopeB, x, PB, 2, 0, normal},
     scope(node(), syn_registry) ! {'3.5', sync_register, ScopeB, x, PB, 2, 0, normal},
@@ -412,7 +412,7 @@ snapshot_aside_and_fences(Config) ->
     _ = sys:get_state(Local), {PA2, new} = view(node()),
     Local ! {'3.5', ack_sync, SA, []},
     _ = sys:get_state(Local), undefined = view(node()), [] = read_aside(Local),
-    %% The same sender-incarnation fence covers pg claim, withdrawal and replies.
+    %% process groups ignore messages from a scope process they don't know in the same way
     PG = scope(node(), syn_pg), PGA = scope(A, syn_pg),
     PG ! {'3.5', ack_sync, PGA, [{g, PA, meta, 10}]},
     PG ! {'3.5', sync_join, Fake, g, PA, stale, 200, normal},
@@ -437,7 +437,7 @@ restart_claims(Config) ->
     _ = sys:get_state(Local), [_] = read_aside(Local),
     OldAside = maps:get(aside, (sys:get_state(Local))#state.handler_state),
     exit(Local, kill),
-    wait(fun() -> scope(node(), syn_registry) =/= Local end),
+    wait(fun() -> case scope(node(), syn_registry) of New0 when is_pid(New0) -> New0 =/= Local; _ -> false end end),
     New = scope(node(), syn_registry),
     _ = sys:get_state(New), undefined = ets:info(OldAside),
     [] = read_aside(New), {P, 1} = view(node()), {P, 1} = syn:lookup(protocol, y),
@@ -491,7 +491,7 @@ monitor_does_not_reconnect(Config) ->
     Local = scope(node(), syn_registry),
     Local ! {'3.5', discover, Fake},
     receive {purge_blocked, Local} -> ok after 5000 -> ct:fail(no_purge) end,
-    %% Cut through B so the test itself never talks to A after disconnect.
+    %% cut the connection through B, so that this node doesn't talk to A again after it
     rpc:call(B, rpc, call, [A, erlang, disconnect_node, [node()]]),
     erlang:disconnect_node(A),
     false = lists:member(A, nodes()),
