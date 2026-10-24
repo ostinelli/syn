@@ -731,7 +731,7 @@ resolve(Name, Nodes, #state{scope = Scope, table_by_pid = TableByPid} = State) -
                 all -> maps:values(Others);
                 _ -> [Claim || {Node, Claim} <- maps:to_list(Others), lists:member(Node, Nodes)]
             end,
-            Outcomes = lists:map(fun({Pid, Meta, Time} = Claim) ->
+            Outcomes = lists:map(fun({Pid, Meta, _Time} = Claim) ->
                 %% both nodes pass the two registrations in the same order, the one of the node whose name sorts
                 %% first being the first, so that a resolver that only looks at its arguments decides the same on both
                 {First, Second} = case node(Pid) < node(TablePid) of
