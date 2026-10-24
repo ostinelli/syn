@@ -74,7 +74,8 @@ java -XX:+UseParallelGC -cp tla2tools.jar tlc2.TLC -workers auto -deadlock -clea
 | `syn_backward.cfg`             | The default resolver with a clock that moves backwards during the conflict.      |
 | `syn_two_names.cfg`            | Two names, a dropped connection, a process exiting.                              |
 | `syn_cyclic.cfg`               | Three nodes register the same name, and no process beats both others.            |
-| `syn_restart.cfg`              | A scope process restarts, a connection drops, a call from another node.          |
+| `syn_restart.cfg`              | A scope process restarts and a connection drops.                                 |
+| `syn_restart_call.cfg`         | Two nodes: a scope process restarts, a connection drops, a call from the other.  |
 | `syn_termination*.cfg`         | Message traffic always stops, in four smaller setups.                            |
 
 All of them must report `Model checking completed. No error has been found.` See the comment at the top of each file
@@ -82,8 +83,8 @@ for what it covers.
 
 ### Checking the checks
 
-The files in `mutations/` each switch on a mistake that an earlier version of Syn made, or that the design had to
-avoid. Each one must make TLC report a failure: that shows the checks above would catch it.
+The files in `mutations/` each switch on a mistake the protocol has to avoid. Each one must make TLC report a failure:
+that shows the checks above would catch it.
 
 | Config                                  | The mistake                                                                |
 |-----------------------------------------|----------------------------------------------------------------------------|
@@ -95,8 +96,7 @@ avoid. Each one must make TLC report a failure: that shows the checks above woul
 
 Run them like the others, with `-config mutations/<name>.cfg`.
 
-## History
+## Credits
 
-The first TLA+ model of Syn was written by [Graham Hay](https://github.com/grahamrhay/syn_tla). It modeled the
-registry of Syn 3.4 and found a race that left entries pointing at dead processes, which was fixed then. This model
-replaces it for the redesigned registry of Syn 3.5; Graham's model remains in the repository history.
+The first TLA+ model of Syn was written by [Graham Hay](https://github.com/grahamrhay/syn_tla): it found a race that left
+registry entries pointing at dead processes. This model builds on that work.
