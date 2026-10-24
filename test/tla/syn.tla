@@ -1,7 +1,7 @@
 -------------------------------- MODULE syn --------------------------------
 (***************************************************************************)
 (* A model of how Syn 3.5 keeps registrations in sync between nodes, as    *)
-(* described in DESIGN-3.5.md. TLC checks it against every order in which  *)
+(* described in INTERNALS.md. TLC checks it against every order in which   *)
 (* messages can arrive, with connections dropping and scope processes      *)
 (* restarting along the way.                                               *)
 (*                                                                         *)

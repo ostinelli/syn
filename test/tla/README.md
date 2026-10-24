@@ -4,7 +4,7 @@
 through every order in which messages can arrive, with connections dropping, messages getting lost and scope
 processes restarting along the way, and checks that the nodes always end up agreeing.
 
-The rules it follows are the ones in `DESIGN-3.5.md` at the root of the repository.
+The rules it follows are the ones described in `INTERNALS.md` at the root of the repository.
 
 ## What the model contains
 
