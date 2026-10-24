@@ -244,7 +244,8 @@ init_per_testcase(TestCase, Config) ->
 %% Config0 = Config1 = [tuple()]
 %% Reason = any()
 %% -------------------------------------------------------------------
-end_per_testcase(_, _Config) ->
+end_per_testcase(_, Config) ->
+    syn_test_suite_helper:reconnect_cluster(Config),
     syn_test_suite_helper:clean_after_test().
 
 %% ===================================================================

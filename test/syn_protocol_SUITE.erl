@@ -199,6 +199,9 @@ stepped_sender() ->
                 {send_single, N, Message, Name} -> erlang:send({Name, N}, Message, [noconnect])
             end,
             Test ! {stepped, Ref}, stepped_sender();
+        {sync, Test, Ref, Nodes} ->
+            [sys:get_state({syn_registry_protocol, N}) || N <- Nodes],
+            Test ! {synced, Ref}, stepped_sender();
         terminate -> ok
     end.
 restore_sender() ->
@@ -264,14 +267,14 @@ conflict_refresh_livelock(Config) ->
     step(SA), step(SB),
     _ = sys:get_state(scope(A, syn_registry)), _ = sys:get_state(scope(B, syn_registry)),
     TimeA = owner_time(A), TimeB = owner_time(B),
-    Deliveries = pump([SA, SB], [node(), A, B], 0, 0, 60),
+    Deliveries = pump([SA, SB], [node(), A, B], 0, 60),
     Expected = case TimeA > TimeB of true -> {PA, updated_a}; false -> {PB, updated_b} end,
     wait(fun() -> lists:all(fun(N) -> view(N) =:= Expected end, [node(), A, B]) end),
     ct:pal("Converged after ~p further FIFO sender instructions, no timestamp refresh", [Deliveries]),
     [] = messages(SA), [] = messages(SB), ok.
 
-%% a new scope process' handshake arrives before the old one's DOWN, an order Erlang allows but doesn't produce in
-%% practice, so the messages are injected: the node keeps the new one, then finds the live peer again
+%% a new scope process' handshake arrives before the old one's DOWN, which Erlang allows: the messages are injected to
+%% get this order every time. The node keeps the new one, then finds the live peer again
 discovery_incarnation_registry(Config) -> incarnation(Config, syn_registry).
 discovery_incarnation_pg(Config) -> incarnation(Config, syn_pg).
 incarnation(Config, Handler) ->
@@ -293,18 +296,30 @@ quiescent(Ns) ->
     [sys:get_state(scope(N, syn_registry)) || N <- Ns],
     wait(fun() -> lists:all(fun(N) -> messages(scope(N, syn_registry)) =:= []
         andalso messages(sender(N, syn_registry)) =:= [] end, Ns) end).
-%% steps the stepped senders until they have nothing to send for a few rounds in a row, each round letting the scope
-%% processes of Nodes handle what reached them; returns how many messages were sent, and fails past Max
-pump(Senders, Nodes, Count, QuietRounds, Max) ->
-    timer:sleep(20),
-    [sys:get_state(scope(N, syn_registry)) || N <- Nodes],
-    Ready = [S || S <- Senders, messages(S) =/= []],
-    case Ready of
-        [] when QuietRounds >= 3 -> Count;
-        [] -> pump(Senders, Nodes, Count, QuietRounds + 1, Max);
-        _ when Count >= Max -> ct:fail({traffic_did_not_stop, Count});
-        _ -> [step(S) || S <- Ready], pump(Senders, Nodes, Count + length(Ready), 0, Max)
+%% steps the stepped senders until they have nothing left to send, even once the scope processes of Nodes have handled
+%% everything the senders sent them; returns how many messages were sent, and fails past Max
+pump(Senders, Nodes, Count, Max) ->
+    case [S || S <- Senders, messages(S) =/= []] of
+        [] ->
+            [sync(S, Nodes) || S <- Senders],
+            case [S || S <- Senders, messages(S) =/= []] of
+                [] -> Count;
+                _ -> pump(Senders, Nodes, Count, Max)
+            end;
+
+        _ when Count >= Max ->
+            ct:fail({traffic_did_not_stop, Count});
+
+        Ready ->
+            [step(S) || S <- Ready],
+            pump(Senders, Nodes, Count + length(Ready), Max)
     end.
+
+%% returns once the scope processes of Nodes have handled everything Sender sent them: the sender asks each of them,
+%% and its questions arrive after its messages
+sync(Sender, Nodes) ->
+    Ref = make_ref(), Sender ! {sync, self(), Ref, Nodes},
+    receive {synced, Ref} -> ok after 5000 -> error(sync_timeout) end.
 report(Event) ->
     case application:get_env(syn, protocol_observer) of
         {ok, Test} -> Test ! Event;

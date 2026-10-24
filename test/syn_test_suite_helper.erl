@@ -40,6 +40,7 @@
 -export([assert_scope_subcluster/4]).
 -export([assert_received_messages/1]).
 -export([assert_received_messages_one_of/1]).
+-export([reconnect_cluster/1]).
 -export([assert_empty_queue/0]).
 -export([assert_wait/2]).
 
@@ -135,6 +136,16 @@ disconnect_node(Node) ->
 disconnect_nodes(Node1, Node2) ->
     rpc:call(Node1, erlang, disconnect_node, [Node2]),
     rpc:call(Node2, erlang, disconnect_node, [Node1]).
+
+%% connects the nodes of Config with each other again, in case a failed test left them apart
+reconnect_cluster(Config) ->
+    SlaveNodes = [Node || {Key, Node} <- Config, lists:member(Key, [syn_slave_1, syn_slave_2, syn_slave_3])],
+    Nodes = [node() | SlaveNodes],
+    [rpc:call(Node1, net_kernel, connect_node, [Node2]) || Node1 <- Nodes, Node2 <- Nodes, Node1 < Node2],
+    case SlaveNodes of
+        [] -> ok;
+        _ -> ok = wait_cluster_mesh_connected(Nodes)
+    end.
 
 clean_after_test() ->
     Nodes = [node() | nodes()],
