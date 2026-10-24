@@ -85,7 +85,8 @@
 %% one of the process running on the node whose name sorts first. A method that decides only from its arguments therefore
 %% keeps the same process on both nodes when they decide on the same versions of the two registrations, even if it
 %% depends on their order, for example to break a tie. While an update of one of them is on its way, the two nodes can
-%% decide on different versions, and they decide again once it arrives; the next paragraph says what that can cause.
+%% decide on different versions; a node that still holds its own registration decides again when it gets the update.
+%% The next paragraph says what that can cause.
 %% The method must not depend on anything that differs between nodes, such as `node()', the local clock or random
 %% numbers: if it does, both nodes can end up keeping their own process.
 %%

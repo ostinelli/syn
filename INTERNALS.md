@@ -28,7 +28,8 @@ default resolution is used, and tells every other node. If its own process wins,
 its own. Each of the two nodes decides on its own, so the resolution must keep the same process on both. Both nodes
 pass it the two registrations in the same order, by node name, so that a resolution that only looks at what it gets
 decides the same on both, given the same versions of the two registrations. While an update of one of them is on its
-way, the two nodes can decide on different versions, and they decide again once it arrives.
+way, the two nodes can decide on different versions; a node that still holds its own registration decides again when
+it gets the update.
 
 ### Calls for a process on another node
 When the operation is called from another node, the result is sent to the scope process of the calling node
@@ -46,11 +47,11 @@ the calling node's data, so that the two nodes know each other by the time the r
 still doesn't know the scope process of the process' node when the result gets there, it doesn't apply it and the call
 returns success: the data of that node reaches it with its snapshot.
 
-If the scope process of the calling node crashes before it applies the result, the result goes to whichever scope
-process runs under the same name when it gets there. If the restarted one is already running, it handles the result as
-above and replies. If none is running, the result is lost: the call exits after the usual 5 second timeout of a call,
-although the process' node did the operation, and the restarted scope process gets the change with that node's
-snapshot.
+If the scope process of the calling node crashes before it applies the result, a result already in its mailbox is lost
+with it. A result still on its way goes to whichever scope process runs under the same name when it gets there: if the
+restarted one is already running, it handles the result as above and replies, and if none is running, the result is
+lost. When the result is lost, the call exits after the usual 5 second timeout of a call, although the process' node
+did the operation, and the restarted scope process gets the change with that node's snapshot.
 
 If the call is made from a scope process (i.e. from a callback), that process can't wait for one: the process' node
 replies to it right away, and the scope process of the calling node applies the result in the same way when it gets to it.
