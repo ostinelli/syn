@@ -52,7 +52,8 @@
     disconnected_handshakes_ignored/1,
     killed_process_loses_both_names/1,
     unchanged_pairs_not_resolved/1,
-    monitor_does_not_reconnect/1
+    monitor_does_not_reconnect/1,
+    messages_from_another_version_ignored/1
 ]).
 
 %% run on other nodes, or by Syn as callbacks
@@ -69,7 +70,8 @@ all() -> [conflict_normal, conflict_second_split, conflict_skew, conflict_refres
           late_down_after_resync, snapshot_aside_and_fences, restart_claims,
           killed_alias_exit_reason, ordered_adoption_fetches_snapshot,
           late_old_incarnation_recovers, disconnected_handshakes_ignored,
-          killed_process_loses_both_names, unchanged_pairs_not_resolved, monitor_does_not_reconnect].
+          killed_process_loses_both_names, unchanged_pairs_not_resolved, monitor_does_not_reconnect,
+          messages_from_another_version_ignored].
 suite() -> [{timetrap, {seconds, 30}}].
 
 init_per_suite(Config) ->
@@ -594,3 +596,24 @@ disconnected_handshakes_ignored(Config) ->
     false = lists:member(B, rpc:call(A, erlang, nodes, [])),
     true = rpc:call(A, net_kernel, connect_node, [B]),
     wait(fun() -> maps:is_key(B, (sys:get_state(SA))#state.nodes_map) end).
+
+%% a node running Syn 3.4 sends its messages in the format of its own protocol, tagged '3.0': the scope processes ignore
+%% them, so the two nodes don't sync, and a call gets undefined back
+messages_from_another_version_ignored(Config) ->
+    A = proplists:get_value(a, Config),
+    Old = pid(A), P = pid(A), Time = erlang:system_time(),
+    Registry = scope(node(), syn_registry), Pg = scope(node(), syn_pg),
+    RegistryNodes = (sys:get_state(Registry))#state.nodes_map,
+    PgNodes = (sys:get_state(Pg))#state.nodes_map,
+    Registry ! {'3.0', discover, Old},
+    Registry ! {'3.0', ack_sync, Old, [{y, P, meta, Time}]},
+    Registry ! {'3.0', sync_register, x, P, meta, Time, normal},
+    Pg ! {'3.0', discover, Old},
+    Pg ! {'3.0', ack_sync, Old, [{g, P, meta, Time}]},
+    Pg ! {'3.0', sync_join, g, P, meta, Time, normal},
+    undefined = gen_server:call(Registry, {'3.0', register_or_update_on_node, A, z, pid(node()), meta}),
+    undefined = gen_server:call(Registry, {'3.0', subcluster_nodes}),
+    RegistryNodes = (sys:get_state(Registry))#state.nodes_map,
+    PgNodes = (sys:get_state(Pg))#state.nodes_map,
+    undefined = syn:lookup(protocol, x), undefined = syn:lookup(protocol, y), undefined = syn:lookup(protocol, z),
+    [] = syn:members(protocol, g).
