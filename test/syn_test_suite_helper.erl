@@ -39,6 +39,7 @@
 -export([assert_cluster/2]).
 -export([assert_scope_subcluster/4]).
 -export([assert_received_messages/1]).
+-export([assert_received_messages_one_of/1]).
 -export([assert_empty_queue/0]).
 -export([assert_wait/2]).
 
@@ -324,6 +325,25 @@ assert_received_messages_evaluate(MissingMessages, UnexpectedMessages) ->
     ct:fail("~n\tReceive messages error (line ~p)~n\tMissing: ~p~n\tUnexpected: ~p~n",
         [get_line_from_stacktrace(), lists:reverse(MissingMessages), lists:reverse(UnexpectedMessages)]
     ).
+
+%% like assert_received_messages/1, when the messages can be any one of several lists, in any order
+assert_received_messages_one_of(Alternatives) ->
+    Received = receive_messages_until_quiet([]),
+    case lists:any(fun(Messages) -> lists:sort(Messages) =:= lists:sort(Received) end, Alternatives) of
+        true ->
+            ok;
+
+        false ->
+            ct:fail("~n\tReceive messages error (line ~p)~n\tReceived: ~p~n\tExpected one of: ~p~n",
+                [get_line_from_stacktrace(), Received, Alternatives])
+    end.
+
+receive_messages_until_quiet(Received) ->
+    receive
+        Message -> receive_messages_until_quiet([Message | Received])
+    after ?UNEXPECTED_MESSAGES_WAIT_TIMEOUT ->
+        lists:reverse(Received)
+    end.
 
 assert_empty_queue() ->
     assert_empty_queue([]).
