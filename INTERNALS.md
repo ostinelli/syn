@@ -45,6 +45,10 @@ the calling node's data, so that the two nodes know each other by the time the r
 still doesn't know the scope process of the process' node when the result gets there, it doesn't apply it and the call
 returns success: the data of that node reaches it with its snapshot.
 
+If the scope process of the calling node crashes before it applies the result, nothing replies to the caller: the call
+exits after the usual 5 second timeout of a call, although the process' node did the operation. The restarted scope
+process gets the change with that node's snapshot.
+
 If the call is made from a scope process (i.e. from a callback), that process can't wait for one: the process' node
 replies to it right away, and the scope process of the calling node applies the result in the same way when it gets to it.
 Such a call returns the result of the process' node: `race_condition` then only comes from the process' node itself,
