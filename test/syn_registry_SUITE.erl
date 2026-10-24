@@ -1748,20 +1748,10 @@ three_nodes_update(Config) ->
     ]).
 
 three_nodes_ack_sync_ordered_delivery(Config) ->
-    %% Issue #87: Race condition causing stale pids in syn lookup.
-    %%
-    %% Root cause: ack_sync was sent directly from gen_server while sync_register/
-    %% sync_unregister was sent via sender_loop. Since these are different sender
-    %% processes, Erlang does not guarantee message ordering between them. This means
-    %% sync_register can arrive at a remote node BEFORE ack_sync, causing it to be
-    %% dropped (remote node not yet in nodes_map), leaving stale data.
-    %%
-    %% Fix: All messages to remote nodes are now routed through sender_loop,
-    %% guaranteeing FIFO delivery.
-    %%
-    %% This test verifies the fix by tracing the local sender_loop process during
-    %% node discovery. With the fix, ack_sync is routed through sender_loop and the
-    %% trace captures {send_single, ...} messages.
+    %% Issue #87. Everything a scope process sends to another node goes through its sender process, ack_sync included:
+    %% Erlang only keeps the order of messages from the same process, and a sync_register that arrived before the
+    %% ack_sync would be dropped, as its node isn't known yet, leaving stale data. The test traces the sender during
+    %% discovery and checks that the ack_sync goes through it.
 
     %% get slave
     SlaveNode1 = proplists:get_value(syn_slave_1, Config),
@@ -1791,9 +1781,7 @@ three_nodes_ack_sync_ordered_delivery(Config) ->
     syn_test_suite_helper:connect_node(SlaveNode1),
     syn_test_suite_helper:assert_scope_subcluster(registry,node(), scope_order, [SlaveNode1]),
 
-    %% verify that sender_loop received a {send_single, ...} message containing ack_sync.
-    %% this proves ack_sync is routed through sender_loop (the fix), ensuring FIFO
-    %% ordering with sync_register/sync_unregister broadcasts.
+    %% the sender got the ack_sync to send, so it goes out in order with the sync_register and sync_unregister messages
     true = check_trace_for_ack_sync_via_sender(),
 
     %% stop tracing after the check: the node can show up in the subcluster

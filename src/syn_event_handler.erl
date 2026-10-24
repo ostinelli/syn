@@ -36,6 +36,7 @@
 %%
 %% All of the callbacks, except for `resolve_registry_conflict/4', are called on all the nodes of the cluster.
 %% This allows you to receive events for the processes running on nodes that get shut down, or in case of net splits.
+%% They run in the scope process of the node they are called on, which handles nothing else meanwhile: keep them short.
 %%
 %% The argument `Reason' in the callbacks can be:
 %% <ul>

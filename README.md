@@ -105,24 +105,10 @@ Ensure that `syn` is started with your application, for example by adding it in 
 ]}.
 ```
 
-### Upgrading from 3.4 or earlier
-Nodes running Syn 3.5 don't sync with nodes running earlier versions: each side ignores the other's messages, so a
-cluster with both splits into one group per version, each with its own registry and process groups. Upgrade all the
-nodes of a cluster together.
-
-The API and the callbacks are the same. What can behave differently:
-
-* Registering or updating a process that runs on another node can return `{error, race_condition}`, when the calling
-  node shows another process for that name once it applies the result.
-* On the calling node, the callbacks for a registration, an update, an unregistration, a join or a leave of a process
-  running on another node run in Syn's scope process, like all the other callbacks, instead of in the process that made
-  the call.
-* A call for a process on another node, made from a callback, doesn't wait for the calling node to show the change.
-* During a registry conflict, a node that runs neither process shows the most recent registration until one of the two
-  nodes drops its own. When the conflict resolution keeps neither process, a node can briefly show one of them before
-  both go, and its callbacks report that.
-* When a registration goes and another node's registration of the same name takes its place, the callback for the new
-  one gets the reason the old one went with.
+### Running different versions together
+Nodes sync only with nodes running the same version of Syn's protocol: a node running Syn 3.5 and a node running an
+earlier version ignore each other's messages, so a cluster with both splits into one group per version, each with its
+own registry and process groups. Upgrade all the nodes of a cluster together.
 
 ## Quickstart
 
