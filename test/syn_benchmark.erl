@@ -55,13 +55,15 @@
 %% example run: `PROCESS_COUNT=100000 WORKERS_PER_NODE=100 NODES_COUNT=2 make bench`
 start() ->
     %% init
-    ProcessCount = list_to_integer(os:getenv("PROCESS_COUNT", "100000")),
+    RequestedProcessCount = list_to_integer(os:getenv("PROCESS_COUNT", "100000")),
     WorkersPerNode = list_to_integer(os:getenv("WORKERS_PER_NODE", "100")),
     SlavesCount = list_to_integer(os:getenv("NODES_COUNT", "2")),
     SkipRegistry = case os:getenv("SKIP_REGISTRY") of false -> false; _ -> true end,
     SkipPG = case os:getenv("SKIP_PG") of false -> false; _ -> true end,
 
-    ProcessesPerNode = round(ProcessCount / SlavesCount),
+    %% every slave gets the same number of processes, and the counts the benchmark waits for are the total of these
+    ProcessesPerNode = RequestedProcessCount div SlavesCount,
+    ProcessCount = ProcessesPerNode * SlavesCount,
 
     io:format("====> Starting benchmark~n"),
     io:format("      --> Nodes: ~w / ~w slave(s)~n", [SlavesCount + 1, SlavesCount]),
@@ -287,7 +289,7 @@ start() ->
 
 register_on_node(CollectorPid, WorkersPerNode, FromName, Pids) ->
     %% split pids in workers
-    PidsPerNode = round(length(Pids) / WorkersPerNode),
+    PidsPerNode = length(Pids) div WorkersPerNode,
     {WorkerInfo, []} = lists:foldl(fun(I, {WInfo, RPids}) ->
         {WorkerPids, RestOfPids} = case I of
             WorkersPerNode ->
@@ -322,7 +324,7 @@ worker_register_on_node(Name, [Pid | PidsTail]) ->
 unregister_on_node(CollectorPid, WorkersPerNode, FromName, ToName) ->
     %% split pids in workers
     ProcessesPerNode = ToName - FromName + 1,
-    ProcessesPerWorker = round(ProcessesPerNode / WorkersPerNode),
+    ProcessesPerWorker = ProcessesPerNode div WorkersPerNode,
     WorkerInfo = lists:foldl(fun(I, Acc) ->
         {WorkerFromName, WorkerToName} = case I of
             WorkersPerNode ->
@@ -355,7 +357,7 @@ worker_unregister_on_node(Name, ToName) ->
 
 join_on_node(CollectorPid, WorkersPerNode, Pids) ->
     %% split pids in workers
-    PidsPerNode = round(length(Pids) / WorkersPerNode),
+    PidsPerNode = length(Pids) div WorkersPerNode,
     {PidsPerWorker, []} = lists:foldl(fun(I, {P, RPids}) ->
         {WPids, RestOfPids} = case I of
             WorkersPerNode ->
@@ -388,7 +390,7 @@ worker_join_on_node([Pid | PidsTail]) ->
 
 leave_on_node(CollectorPid, WorkersPerNode, Pids) ->
     %% split pids in workers
-    PidsPerNode = round(length(Pids) / WorkersPerNode),
+    PidsPerNode = length(Pids) div WorkersPerNode,
     {PidsPerWorker, []} = lists:foldl(fun(I, {P, RPids}) ->
         {WPids, RestOfPids} = case I of
             WorkersPerNode ->
