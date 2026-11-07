@@ -68,6 +68,7 @@ java -XX:+UseParallelGC -cp tla2tools.jar tlc2.TLC -workers auto -deadlock -clea
 |--------------------------------|----------------------------------------------------------------------------------|
 | `syn.cfg`                      | Two nodes register the same name, and any connection can drop once.              |
 | `syn_conflict.cfg`             | Issue #96: one connection drops twice, the resolver keeps the older process.     |
+| `syn_three_owners.cfg`         | Issue #96 with three nodes that register the name, the older process kept.      |
 | `syn_calls.cfg`                | A call from another node, clocks that disagree, a conflict lost after an update. |
 | `syn_calls_two.cfg`            | Two calls from other nodes at the same time.                                     |
 | `syn_skew.cfg`                 | Clocks that disagree with Syn's default resolver, an update during the conflict. |

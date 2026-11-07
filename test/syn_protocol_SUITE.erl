@@ -38,6 +38,8 @@
     conflict_skew/1,
     conflict_refresh_livelock/1,
     conflict_tie/1,
+    three_owners_challenger_cut_off/1,
+    three_owners_challenger_unregistered/1,
     discovery_incarnation_registry/1,
     discovery_incarnation_pg/1,
     ordered_update_withdraw/1,
@@ -59,12 +61,14 @@
 %% run on other nodes, or by Syn as callbacks
 -export([idle/0, hold/2, set_owner_time/2]).
 -export([install_stepped_sender/0, stepped_sender/0, restore_sender/0]).
+-export([install_held_sender/0, held_sender/1, held/1, step_to/2, flush/1]).
 -export([on_process_registered/5, on_process_unregistered/5]).
 -export([on_registry_process_updated/5, on_registry_process_updated/6]).
 -export([resolve_registry_conflict/4]).
 -include_lib("syn/src/syn.hrl").
 
 all() -> [conflict_normal, conflict_second_split, conflict_skew, conflict_refresh_livelock, conflict_tie,
+          three_owners_challenger_cut_off, three_owners_challenger_unregistered,
           discovery_incarnation_registry, discovery_incarnation_pg,
           ordered_update_withdraw, scope_update_withdraw, local_update_withdraw,
           late_down_after_resync, snapshot_aside_and_fences, restart_claims,
@@ -215,6 +219,56 @@ restore_sender() ->
 step(Sender) ->
     Ref = make_ref(), Sender ! {step, self(), Ref},
     receive {stepped, Ref} -> ok after 3000 -> error(step_timeout) end.
+
+%% a sender that holds what it sends per destination node, and sends the oldest message for a node when the test says
+%% so: messages keep their order towards each node, while messages towards different nodes arrive in the order the
+%% test picks, as Erlang allows
+install_held_sender() ->
+    S = sys:replace_state(scope(node(), syn_registry), fun(State) ->
+        State#state.sender_pid ! terminate,
+        State#state{sender_pid = spawn_link(?MODULE, held_sender, [[]])}
+    end), S#state.sender_pid.
+held_sender(Held) ->
+    receive
+        {broadcast, Message, Excluded, Name, Nodes} ->
+            held_sender(Held ++ [{N, Message, Name} || N <- Nodes -- Excluded]);
+        {send_single, N, Message, Name} -> held_sender(Held ++ [{N, Message, Name}]);
+        {held, Test, Ref} -> Test ! {held, Ref, [{N, element(2, M)} || {N, M, _} <- Held]}, held_sender(Held);
+        {step_to, N, Test, Ref} ->
+            case lists:keytake(N, 1, Held) of
+                {value, {N, Message, Name}, Rest} ->
+                    erlang:send({Name, N}, Message, [noconnect]),
+                    Test ! {stepped, Ref, element(2, Message)}, held_sender(Rest);
+                false -> Test ! {stepped, Ref, nothing}, held_sender(Held)
+            end;
+        {flush, Test, Ref} ->
+            [erlang:send({Name, N}, Message, [noconnect]) || {N, Message, Name} <- Held],
+            Test ! {flushed, Ref}, held_sender([]);
+        terminate -> ok
+    end.
+%% the destination node and the kind of each message held, oldest first
+held(Sender) ->
+    Ref = make_ref(), Sender ! {held, self(), Ref},
+    receive {held, Ref, Held} -> Held after 3000 -> error(held_timeout) end.
+%% sends the oldest message held for N, and returns its kind, or nothing
+step_to(Sender, N) ->
+    Ref = make_ref(), Sender ! {step_to, N, self(), Ref},
+    receive {stepped, Ref, Kind} -> Kind after 3000 -> error(step_timeout) end.
+%% sends everything held; what is held for a node that isn't connected is lost, as on a dropped connection
+flush(Sender) ->
+    Ref = make_ref(), Sender ! {flush, self(), Ref},
+    receive {flushed, Ref} -> ok after 3000 -> error(flush_timeout) end.
+%% runs a function on a node; a peer runs it through its control connection, which doesn't connect it to this node
+on(_Config, N, M, F, Args) when N =:= node() -> apply(M, F, Args);
+on(Config, N, M, F, Args) ->
+    {Peer, N} = lists:keyfind(N, 2, proplists:get_value(peers, Config)),
+    peer:call(Peer, M, F, Args).
+%% splits any two nodes, this one included, without sending anything that would connect them again
+cut(Config, X, Y) ->
+    on(Config, X, erlang, disconnect_node, [Y]),
+    on(Config, Y, erlang, disconnect_node, [X]),
+    wait(fun() -> not lists:member(Y, on(Config, X, syn_registry, subcluster_nodes, [protocol]))
+          andalso not lists:member(X, on(Config, Y, syn_registry, subcluster_nodes, [protocol])) end).
 %% issue #96 as seen on a cluster: the loser's snapshot never reaches the winner, as the connection drops again, and
 %% the bystander still ends up with the winner
 conflict_second_split(Config) ->
@@ -290,6 +344,61 @@ conflict_tie(Config) ->
     wait(fun() -> lists:all(fun(N) -> view(N) =:= {Kept, same} end, [node(), A, B]) end),
     quiescent([node(), A, B]),
     {Kept, same} = view(A), {Kept, same} = view(B), {Kept, same} = view(node()).
+
+%% issue #96 on a larger cluster, with three owners and this suite's resolver, which keeps the older process. This
+%% node, Common, loses its own conflict to A's process, then shows B's newer process while B is cut from A, and B's
+%% process loses on B to Common's process, which Common has already dropped. Once B's process leaves Common, through a
+%% cut between B and Common or through B's message, Common shows A's process again, and so does every node
+three_owners_challenger_cut_off(Config) -> three_owners(Config, cut).
+three_owners_challenger_unregistered(Config) -> three_owners(Config, unregister).
+three_owners(Config, How) ->
+    A = proplists:get_value(a, Config), B = proplists:get_value(b, Config), Common = node(),
+    On = fun(N, M, F, Args) -> on(Config, N, M, F, Args) end,
+    View = fun(N) -> On(N, syn, lookup, [protocol, x]) end,
+    [ok = On(N, syn, set_event_handler, [?MODULE]) || N <- [Common, A, B]],
+    PA = On(A, erlang, spawn, [?MODULE, idle, []]), PB = On(B, erlang, spawn, [?MODULE, idle, []]), PC = pid(Common),
+    cut(Config, A, B), cut(Config, A, Common),
+    SC = install_held_sender(), SB = On(B, ?MODULE, install_held_sender, []),
+    ok = On(A, syn, register, [protocol, x, PA, 1]),
+    ok = syn:register(protocol, x, PC, 2),
+    [{B, sync_register}] = held(SC),
+    %% A and Common connect again: Common's messages to A go through until Common has lost to A's process, while
+    %% those to B wait
+    true = On(A, net_kernel, connect_node, [Common]),
+    ToA = fun Loop(0) -> ct:fail({no_conflict, View(Common), held(SC)});
+              Loop(N) -> case View(Common) of
+                             {PA, 1} -> ok;
+                             _ -> step_to(SC, A), timer:sleep(20), Loop(N - 1)
+                         end end,
+    ok = ToA(200),
+    wait(fun() -> step_to(SC, A) =:= nothing andalso On(A, erlang, process_info,
+            [On(A, erlang, whereis, [syn_registry_protocol]), message_queue_len]) =:= {message_queue_len, 0} end),
+    {PA, 1} = View(A),
+    %% B registers its process, then gets Common's registration of a process that Common has already dropped, and
+    %% B's process loses
+    undefined = View(B),
+    ok = On(B, syn, register, [protocol, x, PB, 3]),
+    sync_register = step_to(SC, B),
+    wait(fun() -> View(B) =:= {PC, 2} end),
+    wait(fun() -> On(B, ?MODULE, held, [SB]) =:= [{Common, sync_register}, {Common, sync_unregister}] end),
+    %% B's registration reaches Common, which shows it as the newer one
+    sync_register = On(B, ?MODULE, step_to, [SB, Common]),
+    wait(fun() -> View(Common) =:= {PB, 3} end),
+    case How of
+        cut -> cut(Config, B, Common);
+        unregister -> sync_unregister = On(B, ?MODULE, step_to, [SB, Common])
+    end,
+    wait(fun() -> View(Common) =:= {PA, 1} end),
+    %% what is still held goes to the nodes still connected, then every node connects again
+    ok = flush(SC), ok = On(B, ?MODULE, flush, [SB]),
+    ok = restore_sender(), ok = On(B, ?MODULE, restore_sender, []),
+    true = net_kernel:connect_node(B),
+    true = On(A, net_kernel, connect_node, [B]),
+    wait(fun() -> lists:all(fun(N) -> lists:sort(On(N, syn_registry, subcluster_nodes, [protocol]))
+                                      =:= lists:sort([Common, A, B] -- [N]) end, [Common, A, B]) end),
+    wait(fun() -> lists:all(fun(N) -> View(N) =:= {PA, 1} end, [Common, A, B]) end),
+    quiescent([Common, A, B]),
+    {PA, 1} = View(A), {PA, 1} = View(B), {PA, 1} = View(Common).
 
 %% a new scope process' handshake arrives before the old one's DOWN, which Erlang allows: the messages are injected to
 %% get this order every time. The node keeps the new one, then finds the live peer again
