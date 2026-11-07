@@ -364,7 +364,7 @@ handle_info(Info, #state{scope = Scope} = State) ->
 %% ----------------------------------------------------------------------------------------------------------
 %% Data callbacks
 %% ----------------------------------------------------------------------------------------------------------
--spec get_local_data(#state{}) -> {ok, Data :: term()} | undefined.
+-spec get_local_data(#state{}) -> {ok, Data :: term()}.
 get_local_data(#state{table_by_name = TableByName}) ->
     %% a node always shows its own registrations
     {ok, get_registry_tuples_for_node(node(), TableByName)}.

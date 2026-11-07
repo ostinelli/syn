@@ -31,14 +31,13 @@
 -export([
     start_link/3,
     subcluster_nodes/2,
-    call/3, call/4,
+    call/3,
     call_ordered/4,
     reply_ordered/2
 ]).
 -export([
     broadcast/2,
     broadcast/3,
-    send_to_node/3,
     is_current_scope/2,
     discover_requester/2,
     send_ordered_result/5
@@ -65,7 +64,6 @@
 
 %% types
 -type requester() :: {node(), ScopePid :: pid() | undefined, ReplyWhen :: applied | handled}.
--export_type([requester/0]).
 
 %% callbacks
 -callback init(#state{}) ->
@@ -83,7 +81,7 @@
     {noreply, #state{}, timeout() | hibernate | {continue, term()}} |
     {stop, Reason :: term(), #state{}}.
 -callback save_remote_data(RemoteNode :: node(), RemoteData :: term(), #state{}) -> any().
--callback get_local_data(#state{}) -> {ok, Data :: term()} | undefined.
+-callback get_local_data(#state{}) -> {ok, Data :: term()}.
 -callback purge_local_data_for_node(Node :: node(), #state{}) -> any().
 
 %% ===================================================================

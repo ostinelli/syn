@@ -4,8 +4,6 @@
         {vsn, "3.4.2"},
         {registered, [
             syn_backbone,
-            syn_pg,
-            syn_registry,
             syn_sup
         ]},
         {applications, [

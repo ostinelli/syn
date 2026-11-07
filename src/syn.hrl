@@ -24,10 +24,6 @@
 %% THE SOFTWARE.
 %% ==========================================================================================================
 %% types
--type syn_cluster_api_version() :: {
-    ApiCall :: atom(),
-    Version :: atom()
-}.
 -type syn_registry_entry() :: {
     Name :: term(),
     Pid :: pid(),

@@ -433,7 +433,7 @@ handle_info(Info, #state{scope = Scope} = State) ->
 %% ----------------------------------------------------------------------------------------------------------
 %% Data callbacks
 %% ----------------------------------------------------------------------------------------------------------
--spec get_local_data(State :: term()) -> {ok, Data :: term()} | undefined.
+-spec get_local_data(State :: term()) -> {ok, Data :: term()}.
 get_local_data(#state{table_by_name = TableByName}) ->
     {ok, get_pg_tuples_for_node(node(), TableByName)}.
 
