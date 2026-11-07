@@ -1,5 +1,7 @@
 PROJECT_DIR:=$(strip $(shell dirname $(realpath $(lastword $(MAKEFILE_LIST)))))
 
+.PHONY: all compile_test clean dialyzer run test proper killzombies bench
+
 all:
 	@rebar3 compile
 
@@ -27,36 +29,29 @@ else
 	-eval 'syn:start().'
 endif
 
-test: compile_test
+test:
 ifdef suite
 	@# 'make test suite=syn_registry_SUITE'
-	ct_run -noinput -dir $(PROJECT_DIR)/test -logdir $(PROJECT_DIR)/test/results \
-	-suite $(suite) \
-	-pa `rebar3 as test path` \
-	-erl_args -config $(PROJECT_DIR)/test/sys
+	rebar3 ct --sname ct --sys_config $(PROJECT_DIR)/test/sys.config --suite $(PROJECT_DIR)/test/$(suite)
 else
-	ct_run -noinput -dir $(PROJECT_DIR)/test -logdir $(PROJECT_DIR)/test/results \
-	-pa `rebar3 as test path` \
-	-erl_args -config $(PROJECT_DIR)/test/sys
+	rebar3 ct --sname ct --sys_config $(PROJECT_DIR)/test/sys.config
 endif
 
-proper: compile_test
+proper:
 ifdef suite
-	ct_run -noinput -dir $(PROJECT_DIR)/test/property -logdir $(PROJECT_DIR)/test/results \
-	-suite $(suite) \
-	-pa `rebar3 as test path` \
-	-erl_args -config $(PROJECT_DIR)/test/sys
+	rebar3 ct --sname ct --sys_config $(PROJECT_DIR)/test/sys.config --dir $(PROJECT_DIR)/test/property \
+	--suite $(PROJECT_DIR)/test/property/$(suite)
 else
-	ct_run -noinput -dir $(PROJECT_DIR)/test/property -logdir $(PROJECT_DIR)/test/results \
-	-pa `rebar3 as test path` \
-	-erl_args -config $(PROJECT_DIR)/test/sys
+	rebar3 ct --sname ct --sys_config $(PROJECT_DIR)/test/sys.config --dir $(PROJECT_DIR)/test/property
 endif
 
 killzombies:
-	@pkill -9 -f beam 2>/dev/null; true
+	@# only the nodes started by the tests, and the test runs themselves
+	@pkill -9 -f "sname (syn_slave_|syn_protocol_|syn_hidden_|syn_prop_|syn_pg_prop_)" 2>/dev/null; true
+	@pkill -9 -f "[r]ebar3 ct --sname ct" 2>/dev/null; true
 	@sleep 1
 	@epmd -daemon
-	@echo "Zombie beam processes killed, epmd restarted."
+	@echo "Test nodes killed, epmd running."
 
 bench: compile_test
 	@erl -pa `rebar3 as test path` \
