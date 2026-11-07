@@ -63,7 +63,9 @@ java -XX:+UseParallelGC -cp tla2tools.jar tlc2.TLC -workers auto -deadlock -clea
 
 `-deadlock` is needed because a run that has used up all its outside actions simply stops, which is expected.
 `-metadir` keeps TLC's files outside the repository, so that they don't get copied into the test build. Give each
-run its own directory when running several at once.
+run its own directory when running several at once, and start them a few seconds apart: TLC writes its standard
+modules to the system's temporary folder as it starts, and a run starting at the same moment as another can fail to
+parse them.
 
 | Config                         | What it covers                                                                   |
 |--------------------------------|----------------------------------------------------------------------------------|
