@@ -435,10 +435,11 @@ get_process_name_for_scope(Handler, Scope) ->
 is_scope_process() ->
     get('$initial_call') =:= {?MODULE, init, 1}.
 
-%% hidden nodes included: they don't get discovered, but they can call a node, which then starts tracking them
+%% visible nodes only: a hidden node isn't discovered, and syncing with it after one of its calls would make it share
+%% data with the nodes it called and no others, so that the nodes disagree. Its calls still get their results
 -spec is_connected(Node :: node()) -> boolean().
 is_connected(Node) ->
-    lists:member(Node, nodes(connected)).
+    lists:member(Node, nodes()).
 
 %% starts treating ScopePid as the scope process of its node, and monitors it: if another one was known for that node,
 %% it restarted, so the data that came from it goes, and so does the DOWN still waiting from its monitor.

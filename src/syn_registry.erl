@@ -317,7 +317,8 @@ handle_info({'3.5', sync_register_reply, ScopePid, Name, Pid, Meta, Time, From},
             end;
 
         false ->
-            %% a scope process this node doesn't know (anymore): the entry comes with its full data
+            %% a scope process this node doesn't know (anymore): the entry comes with its full data, unless this node
+            %% doesn't sync with that one, as with a hidden node
             {ok, {Pid, Meta}}
     end,
     syn_gen_scope:reply_ordered(From, Reply),

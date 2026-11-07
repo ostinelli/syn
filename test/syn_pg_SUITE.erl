@@ -2246,8 +2246,8 @@ three_nodes_remote_join_from_another_scope_process(Config) ->
     [{Pid, meta}] = rpc:call(SlaveNode1, syn, members, [scope_stale, "group"]).
 
 three_nodes_remote_join_from_hidden_node(_Config) ->
-    %% a hidden node doesn't get discovered, but it can make a process of ours join a group: we send it our data with the
-    %% result, so it has the member when the call returns
+    %% a hidden node takes no part in syncing: its call for a process of ours works, but the two nodes don't take each
+    %% other in, so neither has the members the other adds
 
     ok = syn:start(),
     ok = syn:add_node_to_scopes([scope_hidden]),
@@ -2255,7 +2255,12 @@ three_nodes_remote_join_from_hidden_node(_Config) ->
     try
         Pid = syn_test_suite_helper:start_process(),
         ok = rpc:call(HiddenNode, syn, join, [scope_hidden, "group", Pid, meta]),
-        [{Pid, meta}] = rpc:call(HiddenNode, syn, members, [scope_hidden, "group"]),
+        [{Pid, meta}] = syn:members(scope_hidden, "group"),
+        HiddenPid = syn_test_suite_helper:start_process(HiddenNode),
+        ok = rpc:call(HiddenNode, syn, join, [scope_hidden, "group", HiddenPid, meta]),
+        [] = syn:subcluster_nodes(pg, scope_hidden),
+        [] = rpc:call(HiddenNode, syn, subcluster_nodes, [pg, scope_hidden]),
+        [{HiddenPid, meta}] = rpc:call(HiddenNode, syn, members, [scope_hidden, "group"]),
         [{Pid, meta}] = syn:members(scope_hidden, "group")
     after
         peer:stop(PeerPid)

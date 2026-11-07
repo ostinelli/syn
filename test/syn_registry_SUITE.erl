@@ -2200,8 +2200,8 @@ three_nodes_remote_register_with_undiscovered_node(Config) ->
     {Pid, meta} = rpc:call(SlaveNode1, syn, lookup, [scope_stale, "proc"]).
 
 three_nodes_remote_register_from_hidden_node(_Config) ->
-    %% a hidden node doesn't get discovered, but it can register a process of ours: we send it our data with the result,
-    %% so it shows the registration when the call returns
+    %% a hidden node takes no part in syncing: its call for a process of ours works, but the two nodes don't take each
+    %% other in, so neither shows what the other registers
 
     ok = syn:start(),
     ok = syn:add_node_to_scopes([scope_hidden]),
@@ -2209,8 +2209,13 @@ three_nodes_remote_register_from_hidden_node(_Config) ->
     try
         Pid = syn_test_suite_helper:start_process(),
         ok = rpc:call(HiddenNode, syn, register, [scope_hidden, "proc", Pid, meta]),
-        {Pid, meta} = rpc:call(HiddenNode, syn, lookup, [scope_hidden, "proc"]),
-        {Pid, meta} = syn:lookup(scope_hidden, "proc")
+        {Pid, meta} = syn:lookup(scope_hidden, "proc"),
+        HiddenPid = syn_test_suite_helper:start_process(HiddenNode),
+        ok = rpc:call(HiddenNode, syn, register, [scope_hidden, "hidden-proc", HiddenPid, meta]),
+        [] = syn:subcluster_nodes(registry, scope_hidden),
+        [] = rpc:call(HiddenNode, syn, subcluster_nodes, [registry, scope_hidden]),
+        undefined = rpc:call(HiddenNode, syn, lookup, [scope_hidden, "proc"]),
+        undefined = syn:lookup(scope_hidden, "hidden-proc")
     after
         peer:stop(PeerPid)
     end.
