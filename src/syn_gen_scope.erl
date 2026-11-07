@@ -368,9 +368,10 @@ handle_info({'DOWN', MRef, process, Pid, Reason}, #state{
             {noreply, State}
     end;
 
-handle_info({nodedown, _Node}, State) ->
-    %% ignore & wait for monitor DOWN message
-    {noreply, State};
+handle_info({nodedown, RemoteNode}, State) ->
+    %% the node's data is purged on the monitor's DOWN; an answer to a request for it can't come anymore, and the
+    %% nodeup that follows a reconnection asks again
+    {noreply, forget_asked(RemoteNode, State)};
 
 handle_info({nodeup, RemoteNode}, #state{
     handler_log_name = HandlerLogName,
@@ -484,6 +485,11 @@ send_discover(Node, #state{asked = Asked} = State) ->
     send_to_node(Node, {'3.5', discover, self()}, State),
     State#state{asked = [Node | lists:delete(Node, Asked)]}.
 
+%% stops waiting for the data of Node, whose connection dropped
+-spec forget_asked(Node :: node(), #state{}) -> #state{}.
+forget_asked(Node, #state{asked = Asked} = State) ->
+    State#state{asked = lists:delete(Node, Asked)}.
+
 %% asks Node for its data, unless already waiting for it
 -spec ask(Node :: node(), #state{}) -> #state{}.
 ask(Node, #state{asked = Asked} = State) ->
@@ -494,23 +500,78 @@ ask(Node, #state{asked = Asked} = State) ->
 
 -spec sender_loop() -> terminated.
 sender_loop() ->
+    sender_loop(#{}).
+
+%% messages to a node go out in the order they came, and only that order matters. A node whose connection is busy, for
+%% example because it stopped reading from it, would make a plain send wait: its messages wait in its backlog instead,
+%% so that the other nodes, and the results of calls made from them, don't wait for it
+-spec sender_loop(Backlogs :: #{node() => queue:queue({atom(), term()})}) -> terminated.
+sender_loop(Backlogs) ->
+    Backlogs1 = send_backlogs(Backlogs),
+    %% a busy connection gives no notice when it frees up: try again soon
+    Timeout = case map_size(Backlogs1) of
+        0 -> infinity;
+        _ -> 1
+    end,
     receive
         {broadcast, Message, ExcludedNodes, ProcessName, Nodes} ->
-            lists:foreach(fun(RemoteNode) ->
-                send_noconnect({ProcessName, RemoteNode}, Message)
-            end, Nodes -- ExcludedNodes),
-            sender_loop();
+            sender_loop(lists:foldl(fun(RemoteNode, Acc) ->
+                send_in_order(RemoteNode, ProcessName, Message, Acc)
+            end, Backlogs1, Nodes -- ExcludedNodes));
 
         {send_single, RemoteNode, Message, ProcessName} ->
-            send_noconnect({ProcessName, RemoteNode}, Message),
-            sender_loop();
+            sender_loop(send_in_order(RemoteNode, ProcessName, Message, Backlogs1));
 
         terminate ->
+            %% what still waits for a busy connection goes with this process: that node gets the DOWN and syncs again
+            _ = send_backlogs(Backlogs1),
             terminated
+    after Timeout ->
+        sender_loop(Backlogs1)
+    end.
+
+-spec send_in_order(RemoteNode :: node(), ProcessName :: atom(), Message :: term(),
+    Backlogs :: #{node() => queue:queue({atom(), term()})}) -> #{node() => queue:queue({atom(), term()})}.
+send_in_order(RemoteNode, ProcessName, Message, Backlogs) ->
+    case maps:find(RemoteNode, Backlogs) of
+        {ok, Queue} ->
+            Backlogs#{RemoteNode := queue:in({ProcessName, Message}, Queue)};
+
+        error ->
+            case send_noconnect({ProcessName, RemoteNode}, Message) of
+                nosuspend -> Backlogs#{RemoteNode => queue:from_list([{ProcessName, Message}])};
+                _ -> Backlogs
+            end
+    end.
+
+%% sends what each backlog can send without waiting
+-spec send_backlogs(Backlogs :: #{node() => queue:queue({atom(), term()})}) ->
+    #{node() => queue:queue({atom(), term()})}.
+send_backlogs(Backlogs) ->
+    maps:fold(fun(RemoteNode, Queue, Acc) ->
+        case send_queue(RemoteNode, Queue) of
+            empty -> maps:remove(RemoteNode, Acc);
+            Queue1 -> Acc#{RemoteNode := Queue1}
+        end
+    end, Backlogs, Backlogs).
+
+-spec send_queue(RemoteNode :: node(), queue:queue({atom(), term()})) -> empty | queue:queue({atom(), term()}).
+send_queue(RemoteNode, Queue) ->
+    case queue:out(Queue) of
+        {empty, _} ->
+            empty;
+
+        {{value, {ProcessName, Message} = Item}, Rest} ->
+            case send_noconnect({ProcessName, RemoteNode}, Message) of
+                %% back in front of Rest, which keeps the work queue:out did, so a backlog that can't move costs
+                %% the same to try again however long it is
+                nosuspend -> queue:in_r(Item, Rest);
+                _ -> send_queue(RemoteNode, Rest)
+            end
     end.
 
 %% syn never opens a connection: a message to a node that isn't connected is dropped, and that node gets the data again
-%% when it connects
--spec send_noconnect(Dest :: {atom(), node()}, Message :: term()) -> any().
+%% when it connects. A connection too busy to take the message right away gives nosuspend, and the message isn't sent
+-spec send_noconnect(Dest :: {atom(), node()}, Message :: term()) -> ok | noconnect | nosuspend.
 send_noconnect(Dest, Message) ->
-    erlang:send(Dest, Message, [noconnect]).
+    erlang:send(Dest, Message, [noconnect, nosuspend]).

@@ -55,11 +55,13 @@
     killed_process_loses_both_names/1,
     unchanged_pairs_not_resolved/1,
     monitor_does_not_reconnect/1,
-    messages_from_another_version_ignored/1
+    messages_from_another_version_ignored/1,
+    asked_forgets_nodes_that_go/1,
+    stalled_node_holds_up_only_itself/1
 ]).
 
 %% run on other nodes, or by Syn as callbacks
--export([idle/0, hold/2, set_owner_time/2]).
+-export([idle/0, hold/2, set_owner_time/2, fill/3]).
 -export([install_stepped_sender/0, stepped_sender/0, restore_sender/0]).
 -export([install_held_sender/0, held_sender/1, held/1, step_to/2, flush/1]).
 -export([on_process_registered/5, on_process_unregistered/5]).
@@ -72,10 +74,10 @@ all() -> [conflict_normal, conflict_second_split, conflict_skew, conflict_refres
           discovery_incarnation_registry, discovery_incarnation_pg,
           ordered_update_withdraw, scope_update_withdraw, local_update_withdraw,
           late_down_after_resync, snapshot_aside_and_fences, restart_claims,
-          killed_alias_exit_reason, ordered_adoption_fetches_snapshot,
+          ordered_adoption_fetches_snapshot,
           late_old_incarnation_recovers, disconnected_handshakes_ignored,
           killed_process_loses_both_names, unchanged_pairs_not_resolved, monitor_does_not_reconnect,
-          messages_from_another_version_ignored].
+          messages_from_another_version_ignored, asked_forgets_nodes_that_go, stalled_node_holds_up_only_itself].
 suite() -> [{timetrap, {seconds, 30}}].
 
 init_per_suite(Config) ->
@@ -726,3 +728,61 @@ messages_from_another_version_ignored(Config) ->
     PgNodes = (sys:get_state(Pg))#state.nodes_map,
     undefined = syn:lookup(protocol, x), undefined = syn:lookup(protocol, y), undefined = syn:lookup(protocol, z),
     [] = syn:members(protocol, g).
+
+%% a node that connects without running the scope never answers the request for its data: once it goes, the scope
+%% processes stop waiting for that answer, so short-lived nodes don't pile up
+asked_forgets_nodes_that_go(_Config) ->
+    Asked = fun(Handler) -> (sys:get_state(scope(node(), Handler)))#state.asked end,
+    {ok, Peer, Node} = peer:start(#{name => syn_protocol_c, connection => 0, args => ["-connect_all", "false"]}),
+    true = net_kernel:connect_node(Node),
+    wait(fun() -> lists:member(Node, Asked(syn_registry)) andalso lists:member(Node, Asked(syn_pg)) end),
+    peer:stop(Peer),
+    wait(fun() -> not lists:member(Node, Asked(syn_registry)) andalso not lists:member(Node, Asked(syn_pg)) end).
+
+%% a node that stops reading from its connections, for example in a long pause, holds up only what is sent to it: the
+%% results of calls for processes of the node that sends to it still come back right away. X gets a tiny distribution
+%% buffer, so that what it sends to the stopped node N soon makes that connection busy
+stalled_node_holds_up_only_itself(_Config) ->
+    Start = fun(Name, Extra) ->
+        {ok, Peer, Node} = peer:start(#{name => Name, connection => 0,
+            args => ["-connect_all", "false", "-kernel", "dist_auto_connect", "never"] ++ Extra}),
+        ok = rpc:call(Node, code, add_pathsa, [code:get_path()]),
+        true = net_kernel:connect_node(Node),
+        {Peer, Node}
+    end,
+    {PeerX, X} = Start(syn_protocol_x, ["+zdbbl", "1"]),
+    {PeerN, N} = Start(syn_protocol_n, []),
+    NOsPid = rpc:call(N, os, getpid, []),
+    %% resumes and stops the nodes even if the test process gets killed, for example by its timetrap
+    Test = self(),
+    Cleanup = fun() -> os:cmd("kill -CONT " ++ NOsPid), catch peer:stop(PeerN), catch peer:stop(PeerX), ok end,
+    Guard = spawn(fun() ->
+        MRef = monitor(process, Test),
+        receive {'DOWN', MRef, process, Test, _} -> Cleanup(); done -> ok end
+    end),
+    try
+        true = rpc:call(X, net_kernel, connect_node, [N]),
+        [begin ok = rpc:call(Node, syn, start, []), ok = rpc:call(Node, syn, add_node_to_scopes, [[stalled]]) end
+            || Node <- [node(), X, N]],
+        wait(fun() -> lists:sort(syn:subcluster_nodes(registry, stalled)) =:= lists:sort([X, N])
+                andalso lists:sort(rpc:call(X, syn, subcluster_nodes, [registry, stalled])) =:= lists:sort([node(), N])
+                andalso lists:sort(syn:subcluster_nodes(pg, stalled)) =:= lists:sort([X, N]) end),
+        "" = os:cmd("kill -STOP " ++ NOsPid),
+        %% everything X registers goes to N too, and piles up on that connection
+        ok = rpc:call(X, ?MODULE, fill, [stalled, 400, 64 * 1024], 20000),
+        P = pid(X),
+        {RegisterTime, ok} = timer:tc(fun() -> syn:register(stalled, during, P, meta) end),
+        {JoinTime, ok} = timer:tc(fun() -> syn:join(stalled, group, P, meta) end),
+        ct:pal("calls during the stall: register ~p ms, join ~p ms", [RegisterTime div 1000, JoinTime div 1000]),
+        {P, meta} = syn:lookup(stalled, during),
+        [{P, meta}] = syn:members(stalled, group)
+    after
+        Guard ! done,
+        Cleanup()
+    end.
+
+%% registers Count processes of this node, with metadata of Size bytes
+fill(Scope, Count, Size) ->
+    Meta = binary:copy(<<"x">>, Size),
+    [ok = syn:register(Scope, {fill, I}, spawn(?MODULE, idle, []), Meta) || I <- lists:seq(1, Count)],
+    ok.

@@ -90,7 +90,9 @@ the following happens:
 
 #### Messages
   * Everything a scope process sends to other nodes goes through its sender process, so that another node gets it in
-    the order it was sent.
+    the order it was sent. A connection too busy to take a message, for example to a node that stopped reading from
+    it, doesn't hold up the others: the messages for that node wait in order until its connection takes them again,
+    while the other nodes, and the results of their calls, get theirs.
   * Syn's scope processes don't open connections between nodes: a message to a node that isn't connected is dropped,
     and that node gets the data again when it connects. There is one narrow exception: if the connection drops between
     the moment a scope process checks it and the moment it starts monitoring the other node's scope process, Erlang
@@ -110,9 +112,10 @@ the following happens:
 #### Joining
 
   * Just after initialization, every scope process sends a discovery message in format `{'3.5', discover, self()}`
-    to every process with the _same name_ running on all the nodes in the Erlang cluster.
-  * Scope processes monitor node events, so when a new node joins the cluster the same discovery message is sent to the
-    new node.
+    to every process with the _same name_ running on all the visible nodes in the Erlang cluster.
+  * Scope processes monitor node events, so when a new visible node joins the cluster the same discovery message is sent
+    to the new node. A node that never answers it, for example one that doesn't run the scope, stops being waited for
+    when its connection drops.
   * When a scope process receives the discovery message, it replies with its local data with an ack message in format
     `{'3.5', ack_sync, self(), LocalData}`. If it didn't know the scope process that sent it, it starts monitoring it,
     adds its node to the list of the subcluster nodes, and asks it for its own data unless it already did.

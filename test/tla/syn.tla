@@ -459,8 +459,10 @@ Disconnect(n, m) ==
                      IF o = n THEN {c \in pcall[n]: c.caller # m} \cup keptN
                      ELSE IF o = m THEN {c \in pcall[m]: c.caller # n} \cup keptM
                      ELSE pcall[o]]
+    \* an answer to a request can't come over the dropped connection: both stop waiting for one
+    /\ asked' = [asked EXCEPT ![n] = @ \ {m}, ![m] = @ \ {n}]
     /\ counts' = [counts EXCEPT !.disc = @ + 1]
-    /\ UNCHANGED <<alive, own, remote, known, asked, inc, pexit, pnodeup, up, nextPid, resMsgs, held, removed>>
+    /\ UNCHANGED <<alive, own, remote, known, inc, pexit, pnodeup, up, nextPid, resMsgs, held, removed>>
 
 Reconnect(n, m) ==
     /\ n # m
