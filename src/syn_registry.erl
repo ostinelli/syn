@@ -142,7 +142,8 @@ register_or_update(Scope, Name, Pid, MetaOrFun) ->
             Response = case Node =/= node() of
                 true ->
                     %% the scope process of this node applies the result, in order with everything else the process'
-                    %% node sends it, and replies once it has: a lookup on this node right after the call sees it
+                    %% node sends it, and replies once it has: a lookup on this node right after the call sees it,
+                    %% except for the cases in "Calls for a process on another node" in INTERNALS.md
                     syn_gen_scope:call_ordered(?MODULE, Node, Scope,
                         {'3.5', register_or_update_on_node_ordered, Name, Pid, MetaOrFun});
 

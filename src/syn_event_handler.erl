@@ -37,6 +37,19 @@
 %% All of the callbacks, except for `resolve_registry_conflict/4', are called on all the nodes of the cluster.
 %% This allows you to receive events for the processes running on nodes that get shut down, or in case of net splits.
 %% They run in the scope process of the node they are called on, which handles nothing else meanwhile: keep them short.
+%% A registry callback runs in the registry scope process of its scope, and a process group callback in the process
+%% group one. A call to Syn that needs that same scope process can't complete while the callback runs:
+%% <ul>
+%% <li>From the callback itself, registering, updating or unregistering a process of the same node, in the same scope
+%% and kind (registry or process groups), exits. A call for a process on another node works, and returns before the
+%% local node shows the change, unless the scope process of that node is itself waiting for this one, for example in
+%% a callback making the same kind of call back: then neither goes on until one of the calls times out after 5 seconds.
+%% </li>
+%% <li>A process that the callback waits for, and that makes such a call in the same scope and kind, for a process on
+%% any node, waits for the callback in turn: neither goes on until one of the calls times out after 5 seconds. The
+%% operation is done either way, whether the call then returns or exits.</li>
+%% </ul>
+%% To act on an event with Syn, send a message to a process or spawn one, and don't wait for it.
 %%
 %% The argument `Reason' in the callbacks can be:
 %% <ul>

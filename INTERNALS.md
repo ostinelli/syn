@@ -58,6 +58,18 @@ replies to it right away, and the scope process of the calling node applies the 
 Such a call returns the result of the process' node: `race_condition` then only comes from the process' node itself,
 for example for an unregister of a name it holds for another process.
 
+Any other caller waits for the scope process of its node. If that scope process is running a callback that waits for
+the caller, directly or through other processes, neither can go on until one of the calls times out after 5 seconds;
+the process' node does the operation either way, whether the caller's call then returns or exits. Callbacks therefore
+must not wait for processes that call Syn in the same scope and kind (see `syn_event_handler`).
+
+A hidden node takes no part in syncing: it isn't discovered (see Joining below), and scope processes don't sync with
+it, since it is usually connected to some of the nodes only and would make them disagree with the others. A call from a
+hidden node for a process on another node, or to a hidden node for one of its processes, still works: the process'
+node does the operation and the call returns its result, but the calling node doesn't show the change. So an
+unregistration or update of that name from the calling node, which looks the name up locally, returns
+`{error, undefined}`.
+
 ## Scope Subclusters
 Syn implements Scopes, which are a way to create namespaced, logical overlay networks running on top of the Erlang
 distribution cluster. Nodes that belong to the same Scope will form a "subcluster": they will synchronize data

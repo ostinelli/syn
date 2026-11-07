@@ -46,7 +46,9 @@
 %% <ul>
 %% <li>An `error({invalid_scope, Scope})' if the local node has not been added to the specified Scope.</li>
 %% <li>An `error({invalid_remote_scope, Scope, RemoteNode})' if the Pid passed in as variable is running on a
-%% node that has not been added to the specified Scope, or if the remote scope process is temporarily down.</li>
+%% node that has not been added to the specified Scope, if the remote scope process is temporarily down, or if that
+%% node runs a version of Syn that this one doesn't sync with (see "Running different versions together" in the
+%% README).</li>
 %% </ul>
 %% @end
 %% ===================================================================
@@ -171,7 +173,7 @@ subcluster_nodes(pg, Scope) ->
 %% <h3>Elixir</h3>
 %% ```
 %% iex> :syn.set_event_handler(MyCustomEventHandler)
-%% ok
+%% :ok
 %% '''
 %% <h3>Erlang</h3>
 %% ```
@@ -230,8 +232,9 @@ register(Scope, Name, Pid) ->
 %% <li>`taken': name is already registered with another `pid()'.</li>
 %% <li>`not_self': the method is being called from a process other than `self()',
 %% but <a href="options.html#strict_mode">`strict_mode'</a> is enabled.</li>
-%% <li>`race_condition': the `pid()' runs on another node, and meanwhile the name got registered with another process,
-%% which the local node shows instead. This is a rare occasion.</li>
+%% <li>`race_condition': the `pid()' runs on another node, which registered it, but meanwhile the local node got another
+%% process for the name and shows that one instead. Conflict resolution then decides which process keeps the name: the
+%% `pid()' can lose it, and the default resolution kills the process that loses. This is a rare occasion.</li>
 %% </ul>
 %%
 %% <h2>Examples</h2>
@@ -246,7 +249,7 @@ register(Scope, Name, Pid) ->
 %% ```
 %% 1> syn:register(devices, "SN-123-456789", self(), [{meta, one}]).
 %% ok
-%% 2> syn:lookup(devices, "SN-123-456789")
+%% 2> syn:lookup(devices, "SN-123-456789").
 %% {<0.105.0>,[{meta, one}]}
 %% '''
 %%
@@ -263,10 +266,10 @@ register(Scope, Name, Pid) ->
 %% <h2>Examples</h2>
 %% <h3>Elixir</h3>
 %% ```
-%% iex> tuple = {:via, :syn, {:devices, "SN-123-456789"}}.
+%% iex> tuple = {:via, :syn, {:devices, "SN-123-456789"}}
 %% {:via, :syn, {:devices, "SN-123-456789"}}
 %% iex> GenServer.start_link(__MODULE__, [], name: tuple)
-%% {ok, #PID<0.105.0>}
+%% {:ok, #PID<0.105.0>}
 %% iex> GenServer.call(tuple, :your_message)
 %% :your_message
 %% '''
@@ -292,8 +295,13 @@ register(Scope, Name, Pid, Meta) ->
 %% Possible error reasons:
 %% <ul>
 %% <li>`undefined': The Name cannot be found.</li>
-%% <li>`race_condition': the `pid()' runs on another node, and meanwhile the name got registered with another process,
-%% which the local node shows instead. This is a rare occasion.</li>
+%% <li>`not_alive': The registered `pid()' is not alive.</li>
+%% <li>`taken': the process' node has the name registered with another `pid()'.</li>
+%% <li>`not_self': the method is being called from a process other than the registered one,
+%% but <a href="options.html#strict_mode">`strict_mode'</a> is enabled.</li>
+%% <li>`race_condition': the `pid()' runs on another node, which updated it, but meanwhile the local node got another
+%% process for the name and shows that one instead. Conflict resolution then decides which process keeps the name.
+%% This is a rare occasion.</li>
 %% </ul>
 %%
 %% Note: an error in the update fun will be raised in the calling process.
@@ -492,6 +500,9 @@ is_member(Scope, GroupName, Pid) ->
 %% Possible error reasons:
 %% <ul>
 %% <li>`undefined': The `pid()' cannot be found in GroupName.</li>
+%% <li>`not_alive': The `pid()' is not alive.</li>
+%% <li>`not_self': the method is being called from a process other than the member,
+%% but <a href="options.html#strict_mode">`strict_mode'</a> is enabled.</li>
 %% </ul>
 %%
 %% Note: an error in the update fun will be raised in the calling process.

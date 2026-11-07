@@ -62,7 +62,8 @@ java -XX:+UseParallelGC -cp tla2tools.jar tlc2.TLC -workers auto -deadlock -clea
 ```
 
 `-deadlock` is needed because a run that has used up all its outside actions simply stops, which is expected.
-`-metadir` keeps TLC's files outside the repository, so that they don't get copied into the test build.
+`-metadir` keeps TLC's files outside the repository, so that they don't get copied into the test build. Give each
+run its own directory when running several at once.
 
 | Config                         | What it covers                                                                   |
 |--------------------------------|----------------------------------------------------------------------------------|
@@ -78,7 +79,7 @@ java -XX:+UseParallelGC -cp tla2tools.jar tlc2.TLC -workers auto -deadlock -clea
 | `syn_second.cfg`               | A resolver that keeps the claim it gets second when the two have the same time.  |
 | `syn_restart.cfg`              | A scope process restarts and a connection drops.                                 |
 | `syn_restart_call.cfg`         | Two nodes: a scope process restarts, a connection drops, a call from the other.  |
-| `syn_termination*.cfg`         | Message traffic always stops, in four smaller setups.                            |
+| `syn_termination*.cfg`         | Message traffic always stops, checked in four setups.                            |
 
 All of them must report `Model checking completed. No error has been found.` See the comment at the top of each file
 for what it covers.
