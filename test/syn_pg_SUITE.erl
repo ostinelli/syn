@@ -178,7 +178,7 @@ do_init_per_scope(TestGroup, Count, Config) ->
     case syn_test_suite_helper:init_cluster(Count) of
         {error_initializing_cluster, Other} ->
             end_per_group(TestGroup, Config),
-            {skip, Other};
+            ct:fail({could_not_init_cluster, Other});
 
         NodesConfig ->
             NodesConfig ++ Config
@@ -1440,7 +1440,8 @@ three_nodes_multi_call(Config) ->
     ok = rpc:call(SlaveNode2, syn, add_node_to_scopes, [[scope_bc]]),
 
     %% start processes
-    RecipientLoopLate = fun() -> timer:sleep(200), recipient_loop() end,
+    %% a member that doesn't answer before the timeout of the calls below, however long the joins take
+    RecipientLoopLate = fun() -> timer:sleep(5000), recipient_loop() end,
 
     Pid = syn_test_suite_helper:start_process(fun recipient_loop/0),
     Pid2 = syn_test_suite_helper:start_process(RecipientLoopLate),
@@ -1921,13 +1922,9 @@ four_nodes_concurrency(Config) ->
     spawn(SlaveNode2, WorkerFun),
     spawn(SlaveNode3, WorkerFun),
 
-    %% wait for workers done
-    syn_test_suite_helper:assert_received_messages([
-        {done, LocalNode},
-        {done, SlaveNode1},
-        {done, SlaveNode2},
-        {done, SlaveNode3}
-    ]),
+    %% wait for workers done: each runs for several seconds, longer than the usual wait for a message
+    [receive {done, N} -> ok after 60000 -> ct:fail({worker_not_done, N}) end
+        || N <- [LocalNode, SlaveNode1, SlaveNode2, SlaveNode3]],
 
     %% check results are same across network
     syn_test_suite_helper:assert_wait(
@@ -2128,8 +2125,8 @@ three_nodes_stale_snapshot_does_not_undo_remote_leave(Config) ->
     [] = rpc:call(SlaveNode1, syn, members, [scope_stale, "group"]).
 
 three_nodes_late_leave_does_not_undo_remote_join(Config) ->
-    %% the slave removes its process from a group and we add it again right after: the leave the slave sent
-    %% before our call reaches our scope before the join, so it can't remove it
+    %% the slave removes its process from a group and we add it again right after: the slave sends the result of our
+    %% join after the leave it sent before, so the leave reaches our scope first and can't remove the member
 
     SlaveNode1 = proplists:get_value(syn_slave_1, Config),
     ScopePid = start_scope_stale(SlaveNode1),
@@ -2137,14 +2134,15 @@ three_nodes_late_leave_does_not_undo_remote_join(Config) ->
     Pid = syn_test_suite_helper:start_process(SlaveNode1),
     ok = syn:join(scope_stale, "group", Pid, meta),
 
-    %% the slave's leave waits in our scope's queue while we join again
-    ok = sys:suspend(ScopePid),
+    %% the slave's sender holds its leave, then the join's broadcast to the other nodes and its result for us
+    SlaveScopePid = rpc:call(SlaveNode1, erlang, whereis, [syn_pg_scope_stale]),
+    Sender = (rpc:call(SlaveNode1, sys, get_state, [SlaveScopePid]))#state.sender_pid,
+    Resume = syn_test_suite_helper:pause_process(Sender),
     ok = rpc:call(SlaveNode1, syn, leave, [scope_stale, "group", Pid]),
-    wait_for_message_queue_len(ScopePid, 1),
     CallRef = syn_test_suite_helper:run_async(fun() -> syn:join(scope_stale, "group", Pid, new_meta) end),
-    wait_for_message_queue_len(ScopePid, 2),
+    wait_for_message_queue_len(Sender, 3),
     syn_test_suite_helper:assert_async_waiting(CallRef),
-    ok = sys:resume(ScopePid),
+    Resume(),
 
     ok = syn_test_suite_helper:wait_async(CallRef),
     _ = sys:get_state(ScopePid),

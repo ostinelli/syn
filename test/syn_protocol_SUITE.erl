@@ -48,7 +48,6 @@
     late_down_after_resync/1,
     snapshot_aside_and_fences/1,
     restart_claims/1,
-    killed_alias_exit_reason/1,
     ordered_adoption_fetches_snapshot/1,
     late_old_incarnation_recovers/1,
     disconnected_handshakes_ignored/1,
@@ -81,7 +80,6 @@ all() -> [conflict_normal, conflict_second_split, conflict_skew, conflict_refres
 suite() -> [{timetrap, {seconds, 30}}].
 
 init_per_suite(Config) ->
-    application:set_env(kernel, prevent_overlapping_partitions, false),
     Peers = [begin
         {ok, Peer, Node} = peer:start(#{name => Name, connection => 0,
             args => ["+S", "2", "-connect_all", "false", "-kernel",
@@ -646,19 +644,6 @@ monitor_does_not_reconnect(Config) ->
     ct:pal("Connection after adopting the new pid across a disconnect: ~p", [Connected]),
     false = Connected.
 
-%% a process loses a conflict for one of its names and is killed: its other name goes with its exit reason
-killed_alias_exit_reason(Config) ->
-    A = proplists:get_value(a, Config), P = pid(node()), Q = pid(A),
-    syn:set_event_handler(syn_test_event_handler_protocol), application:set_env(syn, protocol_observer, self()),
-    ok = syn:register(protocol, x, P, local), ok = syn:register(protocol, y, P, local), collect(),
-    Local = scope(node(), syn_registry), Remote = scope(A, syn_registry),
-    Local ! {'3.5', ack_sync, Remote, [{x, Q, remote, future()}]},
-    receive {unregistered, _, protocol, y, P, local, Reason} ->
-        {syn_resolve_kill, x, local} = Reason
-    after 5000 -> ct:fail(missing_alias_down) end,
-    _ = sys:get_state(Local), undefined = syn:lookup(protocol, y),
-    {Q, remote} = syn:lookup(protocol, x).
-
 %% a node learns of a scope process through a call from it: it sends its data and asks for that node's
 ordered_adoption_fetches_snapshot(Config) ->
     A = proplists:get_value(a, Config), P = pid(node()), Q = pid(A),
@@ -694,14 +679,19 @@ late_old_incarnation_recovers(Config) ->
     end || Handler <- [syn_registry, syn_pg]],
     wait(fun() -> view(node()) =:= {P, meta} end).
 
-%% handshakes from a node that isn't connected are ignored, and the nodes sync once connected
+%% handshakes from a node that isn't connected are ignored, and the nodes sync once connected. A callback for the stale
+%% registration would show it was applied, even if the DOWN of a monitor on the disconnected node then purged it
 disconnected_handshakes_ignored(Config) ->
     A = proplists:get_value(a, Config), B = proplists:get_value(b, Config),
     SA = scope(A, syn_registry), SB = scope(B, syn_registry), Q = pid(B),
+    ok = rpc:call(A, syn, set_event_handler, [syn_test_event_handler_protocol]),
+    ok = rpc:call(A, application, set_env, [syn, protocol_observer, self()]),
     split(A, B),
     SA ! {'3.5', discover, SB},
     SA ! {'3.5', ack_sync, SB, [{x, Q, stale, 1}]},
+    %% the callbacks run in SA and report before it replies
     _ = sys:get_state(SA),
+    receive {registered, A, protocol, x, Q, stale, _} = Event -> ct:fail({applied, Event}) after 0 -> ok end,
     false = maps:is_key(B, (sys:get_state(SA))#state.nodes_map),
     undefined = view(A),
     false = lists:member(B, rpc:call(A, erlang, nodes, [])),

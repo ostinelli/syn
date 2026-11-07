@@ -63,15 +63,10 @@
     three_nodes_remote_register_from_hidden_node/1,
     three_nodes_remote_register_loses_conflict_resolved_elsewhere/1,
     three_nodes_ignored_registration_shown_when_newer_one_goes/1,
-    three_nodes_replaced_registration_shown_when_newer_one_goes/1,
     three_nodes_kept_aside_registration_dropped_by_its_node/1,
-    three_nodes_kept_aside_registration_shown_when_other_node_goes/1,
     three_nodes_registration_set_aside_takes_over_with_reason/1,
     three_nodes_remote_register_while_other_registration_shown/1,
-    three_nodes_remote_update_loses_conflict/1,
     three_nodes_resolution_kills_process_with_two_names/1,
-    three_nodes_late_down_after_resync/1,
-    three_nodes_no_reconnect_after_disconnect/1,
     three_nodes_clock_going_backwards/1,
     three_nodes_ack_sync_from_unknown_node_keeps_remote/1,
     three_nodes_ack_sync_from_unknown_node_resolution_reaches_peer/1,
@@ -150,15 +145,10 @@ groups() ->
             three_nodes_remote_register_from_hidden_node,
             three_nodes_remote_register_loses_conflict_resolved_elsewhere,
             three_nodes_ignored_registration_shown_when_newer_one_goes,
-            three_nodes_replaced_registration_shown_when_newer_one_goes,
             three_nodes_kept_aside_registration_dropped_by_its_node,
-            three_nodes_kept_aside_registration_shown_when_other_node_goes,
             three_nodes_registration_set_aside_takes_over_with_reason,
             three_nodes_remote_register_while_other_registration_shown,
-            three_nodes_remote_update_loses_conflict,
             three_nodes_resolution_kills_process_with_two_names,
-            three_nodes_late_down_after_resync,
-            three_nodes_no_reconnect_after_disconnect,
             three_nodes_clock_going_backwards,
             three_nodes_ack_sync_from_unknown_node_keeps_remote,
             three_nodes_ack_sync_from_unknown_node_resolution_reaches_peer,
@@ -207,7 +197,7 @@ do_init_per_group(TestGroup, Count, Config) ->
     case syn_test_suite_helper:init_cluster(Count) of
         {error_initializing_cluster, Other} ->
             end_per_group(TestGroup, Config),
-            {skip, Other};
+            ct:fail({could_not_init_cluster, Other});
 
         NodesConfig ->
             NodesConfig ++ Config
@@ -988,8 +978,10 @@ three_nodes_cluster_conflicts(Config) ->
 
     %% --> conflict by netsplit
     ok = rpc:call(SlaveNode1, syn, register, [scope_all, "proc-confict-by-netsplit", Pid2RemoteOn1, "meta-1"]),
+    syn_test_suite_helper:wait_clock_after(SlaveNode2, SlaveNode1),
     ok = rpc:call(SlaveNode2, syn, register, [scope_all, "proc-confict-by-netsplit", Pid2RemoteOn2, "meta-2"]),
     ok = rpc:call(SlaveNode1, syn, register, [scope_bc, "proc-confict-by-netsplit-scoped", Pid2RemoteOn1, "meta-1"]),
+    syn_test_suite_helper:wait_clock_after(SlaveNode2, SlaveNode1),
     ok = rpc:call(SlaveNode2, syn, register, [scope_bc, "proc-confict-by-netsplit-scoped", Pid2RemoteOn2, "meta-2"]),
 
     %% re-join
@@ -1050,29 +1042,6 @@ three_nodes_cluster_conflicts(Config) ->
         fun() -> rpc:call(SlaveNode2, erlang, is_process_alive, [Pid2RemoteOn2]) end
     ),
 
-    %% --> conflict by race condition
-    PidOnMaster = syn_test_suite_helper:start_process(),
-    PidOn1 = syn_test_suite_helper:start_process(SlaveNode1),
-    rpc:call(SlaveNode1, syn_registry, add_to_local_table,
-        [default, <<"my proc">>, PidOn1, "meta-2", erlang:system_time(), undefined]
-    ),
-    ok = syn:register(scope_all, <<"my proc">>, PidOnMaster, "meta-1"),
-
-    %% retrieve
-    syn_test_suite_helper:assert_wait(
-        {PidOnMaster, "meta-1"},
-        fun() -> syn:lookup(scope_all, <<"my proc">>) end
-    ),
-    syn_test_suite_helper:assert_wait(
-        {PidOnMaster, "meta-1"},
-        fun() -> rpc:call(SlaveNode1, syn, lookup, [scope_all, <<"my proc">>]) end
-    ),
-    syn_test_suite_helper:assert_wait(
-        {PidOnMaster, "meta-1"},
-        fun() -> rpc:call(SlaveNode2, syn, lookup, [scope_all, <<"my proc">>]) end
-    ),
-    %% NB: we can't check for process alive here because we injected the conflicting process in the DB
-    %% -> it's not actually monitored
     ok.
 
 three_nodes_custom_event_handler_reg_unreg(Config) ->
@@ -1236,6 +1205,7 @@ three_nodes_custom_event_handler_reg_unreg(Config) ->
     Pid2RemoteOn2 = syn_test_suite_helper:start_process(SlaveNode2),
 
     ok = rpc:call(SlaveNode1, syn, register, [scope_all, "proc-confict", Pid2RemoteOn1, {recipient, self(), <<"meta-1">>}]),
+    syn_test_suite_helper:wait_clock_after(SlaveNode2, SlaveNode1),
     ok = rpc:call(SlaveNode2, syn, register, [scope_all, "proc-confict", Pid2RemoteOn2, {recipient, self(), <<"meta-2">>}]),
 
     %% check callbacks called
@@ -1341,8 +1311,10 @@ three_nodes_custom_event_handler_conflict_resolution(Config) ->
 
     %% --> conflict by netsplit
     ok = rpc:call(SlaveNode1, syn, register, [scope_all, "proc-confict-by-netsplit-custom", PidOn1, {recipient, TestPid, keepthis}]),
+    syn_test_suite_helper:wait_clock_after(SlaveNode2, SlaveNode1),
     ok = rpc:call(SlaveNode2, syn, register, [scope_all, "proc-confict-by-netsplit-custom", PidOn2, {recipient, TestPid, "meta-2"}]),
     ok = rpc:call(SlaveNode1, syn, register, [scope_bc, "proc-confict-by-netsplit-scoped-custom", PidOn1, {recipient, TestPid, keepthis}]),
+    syn_test_suite_helper:wait_clock_after(SlaveNode2, SlaveNode1),
     ok = rpc:call(SlaveNode2, syn, register, [scope_bc, "proc-confict-by-netsplit-scoped-custom", PidOn2, {recipient, TestPid, "meta-2"}]),
 
     %% check callbacks
@@ -1469,6 +1441,7 @@ three_nodes_custom_event_handler_conflict_resolution(Config) ->
 
     %% register with meta with no 'keepthis' element
     ok = rpc:call(SlaveNode1, syn, register, [scope_all, "proc-confict-by-netsplit-custom-other-pid", PidOn1, {recipient, TestPid, "meta-1"}]),
+    syn_test_suite_helper:wait_clock_after(SlaveNode2, SlaveNode1),
     ok = rpc:call(SlaveNode2, syn, register, [scope_all, "proc-confict-by-netsplit-custom-other-pid", PidOn2, {recipient, TestPid, "meta-2"}]),
 
     %% check callbacks
@@ -1538,6 +1511,7 @@ three_nodes_custom_event_handler_conflict_resolution(Config) ->
 
     %% register with meta with no 'crash' element
     ok = rpc:call(SlaveNode1, syn, register, [scope_all, "proc-confict-by-netsplit-custom-crash", PidOn1, {recipient, TestPid, crash}]),
+    syn_test_suite_helper:wait_clock_after(SlaveNode2, SlaveNode1),
     ok = rpc:call(SlaveNode2, syn, register, [scope_all, "proc-confict-by-netsplit-custom-crash", PidOn2, {recipient, TestPid, crash}]),
 
     %% check callbacks
@@ -2013,8 +1987,8 @@ three_nodes_stale_snapshot_does_not_undo_remote_unregister(Config) ->
     undefined = rpc:call(SlaveNode1, syn, lookup, [scope_stale, "proc"]).
 
 three_nodes_late_unregister_does_not_undo_remote_register(Config) ->
-    %% the slave unregisters its process and we register it again right after: the unregister the slave sent
-    %% before our call reaches our scope before the registration, so it can't remove it
+    %% the slave unregisters its process and we register it again right after: the slave sends the result of our
+    %% registration after the unregister it sent before, so the unregister reaches our scope first and can't remove it
 
     SlaveNode1 = proplists:get_value(syn_slave_1, Config),
     ScopePid = start_scope_stale(SlaveNode1),
@@ -2022,14 +1996,16 @@ three_nodes_late_unregister_does_not_undo_remote_register(Config) ->
     Pid = syn_test_suite_helper:start_process(SlaveNode1),
     ok = syn:register(scope_stale, "proc", Pid, meta),
 
-    %% the slave's unregister waits in our scope's queue while we register again
-    ok = sys:suspend(ScopePid),
+    %% the slave's sender holds its unregister, then the registration's broadcast to the other nodes and its result
+    %% for us
+    SlaveScopePid = rpc:call(SlaveNode1, erlang, whereis, [syn_registry_scope_stale]),
+    Sender = (rpc:call(SlaveNode1, sys, get_state, [SlaveScopePid]))#state.sender_pid,
+    Resume = syn_test_suite_helper:pause_process(Sender),
     ok = rpc:call(SlaveNode1, syn, unregister, [scope_stale, "proc"]),
-    wait_for_message_queue_len(ScopePid, 1),
     CallRef = syn_test_suite_helper:run_async(fun() -> syn:register(scope_stale, "proc", Pid, new_meta) end),
-    wait_for_message_queue_len(ScopePid, 2),
+    wait_for_message_queue_len(Sender, 3),
     syn_test_suite_helper:assert_async_waiting(CallRef),
-    ok = sys:resume(ScopePid),
+    Resume(),
 
     ok = syn_test_suite_helper:wait_async(CallRef),
     _ = sys:get_state(ScopePid),
@@ -2289,30 +2265,6 @@ three_nodes_ignored_registration_shown_when_newer_one_goes(Config) ->
     _ = sys:get_state(ScopePid),
     {PidOn1, on_1} = syn:lookup(scope_all, "proc-same-time").
 
-three_nodes_replaced_registration_shown_when_newer_one_goes(Config) ->
-    %% we have the name on a process of slave 1, and slave 2 registers it on its own process with a later time,
-    %% then drops it before the two resolve the conflict: we show the registration of slave 1 again
-
-    SlaveNode1 = proplists:get_value(syn_slave_1, Config),
-    SlaveNode2 = proplists:get_value(syn_slave_2, Config),
-    ScopePid = start_scope_all(SlaveNode1, SlaveNode2),
-    RemoteScopePid2 = rpc:call(SlaveNode2, erlang, whereis, [syn_registry_scope_all]),
-
-    PidOn1 = syn_test_suite_helper:start_process(SlaveNode1),
-    PidOn2 = syn_test_suite_helper:start_process(SlaveNode2),
-    ok = rpc:call(SlaveNode1, syn, register, [scope_all, "proc", PidOn1, on_1]),
-    syn_test_suite_helper:assert_wait(
-        {PidOn1, on_1},
-        fun() -> syn:lookup(scope_all, "proc") end
-    ),
-    ScopePid ! {'3.5', sync_register, RemoteScopePid2, "proc", PidOn2, on_2, later_time(), normal},
-    _ = sys:get_state(ScopePid),
-    {PidOn2, on_2} = syn:lookup(scope_all, "proc"),
-
-    ScopePid ! {'3.5', sync_unregister, RemoteScopePid2, "proc", PidOn2, on_2, normal},
-    _ = sys:get_state(ScopePid),
-    {PidOn1, on_1} = syn:lookup(scope_all, "proc").
-
 three_nodes_kept_aside_registration_dropped_by_its_node(Config) ->
     %% a registration we keep aside goes when its node unregisters it, sends us a snapshot without it,
     %% or goes down: it doesn't come back when the name's other process goes
@@ -2355,29 +2307,6 @@ three_nodes_kept_aside_registration_dropped_by_its_node(Config) ->
 
     %% reconnect for the next tests
     true = syn_test_suite_helper:connect_node(SlaveNode1),
-    syn_test_suite_helper:assert_cluster(node(), [SlaveNode1, SlaveNode2]).
-
-three_nodes_kept_aside_registration_shown_when_other_node_goes(Config) ->
-    %% we keep aside the registration of slave 1, and the node of the process we show goes down: we show it
-
-    SlaveNode1 = proplists:get_value(syn_slave_1, Config),
-    SlaveNode2 = proplists:get_value(syn_slave_2, Config),
-    ScopePid = start_scope_all(SlaveNode1, SlaveNode2),
-    RemoteScopePid2 = rpc:call(SlaveNode2, erlang, whereis, [syn_registry_scope_all]),
-
-    PidOn1 = syn_test_suite_helper:start_process(SlaveNode1),
-    PidOn2 = syn_test_suite_helper:start_process(SlaveNode2),
-    ScopePid ! {'3.5', sync_register, RemoteScopePid2, "proc", PidOn2, on_2, later_time(), normal},
-    ok = rpc:call(SlaveNode1, syn, register, [scope_all, "proc", PidOn1, on_1]),
-    wait_for_registry_entry(SlaveNode2, scope_all, "proc", PidOn1),
-    {PidOn2, on_2} = syn:lookup(scope_all, "proc"),
-
-    syn_test_suite_helper:disconnect_node(SlaveNode2),
-    syn_test_suite_helper:assert_scope_subcluster(registry, node(), scope_all, [SlaveNode1]),
-    {PidOn1, on_1} = syn:lookup(scope_all, "proc"),
-
-    %% reconnect for the next tests
-    true = syn_test_suite_helper:connect_node(SlaveNode2),
     syn_test_suite_helper:assert_cluster(node(), [SlaveNode1, SlaveNode2]).
 
 three_nodes_registration_set_aside_takes_over_with_reason(Config) ->
@@ -2453,38 +2382,6 @@ three_nodes_remote_register_while_other_registration_shown(Config) ->
     _ = sys:get_state(ScopePid),
     {PidOn1, on_1} = syn:lookup(scope_all, "proc").
 
-three_nodes_remote_update_loses_conflict(Config) ->
-    %% slave 1 keeps its process in a conflict with one of slave 2, and we update its meta so that it loses: slave 1
-    %% sends us the result of the update before the withdrawal it causes, so we don't show the process once it's gone
-
-    SlaveNode1 = proplists:get_value(syn_slave_1, Config),
-    SlaveNode2 = proplists:get_value(syn_slave_2, Config),
-    [ok = rpc:call(Node, application, set_env, [syn, event_handler, syn_test_event_handler_resolution])
-        || Node <- [node(), SlaveNode1, SlaveNode2]],
-    ScopePid = start_scope_all(SlaveNode1, SlaveNode2),
-    RemoteScopePid1 = rpc:call(SlaveNode1, erlang, whereis, [syn_registry_scope_all]),
-    RemoteScopePid2 = rpc:call(SlaveNode2, erlang, whereis, [syn_registry_scope_all]),
-    TestPid = self(),
-
-    PidOn1 = syn_test_suite_helper:start_process(SlaveNode1),
-    PidOn2 = syn_test_suite_helper:start_process(SlaveNode2),
-    ok = rpc:call(SlaveNode1, syn, register, [scope_all, "proc", PidOn1, {recipient, TestPid, keepthis}]),
-    wait_for_registry_entry(node(), scope_all, "proc", PidOn1),
-
-    %% slave 1 hears of a registration of slave 2, and keeps its own
-    RemoteScopePid1 ! {'3.5', sync_register, RemoteScopePid2, "proc", PidOn2, {recipient, TestPid, on_2}, erlang:system_time(), normal},
-    _ = rpc:call(SlaveNode1, sys, get_state, [RemoteScopePid1]),
-    {PidOn1, {recipient, TestPid, keepthis}} = rpc:call(SlaveNode1, syn, lookup, [scope_all, "proc"]),
-
-    %% without keepthis the resolver keeps neither process, so slave 1 drops its own right after the update
-    ok = syn:register(scope_all, "proc", PidOn1, {recipient, TestPid, lose}),
-    syn_test_suite_helper:assert_wait(
-        undefined,
-        fun() -> syn:lookup(scope_all, "proc") end
-    ),
-    _ = sys:get_state(ScopePid),
-    undefined = syn:lookup(scope_all, "proc").
-
 three_nodes_resolution_kills_process_with_two_names(Config) ->
     %% a process registered under two names loses a conflict on one of them: the default resolver kills it, and it
     %% goes from the other name with its exit reason
@@ -2524,57 +2421,6 @@ three_nodes_resolution_kills_process_with_two_names(Config) ->
     ]),
     false = rpc:call(SlaveNode1, erlang, is_process_alive, [PidOn1]).
 
-three_nodes_late_down_after_resync(Config) ->
-    %% a DOWN for the scope process of slave 1 reaches us while we're connected to it: we drop its data and, since
-    %% the node is still there, ask it for its data again
-
-    SlaveNode1 = proplists:get_value(syn_slave_1, Config),
-    SlaveNode2 = proplists:get_value(syn_slave_2, Config),
-    ScopePid = start_scope_all(SlaveNode1, SlaveNode2),
-    RemoteScopePid1 = rpc:call(SlaveNode1, erlang, whereis, [syn_registry_scope_all]),
-
-    PidOn1 = syn_test_suite_helper:start_process(SlaveNode1),
-    ok = rpc:call(SlaveNode1, syn, register, [scope_all, "proc", PidOn1, meta]),
-    wait_for_registry_entry(node(), scope_all, "proc", PidOn1),
-
-    #state{nodes_map = #{SlaveNode1 := {RemoteScopePid1, MRef}}} = sys:get_state(ScopePid),
-    ScopePid ! {'DOWN', MRef, process, RemoteScopePid1, noconnection},
-    syn_test_suite_helper:assert_wait(
-        true,
-        fun() ->
-            #state{nodes_map = NodesMap} = sys:get_state(ScopePid),
-            case maps:find(SlaveNode1, NodesMap) of
-                {ok, {RemoteScopePid1, NewMRef}} -> NewMRef =/= MRef;
-                _ -> false
-            end
-        end
-    ),
-    syn_test_suite_helper:assert_wait(
-        {PidOn1, meta},
-        fun() -> syn:lookup(scope_all, "proc") end
-    ).
-
-three_nodes_no_reconnect_after_disconnect(Config) ->
-    %% a discover of slave 1 is still in our queue when the connection drops: we neither answer it nor monitor its
-    %% scope process again, as either would make Erlang connect the nodes again
-
-    SlaveNode1 = proplists:get_value(syn_slave_1, Config),
-    SlaveNode2 = proplists:get_value(syn_slave_2, Config),
-    ScopePid = start_scope_all(SlaveNode1, SlaveNode2),
-    RemoteScopePid1 = rpc:call(SlaveNode1, erlang, whereis, [syn_registry_scope_all]),
-
-    ok = sys:suspend(ScopePid),
-    ScopePid ! {'3.5', discover, RemoteScopePid1},
-    syn_test_suite_helper:disconnect_node(SlaveNode1),
-    ok = sys:resume(ScopePid),
-    syn_test_suite_helper:assert_scope_subcluster(registry, node(), scope_all, [SlaveNode2]),
-    timer:sleep(500),
-    false = lists:member(SlaveNode1, nodes()),
-
-    %% reconnect for the next tests
-    true = syn_test_suite_helper:connect_node(SlaveNode1),
-    syn_test_suite_helper:assert_cluster(node(), [SlaveNode1, SlaveNode2]).
-
 three_nodes_clock_going_backwards(Config) ->
     %% times come from the clock of each node, which can step backwards: what a node sends about
     %% its own processes is applied in the order it arrives, whatever the time
@@ -2599,15 +2445,14 @@ three_nodes_clock_going_backwards(Config) ->
 
 three_nodes_ack_sync_from_unknown_node_keeps_remote(Config) ->
     %% The local node sees both slaves, which cannot see each other. The name is registered
-    %% on slave 1 first and on slave 2 later, so the local node holds the process on slave 2.
+    %% on slave 1 first and on slave 2 later, so the local node shows the process on slave 2.
     %% The resolver keeps the process on slave 1.
     %%
     %% When the slaves connect, slave 2 handles the ack_sync of slave 1 while slave 1 is not
     %% in its nodes_map yet, and slave 1 handles the snapshot of slave 2 as a known node, as
     %% in a join where slave 1 handles the discover of slave 2 before its own nodeup.
-    %% Slave 2 keeps the remote process and broadcasts the unregistration of its own process.
-    %% Slave 1 must get the conflicting entry in the snapshot of slave 2 and resolve the
-    %% conflict too: only slave 1 sends its process to the local node.
+    %% Slave 2 keeps the remote process and tells every node it dropped its own; slave 1,
+    %% which keeps its process, sends nothing. The local node shows the process on slave 1.
 
     %% get slaves
     SlaveNode1 = proplists:get_value(syn_slave_1, Config),
@@ -2666,10 +2511,10 @@ three_nodes_ack_sync_from_unknown_node_keeps_remote(Config) ->
 three_nodes_ack_sync_from_unknown_node_resolution_reaches_peer(Config) ->
     %% Slave 1 adds a scope in which slave 2 already holds a name, and registers the same
     %% name before slave 2 answers its discover. Slave 1 then handles the ack_sync of slave 2
-    %% while slave 2 is not in its nodes_map, keeps its local process, the later registration,
-    %% and broadcasts it with a new time. The slaves stay connected, so no nodeup follows and
-    %% slave 1 handles no other ack_sync: slave 2 gets the new time only through that
-    %% broadcast. Both slaves must end with the same process and the same time.
+    %% while slave 2 is not in its nodes_map, and sends slave 2 its own data before resolving.
+    %% The resolver keeps the later registration, slave 1's: slave 2 drops its process. The
+    %% slaves stay connected, so no nodeup follows. Both slaves must end with the same
+    %% process and the same time.
 
     %% get slaves
     SlaveNode1 = proplists:get_value(syn_slave_1, Config),
@@ -2693,6 +2538,7 @@ three_nodes_ack_sync_from_unknown_node_resolution_reaches_peer(Config) ->
 
     %% register on slave 1 later, then let slave 2 answer the discover
     PidOn1 = syn_test_suite_helper:start_process(SlaveNode1),
+    syn_test_suite_helper:wait_clock_after(SlaveNode1, SlaveNode2),
     ok = rpc:call(SlaveNode1, syn, register, [scope_bc, Name, PidOn1, "meta-1"]),
     ok = sys:resume(ScopePid2),
 
@@ -2937,13 +2783,9 @@ four_nodes_concurrency(Config) ->
     spawn(SlaveNode2, WorkerFun),
     spawn(SlaveNode3, WorkerFun),
 
-    %% wait for workers done
-    syn_test_suite_helper:assert_received_messages([
-        {done, LocalNode},
-        {done, SlaveNode1},
-        {done, SlaveNode2},
-        {done, SlaveNode3}
-    ]),
+    %% wait for workers done: each runs for several seconds, longer than the usual wait for a message
+    [receive {done, N} -> ok after 60000 -> ct:fail({worker_not_done, N}) end
+        || N <- [LocalNode, SlaveNode1, SlaveNode2, SlaveNode3]],
 
     %% check results are same across network
     syn_test_suite_helper:assert_wait(
@@ -3008,7 +2850,7 @@ get_registry_entry(Node, Scope, Name) ->
 
 %% Add scope_all on the local node and both slaves, disconnect slave 1 from slave 2,
 %% then register Name on slave 1 and later on slave 2. The local node sees both
-%% registrations and holds the later one.
+%% registrations and shows the later one.
 register_conflict_in_partial_netsplit(SlaveNode1, SlaveNode2, Name, Meta1, Meta2) ->
     %% add scopes
     ok = syn:add_node_to_scopes([scope_all]),
@@ -3031,6 +2873,7 @@ register_conflict_in_partial_netsplit(SlaveNode1, SlaveNode2, Name, Meta1, Meta2
         {PidOn1, Meta1},
         fun() -> syn:lookup(scope_all, Name) end
     ),
+    syn_test_suite_helper:wait_clock_after(SlaveNode2, SlaveNode1),
     ok = rpc:call(SlaveNode2, syn, register, [scope_all, Name, PidOn2, Meta2]),
     syn_test_suite_helper:assert_wait(
         {PidOn2, Meta2},

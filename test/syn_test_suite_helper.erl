@@ -27,7 +27,6 @@
 
 %% API
 -export([init_cluster/1, end_cluster/2]).
--export([start_slave/1, stop_slave/1]).
 -export([connect_node/1, disconnect_node/1, disconnect_nodes/2]).
 -export([clean_after_test/0]).
 -export([start_process/0, start_process/1, start_process/2]).
@@ -35,7 +34,6 @@
 -export([run_async/1, run_async/2, wait_async/1, assert_async_waiting/1]).
 -export([wait_cluster_mesh_connected/1]).
 -export([wait_process_name_ready/1, wait_process_name_ready/2]).
--export([wait_message_queue_empty/0]).
 -export([assert_cluster/2]).
 -export([assert_scope_subcluster/4]).
 -export([assert_received_messages/1]).
@@ -43,6 +41,8 @@
 -export([reconnect_cluster/1]).
 -export([assert_empty_queue/0]).
 -export([assert_wait/2]).
+-export([wait_clock_after/2]).
+-export([pause_process/1]).
 
 %% internal
 -export([process_main/0]).
@@ -78,7 +78,7 @@ init_cluster(NodesCount) ->
             NodesConfig;
 
         Other ->
-            ct:pal("*********** Could not get full cluster of ~p nodes, skipping", [NodesCount]),
+            ct:pal("*********** Could not get full cluster of ~p nodes", [NodesCount]),
             {error_initializing_cluster, Other}
     end.
 
@@ -86,7 +86,7 @@ end_cluster(NodesCount, Config) ->
     SlavesCount = NodesCount - 1,
     %% clean
     clean_after_test(),
-    %% shutdown (reconnect first since peer:stop needs distribution with connection => 0)
+    %% shutdown
     lists:foreach(fun(I) ->
         IBin = integer_to_binary(I),
         NodeShortName = list_to_atom(binary_to_list(<<"syn_slave_", IBin/binary>>)),
@@ -107,19 +107,15 @@ start_slave(NodeShortName) ->
     %% controller process that is independent of the calling process and
     %% survives CT process lifecycle changes.
     %%
-    %% connection => 0 starts a detached peer that uses distribution for the
-    %% control channel. This allows passing -kernel dist_auto_connect never
-    %% which would otherwise prevent the standard_io boot handshake.
+    %% connection => 0 controls the peer through a TCP connection of its own instead
+    %% of standard io, so that the peer can run with -kernel dist_auto_connect never.
     {ok, PeerPid, Node} = peer:start(#{
         name => NodeShortName,
         args => ["-connect_all", "false", "-kernel", "dist_auto_connect", "never"],
         connection => 0
     }),
-    %% add syn code path to slaves
-    CodePath = lists:filter(fun(Path) ->
-        nomatch =/= string:find(Path, "/syn/")
-    end, code:get_path()),
-    ok = rpc:call(Node, code, add_pathsa, [CodePath]),
+    %% the slaves run the same code as this node, test modules included
+    ok = rpc:call(Node, code, add_pathsa, [code:get_path()]),
     %% return
     {ok, Node, PeerPid}.
 
@@ -281,16 +277,6 @@ wait_process_name_ready(Name, StartAt) ->
             end
     end.
 
-wait_message_queue_empty() ->
-    timer:sleep(500),
-    syn_test_suite_helper:assert_wait(
-        ok,
-        fun() ->
-            flush_inbox(),
-            syn_test_suite_helper:assert_empty_queue()
-        end
-    ).
-
 assert_cluster(Node, ExpectedNodes) ->
     assert_cluster(Node, ExpectedNodes, os:system_time(millisecond)).
 assert_cluster(Node, ExpectedNodes, StartAt) ->
@@ -384,6 +370,25 @@ assert_empty_queue(UnexpectedMessages) ->
             _ -> ct:fail("~n\tMessage queue was not empty, got:~n\t~p~n", [UnexpectedMessages])
         end
     end.
+
+%% suspends Pid, which can run on another node, until the returned fun is called: a process on its node holds the
+%% suspension, which would end with the process that asked for it
+pause_process(Pid) ->
+    Test = self(),
+    Holder = spawn(node(Pid), fun() ->
+        true = erlang:suspend_process(Pid),
+        Test ! {paused, self()},
+        receive resume -> erlang:resume_process(Pid) end
+    end),
+    receive {paused, Holder} -> ok after 5000 -> ct:fail(pause_timeout) end,
+    fun() -> Holder ! resume, ok end.
+
+%% waits until the clock of Node reads later than the clock of OtherNode does now. The clocks of two nodes on the
+%% same machine can be apart by more than the time between two calls, so a test that needs a registration on Node to be
+%% more recent than one just made on OtherNode waits for this first
+wait_clock_after(Node, OtherNode) ->
+    Time = rpc:call(OtherNode, erlang, system_time, []),
+    assert_wait(true, fun() -> rpc:call(Node, erlang, system_time, []) > Time end).
 
 assert_wait(ExpectedResult, Fun) ->
     assert_wait(ExpectedResult, Fun, os:system_time(millisecond)).
