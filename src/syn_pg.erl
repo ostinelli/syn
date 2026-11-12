@@ -189,59 +189,22 @@ join_or_update(Scope, GroupName, Pid, MetaOrFun) ->
 
         _ ->
             Node = node(Pid),
-            case Node =/= node() of
-                true -> join_or_update_ordered(Scope, Node, GroupName, Pid, MetaOrFun);
-                false -> join_or_update_direct(Scope, Node, GroupName, Pid, MetaOrFun)
+            Response = case Node =/= node() of
+                true ->
+                    %% the scope process of this node applies the result, in order with everything else the process'
+                    %% node sends it, and replies once it has: a lookup on this node right after the call sees it,
+                    %% except for the cases in "Calls for a process on another node" in INTERNALS.md
+                    syn_gen_scope:call_ordered(?MODULE, Node, Scope,
+                        {'3.5', join_or_update_on_node_ordered, GroupName, Pid, MetaOrFun});
+
+                false ->
+                    syn_gen_scope:call(?MODULE, Scope, {'3.5', join_or_update_on_node, GroupName, Pid, MetaOrFun})
+            end,
+            case Response of
+                {ok, {Pid, Meta}} -> {ok, {Pid, Meta}};
+                {error, Reason} -> {error, Reason};
+                {raise, Class, Reason, Stacktrace} -> erlang:raise(Class, Reason, Stacktrace)
             end
-    end.
-
-%% the scope process of this node applies the result, in order with everything else the process' node sends it,
-%% and replies once it has: a lookup on this node right after the call sees it
--spec join_or_update_ordered(Scope :: atom(), Node :: node(), GroupName :: term(), Pid :: pid(), MetaOrFun :: term() | function()) ->
-    {ok, {Pid :: pid(), Meta :: term()}} | {error, Reason :: term()}.
-join_or_update_ordered(Scope, Node, GroupName, Pid, MetaOrFun) ->
-    case syn_gen_scope:call_ordered(?MODULE, Node, Scope, {'3.0', join_or_update_on_node_ordered, GroupName, Pid, MetaOrFun}) of
-        {ok, {Pid, Meta}} ->
-            {ok, {Pid, Meta}};
-
-        {error, Reason} ->
-            {error, Reason};
-
-        {raise, Class, Reason, Stacktrace} ->
-            erlang:raise(Class, Reason, Stacktrace);
-
-        undefined ->
-            %% the process' node runs a version that doesn't know this call
-            join_or_update_direct(Scope, Node, GroupName, Pid, MetaOrFun)
-    end.
-
-%% the process' node replies to the caller directly: used for local processes, and with nodes that don't know
-%% the ordered call
--spec join_or_update_direct(Scope :: atom(), Node :: node(), GroupName :: term(), Pid :: pid(), MetaOrFun :: term() | function()) ->
-    {ok, {Pid :: pid(), Meta :: term()}} | {error, Reason :: term()}.
-join_or_update_direct(Scope, Node, GroupName, Pid, MetaOrFun) ->
-    case syn_gen_scope:call(?MODULE, Node, Scope, {'3.0', join_or_update_on_node, node(), GroupName, Pid, MetaOrFun}) of
-        {ok, {CallbackMethod, PreviousMeta, Meta, Time, TableByName, TableByPid}} when Node =/= node() ->
-            %% update table on caller node immediately so that subsequent calls have an updated pg,
-            %% marked so that a snapshot sent before this change doesn't remove it
-            add_to_local_table(GroupName, Pid, Meta, Time, caller, TableByName, TableByPid),
-            %% callback
-            syn_event_handler:call_event_handler(CallbackMethod, [Scope, GroupName, Pid, Meta, normal]),
-            syn_event_handler:call_event_handler(CallbackMethod, [Scope, GroupName, Pid, PreviousMeta, Meta, normal]),
-            %% return
-            {ok, {Pid, Meta}};
-
-        {ok, {_, _, Meta, _, _, _}} ->
-            {ok, {Pid, Meta}};
-
-        {noop, Meta} ->
-            {ok, {Pid, Meta}};
-
-        {error, Reason} ->
-            {error, Reason};
-
-        {raise, Class, Reason, Stacktrace} ->
-            erlang:raise(Class, Reason, Stacktrace)
     end.
 
 -spec leave(Scope :: atom(), GroupName :: term(), pid()) -> ok | {error, Reason :: term()}.
@@ -250,46 +213,12 @@ leave(Scope, GroupName, Pid) ->
         undefined ->
             error({invalid_scope, Scope});
 
-        TableByName ->
+        _ ->
             Node = node(Pid),
             case Node =/= node() of
-                true -> leave_ordered(Scope, Node, GroupName, Pid, TableByName);
-                false -> leave_direct(Scope, Node, GroupName, Pid, TableByName)
+                true -> syn_gen_scope:call_ordered(?MODULE, Node, Scope, {'3.5', leave_on_node_ordered, GroupName, Pid});
+                false -> syn_gen_scope:call(?MODULE, Scope, {'3.5', leave_on_node, GroupName, Pid})
             end
-    end.
-
--spec leave_ordered(Scope :: atom(), Node :: node(), GroupName :: term(), Pid :: pid(), TableByName :: atom()) ->
-    ok | {error, Reason :: term()}.
-leave_ordered(Scope, Node, GroupName, Pid, TableByName) ->
-    case syn_gen_scope:call_ordered(?MODULE, Node, Scope, {'3.0', leave_on_node_ordered, GroupName, Pid}) of
-        ok ->
-            ok;
-
-        {error, Reason} ->
-            {error, Reason};
-
-        undefined ->
-            %% the process' node runs a version that doesn't know this call
-            leave_direct(Scope, Node, GroupName, Pid, TableByName)
-    end.
-
--spec leave_direct(Scope :: atom(), Node :: node(), GroupName :: term(), Pid :: pid(), TableByName :: atom()) ->
-    ok | {error, Reason :: term()}.
-leave_direct(Scope, Node, GroupName, Pid, TableByName) ->
-    case syn_gen_scope:call(?MODULE, Node, Scope, {'3.0', leave_on_node, node(), GroupName, Pid}) of
-        {ok, {Meta, TableByPid}} when Node =/= node() ->
-            %% remove table on caller node immediately so that subsequent calls have an updated process group
-            remove_from_local_table(GroupName, Pid, TableByName, TableByPid),
-            %% callback
-            syn_event_handler:call_event_handler(on_process_left, [Scope, GroupName, Pid, Meta, normal]),
-            %% return
-            ok;
-
-        {ok, _} ->
-            ok;
-
-        {error, Reason} ->
-            {error, Reason}
     end.
 
 -spec count(Scope :: atom()) -> non_neg_integer().
@@ -392,50 +321,40 @@ init(#state{
     {noreply, #state{}, timeout() | hibernate | {continue, term()}} |
     {stop, Reason :: term(), Reply :: term(), #state{}} |
     {stop, Reason :: term(), #state{}}.
-handle_call({'3.0', join_or_update_on_node, RequesterNode, GroupName, Pid, MetaOrFun}, _From, #state{
-    table_by_name = TableByName,
-    table_by_pid = TableByPid
-} = State) ->
-    case join_or_update_on_node(RequesterNode, GroupName, Pid, MetaOrFun, State) of
-        {ok, {CallbackMethod, PreviousMeta, Meta, Time}} ->
-            {reply, {ok, {CallbackMethod, PreviousMeta, Meta, Time, TableByName, TableByPid}}, State};
-
-        {noop, Meta, _Time} ->
-            {reply, {noop, Meta}, State};
-
-        Error ->
-            {reply, Error, State}
+handle_call({'3.5', join_or_update_on_node, GroupName, Pid, MetaOrFun}, _From, State) ->
+    case join_or_update_on_node(node(), GroupName, Pid, MetaOrFun, State) of
+        {ok, {_, _, Meta, _}} -> {reply, {ok, {Pid, Meta}}, State};
+        {noop, Meta, _Time} -> {reply, {ok, {Pid, Meta}}, State};
+        Error -> {reply, Error, State}
     end;
 
-handle_call({'3.0', join_or_update_on_node_ordered, GroupName, Pid, MetaOrFun, Requester}, From, State) ->
+handle_call({'3.5', join_or_update_on_node_ordered, GroupName, Pid, MetaOrFun, Requester}, From, State) ->
     {RequesterNode, State1} = syn_gen_scope:discover_requester(Requester, State),
     case join_or_update_on_node(RequesterNode, GroupName, Pid, MetaOrFun, State1) of
         {ok, {_, _, Meta, Time}} ->
-            Message = {'3.0', sync_join_reply, GroupName, Pid, Meta, Time},
+            Message = {'3.5', sync_join_reply, self(), GroupName, Pid, Meta, Time},
             syn_gen_scope:send_ordered_result(Requester, Message, {ok, {Pid, Meta}}, From, State1);
 
         {noop, Meta, Time} ->
             %% sent anyway, the requester may be missing the entry
-            Message = {'3.0', sync_join_reply, GroupName, Pid, Meta, Time},
+            Message = {'3.5', sync_join_reply, self(), GroupName, Pid, Meta, Time},
             syn_gen_scope:send_ordered_result(Requester, Message, {ok, {Pid, Meta}}, From, State1);
 
         Error ->
             {reply, Error, State1}
     end;
 
-handle_call({'3.0', leave_on_node, RequesterNode, GroupName, Pid}, _From, #state{
-    table_by_pid = TableByPid
-} = State) ->
-    case leave_on_node(RequesterNode, GroupName, Pid, State) of
-        {ok, Meta} -> {reply, {ok, {Meta, TableByPid}}, State};
+handle_call({'3.5', leave_on_node, GroupName, Pid}, _From, State) ->
+    case leave_on_node(node(), GroupName, Pid, State) of
+        {ok, _Meta} -> {reply, ok, State};
         {error, Reason} -> {reply, {error, Reason}, State}
     end;
 
-handle_call({'3.0', leave_on_node_ordered, GroupName, Pid, Requester}, From, State) ->
+handle_call({'3.5', leave_on_node_ordered, GroupName, Pid, Requester}, From, State) ->
     {RequesterNode, State1} = syn_gen_scope:discover_requester(Requester, State),
     case leave_on_node(RequesterNode, GroupName, Pid, State1) of
         {ok, Meta} ->
-            Message = {'3.0', sync_leave_reply, GroupName, Pid, Meta},
+            Message = {'3.5', sync_leave_reply, self(), GroupName, Pid, Meta},
             syn_gen_scope:send_ordered_result(Requester, Message, ok, From, State1);
 
         {error, Reason} ->
@@ -454,35 +373,33 @@ handle_call(Request, From, #state{scope = Scope} = State) ->
     {noreply, #state{}} |
     {noreply, #state{}, timeout() | hibernate | {continue, term()}} |
     {stop, Reason :: term(), #state{}}.
-handle_info({'3.0', sync_join, GroupName, Pid, Meta, Time, Reason}, #state{nodes_map = NodesMap} = State) ->
-    case maps:is_key(node(Pid), NodesMap) of
-        true ->
-            handle_pg_sync(GroupName, Pid, Meta, Time, Reason, State);
-
-        false ->
-            %% ignore, node not yet discovered (ack_sync not yet received)
-            ok
+handle_info({'3.5', sync_join, ScopePid, GroupName, Pid, Meta, Time, Reason}, State) ->
+    case is_from_owner(ScopePid, Pid, State) of
+        true -> handle_pg_sync(GroupName, Pid, Meta, Time, Reason, State);
+        false -> ok
     end,
     {noreply, State};
 
-handle_info({'3.0', sync_join_reply, GroupName, Pid, Meta, Time, From}, #state{nodes_map = NodesMap} = State) ->
-    case maps:is_key(node(Pid), NodesMap) of
-        true ->
-            handle_pg_sync(GroupName, Pid, Meta, Time, normal, State);
-
-        false ->
-            %% node not yet discovered, its ack_sync brings the entry
-            ok
+handle_info({'3.5', sync_join_reply, ScopePid, GroupName, Pid, Meta, Time, From}, State) ->
+    case is_from_owner(ScopePid, Pid, State) of
+        true -> handle_pg_sync(GroupName, Pid, Meta, Time, normal, State);
+        false -> ok
     end,
     syn_gen_scope:reply_ordered(From, {ok, {Pid, Meta}}),
     {noreply, State};
 
-handle_info({'3.0', sync_leave, GroupName, Pid, Meta, Reason}, State) ->
-    handle_pg_leave_sync(GroupName, Pid, Meta, Reason, State),
+handle_info({'3.5', sync_leave, ScopePid, GroupName, Pid, Meta, Reason}, State) ->
+    case is_from_owner(ScopePid, Pid, State) of
+        true -> handle_pg_leave_sync(GroupName, Pid, Meta, Reason, State);
+        false -> ok
+    end,
     {noreply, State};
 
-handle_info({'3.0', sync_leave_reply, GroupName, Pid, Meta, From}, State) ->
-    handle_pg_leave_sync(GroupName, Pid, Meta, normal, State),
+handle_info({'3.5', sync_leave_reply, ScopePid, GroupName, Pid, Meta, From}, State) ->
+    case is_from_owner(ScopePid, Pid, State) of
+        true -> handle_pg_leave_sync(GroupName, Pid, Meta, normal, State);
+        false -> ok
+    end,
     syn_gen_scope:reply_ordered(From, ok),
     {noreply, State};
 
@@ -503,7 +420,7 @@ handle_info({'DOWN', _MRef, process, Pid, Reason}, #state{
                 %% callback
                 syn_event_handler:call_event_handler(on_process_left, [Scope, GroupName, Pid, Meta, Reason]),
                 %% broadcast
-                syn_gen_scope:broadcast({'3.0', sync_leave, GroupName, Pid, Meta, Reason}, State)
+                syn_gen_scope:broadcast({'3.5', sync_leave, self(), GroupName, Pid, Meta, Reason}, State)
             end, Entries)
     end,
     %% return
@@ -517,7 +434,7 @@ handle_info(Info, #state{scope = Scope} = State) ->
 %% ----------------------------------------------------------------------------------------------------------
 %% Data callbacks
 %% ----------------------------------------------------------------------------------------------------------
--spec get_local_data(State :: term()) -> {ok, Data :: term()} | undefined.
+-spec get_local_data(State :: term()) -> {ok, Data :: term()}.
 get_local_data(#state{table_by_name = TableByName}) ->
     {ok, get_pg_tuples_for_node(node(), TableByName)}.
 
@@ -654,7 +571,7 @@ leave_on_node(RequesterNode, GroupName, Pid, #state{
             %% callback
             syn_event_handler:call_event_handler(on_process_left, [Scope, GroupName, Pid, Meta, normal]),
             %% broadcast
-            syn_gen_scope:broadcast({'3.0', sync_leave, GroupName, Pid, Meta, normal}, [RequesterNode], State),
+            syn_gen_scope:broadcast({'3.5', sync_leave, self(), GroupName, Pid, Meta, normal}, [RequesterNode], State),
             %% return
             {ok, Meta}
     end.
@@ -683,7 +600,7 @@ do_join_on_node(GroupName, Pid, PreviousMeta, Meta, MRef, Reason, RequesterNode,
     syn_event_handler:call_event_handler(CallbackMethod, [Scope, GroupName, Pid, Meta, Reason]),
     syn_event_handler:call_event_handler(CallbackMethod, [Scope, GroupName, Pid, PreviousMeta, Meta, normal]),
     %% broadcast
-    syn_gen_scope:broadcast({'3.0', sync_join, GroupName, Pid, Meta, Time, Reason}, [RequesterNode], State),
+    syn_gen_scope:broadcast({'3.5', sync_join, self(), GroupName, Pid, Meta, Time, Reason}, [RequesterNode], State),
     %% return
     {ok, {CallbackMethod, PreviousMeta, Meta, Time}}.
 
@@ -748,7 +665,7 @@ maybe_demonitor(Pid, TableByPid) ->
     Pid :: pid(),
     Meta :: term(),
     Time :: integer(),
-    MRef :: undefined | reference() | caller,
+    MRef :: undefined | reference(),
     TableByName :: atom(),
     TableByPid :: atom()
 ) -> true.
@@ -792,6 +709,7 @@ purge_pg_for_remote_node(Scope, Node, TableByName, TableByPid) when Node =/= nod
     ets:match_delete(TableByName, {{'_', '_'}, '_', '_', '_', Node}),
     ets:match_delete(TableByPid, {{'_', '_'}, '_', '_', '_', Node}).
 
+%% the full data of a node replaces what this node had from it: the entries it doesn't have anymore go
 -spec reconcile_remote_pg_snapshot(Node :: node(), [syn_pg_tuple()], #state{}) -> ok.
 reconcile_remote_pg_snapshot(Node, PgTuplesOfRemoteNode, #state{
     scope = Scope,
@@ -799,9 +717,9 @@ reconcile_remote_pg_snapshot(Node, PgTuplesOfRemoteNode, #state{
     table_by_pid = TableByPid
 }) ->
     ExistingEntries = ets:select(TableByName, [{
-        {{'$1', '$2'}, '$3', '$4', '$5', Node},
+        {{'$1', '$2'}, '$3', '_', '_', Node},
         [],
-        [{{'$1', '$2', '$3', '$4', '$5'}}]
+        [{{'$1', '$2', '$3'}}]
     }]),
     case ExistingEntries of
         [] ->
@@ -810,9 +728,8 @@ reconcile_remote_pg_snapshot(Node, PgTuplesOfRemoteNode, #state{
         _ ->
             %% gb_sets compares with == like the ordered_set tables do, so 1 and 1.0 are the same group here too
             SnapshotKeys = gb_sets:from_list([{GroupName, Pid} || {GroupName, Pid, _Meta, _Time} <- PgTuplesOfRemoteNode]),
-            SnapshotTime = lists:foldl(fun({_, _, _, Time}, Acc) -> max(Time, Acc) end, 0, PgTuplesOfRemoteNode),
-            lists:foreach(fun({GroupName, Pid, Meta, Time, MRef}) ->
-                case gb_sets:is_element({GroupName, Pid}, SnapshotKeys) orelse is_newer_caller_entry(MRef, Time, SnapshotTime) of
+            lists:foreach(fun({GroupName, Pid, Meta}) ->
+                case gb_sets:is_element({GroupName, Pid}, SnapshotKeys) of
                     true ->
                         ok;
 
@@ -824,12 +741,6 @@ reconcile_remote_pg_snapshot(Node, PgTuplesOfRemoteNode, #state{
                 end
             end, ExistingEntries)
     end.
-
-%% an entry this node wrote itself from the reply to its own call, newer than anything in the snapshot:
-%% the snapshot may have been sent before the call was handled, so it can't know about it yet
--spec is_newer_caller_entry(MRef :: undefined | reference() | caller, Time :: integer(), SnapshotTime :: integer()) -> boolean().
-is_newer_caller_entry(caller, Time, SnapshotTime) -> Time > SnapshotTime;
-is_newer_caller_entry(_, _, _) -> false.
 
 -spec handle_pg_sync(
     GroupName :: term(),
@@ -850,10 +761,6 @@ handle_pg_sync(GroupName, Pid, Meta, Time, Reason, #state{
             add_to_local_table(GroupName, Pid, Meta, Time, undefined, TableByName, TableByPid),
             %% callback
             syn_event_handler:call_event_handler(on_process_joined, [Scope, GroupName, Pid, Meta, Reason]);
-
-        {{_, _}, _, TableTime, caller, _} when Time < TableTime ->
-            %% older than what this node wrote from the reply to its own call: ignore
-            ok;
 
         {{_, _}, TableMeta, _, MRef, _} ->
             %% more recent (because it comes from the same node, which means that it's sequential)
@@ -891,6 +798,11 @@ handle_pg_leave_sync(GroupName, Pid, Meta, Reason, #state{
             %% callback
             syn_event_handler:call_event_handler(on_process_left, [Scope, GroupName, Pid, Meta, Reason])
     end.
+
+%% a message about Pid comes from the scope process this node knows for Pid's node
+-spec is_from_owner(ScopePid :: pid(), Pid :: pid(), #state{}) -> boolean().
+is_from_owner(ScopePid, Pid, State) ->
+    node(ScopePid) =:= node(Pid) andalso syn_gen_scope:is_current_scope(ScopePid, State).
 
 -spec multi_call_and_receive(
     CollectorPid :: pid(),

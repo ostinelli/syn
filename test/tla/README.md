@@ -1,170 +1,108 @@
-# TLA+ Model for Syn Registry
+# TLA+ Model of Syn's Registry
 
-The TLA+ specifications in this directory were authored by [Graham Hay](https://github.com/grahamrhay/syn_tla)
-as a formal model of Syn's distributed registry conflict resolution protocol.
+`syn.tla` describes how Syn keeps registrations in sync between nodes. TLC, the TLA+ model checker, runs it
+through every order in which messages can arrive, with connections dropping, messages getting lost and scope
+processes restarting along the way, and checks that the nodes always end up agreeing.
 
-## The Bug
+The rules it follows are the ones described in `INTERNALS.md` at the root of the repository.
 
-Graham's model found an invariant violation (`AllRegistered`) demonstrating a race condition
-that produces zombie registry entries — entries pointing at dead processes that persist
-indefinitely until the next network partition cycle.
+## What the model contains
 
-The scenario involves two nodes (n1, n2) and a single name "a":
+- **Claims.** A claim is a registration as held by the node that runs the process. Only that node creates, changes or
+  drops its claims. Every node keeps a copy of the claims of the nodes it knows.
+- **What a node shows.** A node that holds its own claim for a name shows it. Otherwise it shows the newest claim it
+  has a copy of, with node names breaking ties. It never hides a claim because it expects another node to drop it.
+- **Conflicts.** When a node holds a claim for a name and gets a copy of another node's claim for it, it asks the
+  resolver which process keeps the name, passing it the two claims in node order, as the other node does. If its own
+  loses, it drops it and tells everyone. If its own wins, it does nothing: the other node will drop its own.
+- **Messages.** Messages from one scope process to one node arrive in the order they were sent, unless some are lost
+  when the connection drops. Nothing else is ordered: messages from different nodes, "went away" notices (DOWN) and
+  "connected" notices (nodeup) can arrive in any order, late included.
+- **Connections.** A connection can drop: what is already in a mailbox stays, what is on the wire is lost, and what a
+  sender hasn't sent yet waits in its queue and is lost if it gets sent before the connection is back. A connection can
+  come back at any moment, whatever reopens it. A scope process ignores a handshake from a node it isn't connected to.
+- **Scope process restarts.** A scope process can crash, and a new one starts later. In between, messages sent to that
+  node are lost. The crash loses its mailbox and what its sender hadn't sent; the claims of the node's own processes
+  survive, as Syn's tables do. Nodes find each other again by asking for each other's data (`discover`) and sending it
+  (`ack_sync`). A node that loses track of another node while still connected to it asks it for its data again.
+- **Calls from another node.** A registration or update called on one node for a process on another is handled by the
+  process' node, which sends the result to the caller's node like any other message. If the caller's scope process is
+  new to it, it sends it its data and asks for the caller node's.
 
-1. Both nodes register "a" while disconnected (n1 at time T1, n2 at time T2, T2 > T1).
-2. The nodes reconnect, exchanging `discover` and `ack_sync` messages.
-3. n2 unregisters "a", but this is queued behind the `discover` message in n2's gen_server mailbox.
-4. n2 processes `discover` from n1 — sends `ack_sync` containing `{a, Pid2, T2}` (still registered at this point).
-5. n1 processes `discover` from n2 — sends `ack_sync` containing `{a, Pid1, T1}`.
-6. n1 processes n2's `ack_sync` — conflict resolution: T2 > T1, remote wins. n1 kills Pid1
-   and replaces its entry with Pid2. **No broadcast is sent for the losing Pid1.**
-7. n2 processes `unregister_on_node` — removes "a", broadcasts `sync_unregister` for Pid2 to n1.
-8. n1 processes `sync_unregister` — removes Pid2. Now n1 has no entry for "a".
-9. n2 processes n1's stale `ack_sync` (containing `{a, Pid1, T1}`) — no existing entry for "a",
-   so `handle_registry_sync` adds it unconditionally. **Zombie entry created.**
+It doesn't model process groups (pg), callbacks, what a call returns, or a process registered under several names.
+A call returns what the caller's node shows once it applies the result, so return values, callbacks and process
+groups are covered by the Erlang test suites. Monitors are modeled by the scope process they watch: the Erlang code
+also checks the monitor reference.
 
-The zombie entry on n2 points at Pid1 (dead on n1). n1 has no record of it.
-No cleanup message will ever be sent because:
+## What it checks
 
-- The monitor for Pid1 on n1 was flushed during conflict resolution (`maybe_demonitor`).
-- n1 already removed Pid1 from its tables; no `DOWN` will fire, no `sync_unregister` will be broadcast.
+Each of these holds once nothing is left to deliver or handle:
 
-Consequences:
+- **Membership**: every running scope process knows the current scope process of every node it's connected to that
+  runs one, and has an exact copy of that node's claims; it has nothing from the other nodes.
+- **Agreement**: with every node connected and running, all nodes show the same claim for each name, the claim shown
+  is still held by its node, and a name that some node holds is shown everywhere.
+- **OneOwner**: with every node connected and running, at most one node holds each name.
+- **ResolutionBounded**: conflicts only ever make a node drop its claim, and each claim is dropped at most once, so
+  there is no endless back and forth.
+- **Survivor**: with a resolver that compares things that don't change during the conflict (Syn's default with clocks
+  that don't go back, or a start time stored in the metadata), a name that got registered, and whose processes were
+  never unregistered and never exited, is still held by someone. Other resolvers can make every node drop it; all
+  nodes still agree on that.
+- **DeliveredInChannel**: the model's own bookkeeping of what reached a mailbox stays consistent.
+- **Termination**: message traffic always stops, and stays stopped, once outside actions stop.
 
-- `syn:lookup(Scope, a)` on n2 returns a dead pid.
-- Registering "a" on n2 returns `{error, taken}`.
-- The zombie persists until the next disconnect/reconnect cycle purges n1's entries on n2.
+## Running it
 
-## The Fix
-
-In `syn_registry.erl`, in the `resolve_conflict/5` function, the "keep remote" path
-(where the remote process wins the conflict) updates the local table and kills the losing
-process, but does not broadcast a `sync_unregister` for the loser. The "keep neither" path
-already does this. The fix adds the missing broadcast:
-
-```erlang
-Pid ->
-    %% -> we keep the remote pid
-    ...
-    %% callbacks
-    syn_event_handler:call_event_handler(on_process_unregistered, ...),
-    syn_event_handler:call_event_handler(on_process_registered, ...),
-    %% broadcast unregister for the losing local pid
-    %% so other nodes clean up stale ack_sync data
-    syn_gen_scope:broadcast(
-        {'3.0', sync_unregister, Name, TablePid, TableMeta, syn_conflict_resolution},
-        State
-    );
-```
-
-This works because of the FIFO guarantee established by PR #87 (routing `ack_sync` through
-the sender process, `sender_loop`). Both the stale `ack_sync` and the corrective `sync_unregister`
-flow through the same node's `sender_loop`, so the receiver always processes the stale data first
-and the cleanup second. The zombie is created momentarily but immediately removed.
-
-Fix applied in [this commit](https://github.com/ostinelli/syn/commit/7716a9885924643ce84bb47cbc36b5efb891e577).
-
-## Calls Made From Another Node
-
-A node can register or unregister a process that lives on another node: the call goes to that node,
-which handles it like one for its own processes and sends the usual `sync_register` / `sync_unregister`
-to the other nodes, but not to the calling node. The calling node gets the result instead in a
-`register_reply` / `unregister_reply`, through the same queue as everything else that node sends it.
-Its scope process applies it like a sync message, conflict resolution included, and only then does
-the call return: a lookup on the calling node right after the call sees it, and nothing the other
-node sent before can undo it. If the calling node keeps the name on another process, because it
-resolved a conflict against this one or has a more recent registration of it, the call returns
-`{error, race_condition}`. A call made from a scope process (i.e. from a
-callback) can't wait for one: it gets its reply right away, and the scope process of the calling node
-applies the result in the same way when it gets to it.
-
-In the model, `Register` and `Unregister` can be called from the node that runs the process or from
-any node that can see it.
-
-When the calling node writes the result into its own table itself, outside of its scope process, the
-write isn't lined up with what the other node sends to that scope. That is what happens with nodes
-running a version that doesn't support the reply above, until they are upgraded. In those cases an older
-`ack_sync` snapshot still waiting in the calling node's scope queue can't remove a name registered
-from another node: the calling node marks what it writes from a reply, and reconciliation keeps a
-marked entry that is newer than everything in the snapshot, since the snapshot can't know about it yet.
-But:
-
-- A name unregistered from another node can come back if an older snapshot still has it.
-- An unregister the other node sent before the call can arrive after it, and remove the entry the call
-  just wrote for the same process.
-- If the calling node processes a `DOWN` for the other node after writing, it drops the entry, and a
-  snapshot sent before the call won't bring it back.
-- If two nodes register the same name on each other's processes at the same time, each one writes
-  the other's process over its own entry, and the conflict is never resolved.
-
-The model doesn't cover these cases.
-
-### DOWN Messages Ahead of Earlier Messages
-
-Erlang only guarantees the order of messages between a pair of processes. When a scope process
-restarts, its `DOWN` and the messages of its sender process come from two different processes, so
-the `DOWN` could reach another node ahead of messages that were sent before it. The model has no
-scope restarts: with `DownOvertakes = TRUE` (see `syn_down_overtakes.cfg`), the `DOWN` of a
-`Disconnect` can land anywhere in the inbox instead.
-
-All the invariants still hold, but `ReadYourWrites` doesn't: if the calling node handles the `DOWN`
-before the reply, it no longer knows the other node and doesn't apply the reply, so the call returns
-`ok` while the name isn't in its table yet. It gets there with the other node's `ack_sync`, once the
-two nodes have found each other again. `syn_down_overtakes.cfg` leaves `ReadYourWrites` out for this
-reason.
-
-## Running the Model Checker
-
-Requires Java 8+:
+Requires Java 11 or later. From this directory:
 
 ```
-cd test/tla
-java -XX:+UseParallelGC -cp tla2tools.jar tlc2.TLC \
-    -metadir /tmp/syn-tla-states \
-    -config syn.cfg -workers auto -cleanup syn.tla
+java -XX:+UseParallelGC -cp tla2tools.jar tlc2.TLC -workers auto -deadlock -cleanup \
+    -metadir /tmp/syn-tla-states -config syn.cfg syn.tla
 ```
 
-Use `-config syn_down_overtakes.cfg` for DOWN messages that can arrive ahead of earlier ones.
+`-deadlock` is needed because a run that has used up all its outside actions simply stops, which is expected.
+`-metadir` keeps TLC's files outside the repository, so that they don't get copied into the test build. Give each
+run its own directory when running several at once, and start them a few seconds apart: TLC writes its standard
+modules to the system's temporary folder as it starts, and a run starting at the same moment as another can fail to
+parse them.
 
-The model checks these properties:
+| Config                         | What it covers                                                                   |
+|--------------------------------|----------------------------------------------------------------------------------|
+| `syn.cfg`                      | Two nodes register the same name, and any connection can drop once.              |
+| `syn_conflict.cfg`             | Issue #96: one connection drops twice, the resolver keeps the older process.     |
+| `syn_three_owners.cfg`         | Issue #96 with three nodes that register the name, the older process kept.      |
+| `syn_calls.cfg`                | A call from another node, clocks that disagree, a conflict lost after an update. |
+| `syn_calls_two.cfg`            | Two calls from other nodes at the same time.                                     |
+| `syn_skew.cfg`                 | Clocks that disagree with Syn's default resolver, an update during the conflict. |
+| `syn_backward.cfg`             | The default resolver with a clock that moves backwards during the conflict.      |
+| `syn_two_names.cfg`            | Two names, a dropped connection, a process exiting.                              |
+| `syn_cyclic.cfg`               | Three nodes register the same name, and no process beats both others.            |
+| `syn_second.cfg`               | A resolver that keeps the claim it gets second when the two have the same time.  |
+| `syn_restart.cfg`              | A scope process restarts and a connection drops.                                 |
+| `syn_restart_call.cfg`         | Two nodes: a scope process restarts, a connection drops, a call from the other.  |
+| `syn_termination*.cfg`         | Message traffic always stops, checked in four setups.                            |
 
-- **AllRegistered** (invariant): When all messages are processed and all nodes are connected,
-  every node's view of registered names matches the global truth.
-- **ThereCanBeOnlyOne** (invariant): No name is registered on two different nodes simultaneously
-  on any single node's view.
-- **ViewsMatchOwners** (invariant): When all messages are processed and all nodes are connected,
-  every node has each name on the node that actually runs it.
-- **AllMessagesProcessed** (liveness): All message queues eventually drain.
-- **ReadYourWrites** (action property): A register call made from another node that returns `ok`
-  has the name in the calling node's table. A reply that the calling node applies always does, so this
-  fails only when the reply comes from a node the calling node doesn't know (anymore).
+All of them must report `Model checking completed. No error has been found.` See the comment at the top of each file
+for what it covers.
 
-The model starts from an already discovered, fully connected subcluster. It then models
-membership loss and rediscovery through disconnect/reconnect cycles. This keeps startup
-discovery out of scope while covering the protocol races that happen after a known
-remote scope process goes down and later rejoins. It only covers the registry, without
-registering a process again with other meta.
+### Checking the checks
 
-A node can only have one unregister per name waiting in its inbox. More would just fail with
-`{error, undefined}`, and without that limit the inbox can grow forever, so the checker never finishes.
+The files in `mutations/` each switch on a mistake the protocol has to avoid. Each one must make TLC report a failure:
+that shows the checks above would catch it.
 
-## Unit Tests
+| Config                                  | The mistake                                                                |
+|-----------------------------------------|----------------------------------------------------------------------------|
+| `mutations/hide_after_conflict.cfg`     | A node that loses a conflict makes the others hide every claim for the name. |
+| `mutations/refresh_winner.cfg`          | The node that keeps its process gives it a new time and tells everyone.    |
+| `mutations/withdraw_before_result.cfg`  | The caller of an update hears of the withdrawal before the update.         |
+| `mutations/no_rediscover.cfg`           | A node that loses track of a connected node doesn't ask it for its data again. |
+| `mutations/no_ask_on_adopt.cfg`         | A node that learns of a new scope process through a call doesn't ask for its data. |
+| `mutations/resolve_by_role.cfg`         | Each node passes the other node's claim to the resolver first and its own second. |
 
-`syn_tests.tla` contains unit tests for the TLA+ helper functions (`AllRegisteredForNode`,
-`AllRegisteredNames`, `Duplicates`, `MergeRegistries`, `MergeRegistrySnapshot`). Run with:
+Run them like the others, with `-config mutations/<name>.cfg`.
 
-```
-java -cp tla2tools.jar tlc2.TLC -metadir /tmp/syn-tla-unit-states \
-    -config syn_tests.cfg syn_tests.tla
-```
+## Credits
 
-The `-metadir` arguments keep TLC's disk state outside the repository. This avoids
-interference with `make test`, which copies the `test/` directory during compilation.
-
-## Copyright
-
-The TLA+ specifications in this directory were authored by
-[Graham Hay](https://github.com/grahamrhay) and are included here with minor modifications
-(the bug fix described above). The original model is available at
-https://github.com/grahamrhay/syn_tla. All rights to the original work remain with
-the author.
+The first TLA+ model of Syn was written by [Graham Hay](https://github.com/grahamrhay/syn_tla): it found a race that left
+registry entries pointing at dead processes. This model builds on that work.

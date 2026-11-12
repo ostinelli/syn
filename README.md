@@ -105,6 +105,20 @@ Ensure that `syn` is started with your application, for example by adding it in 
 ]}.
 ```
 
+### Running different versions together
+Nodes sync only with nodes running the same version of Syn's protocol: a node running Syn 3.5 and a node running an
+earlier version ignore each other's messages, so a cluster with both splits into one group per version, each with its
+own registry and process groups:
+
+* a name can be registered once in each group, so two processes can hold it at the same time, until the nodes of one
+  of the versions stop and their registrations go with them;
+* a call for a process on a node running the other version fails: on a 3.5 node it raises
+  `{invalid_remote_scope, Scope, Node}`;
+* each node logs a warning for every message it gets from the other version.
+
+Upgrade all the nodes of a cluster together: stop them all and start them with the new version, or start the new
+version as a separate cluster (for example with another cookie) and move the traffic to it.
+
 ## Quickstart
 
 ### Registry

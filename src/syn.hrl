@@ -24,16 +24,12 @@
 %% THE SOFTWARE.
 %% ==========================================================================================================
 %% types
--type syn_cluster_api_version() :: {
-    ApiCall :: atom(),
-    Version :: atom()
-}.
 -type syn_registry_entry() :: {
     Name :: term(),
     Pid :: pid(),
     Meta :: term(),
     Time :: integer(),
-    MRef :: undefined | reference() | caller,
+    MRef :: undefined | reference(),
     Node :: node()
 }.
 -type syn_registry_entry_by_pid() :: {
@@ -41,7 +37,7 @@
     Name :: term(),
     Meta :: term(),
     Time :: integer(),
-    MRef :: undefined | reference() | caller,
+    MRef :: undefined | reference(),
     Node :: node()
 }.
 -type syn_registry_tuple() :: {
@@ -57,7 +53,7 @@
     },
     Meta :: term(),
     Time :: integer(),
-    MRef :: undefined | reference() | caller,
+    MRef :: undefined | reference(),
     Node :: node()
 }.
 -type syn_pg_tuple() :: {
@@ -74,7 +70,8 @@
     handler_log_name :: atom(),
     scope = undefined :: atom(),
     process_name :: atom(),
-    nodes_map = #{} :: #{node() => pid()},
+    nodes_map = #{} :: #{node() => {ScopePid :: pid(), MRef :: reference()}},
+    asked = [] :: [node()],
     sender_pid :: pid(),
     table_by_name :: atom(),
     table_by_pid :: atom()

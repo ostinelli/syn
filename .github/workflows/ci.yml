@@ -12,8 +12,8 @@ jobs:
     name: Tests on OTP ${{matrix.otp}} with rebar v${{matrix.rebar3}}
     strategy:
       matrix:
-        otp: ['28', '27']
-        rebar3: ['3.25.0']
+        otp: ['29', '28', '27']
+        rebar3: ['3.27.3']
 
     steps:
       - uses: actions/checkout@v7

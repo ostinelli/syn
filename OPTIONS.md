@@ -73,9 +73,9 @@ With `strict_mode` turned on:
 ```elixir
 iex> pid = spawn(fn -> receive do _ -> :ok end end)
 #PID<0.108.0>
-iex> :syn.register(:users, "hedy", pid).
+iex> :syn.register(:users, "hedy", pid)
 {:error, :not_self}
-iex> :syn.register(:users, "hedy", self()).
+iex> :syn.register(:users, "hedy", self())
 :ok
 ```
 

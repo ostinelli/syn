@@ -59,6 +59,14 @@
 
 -include_lib("kernel/include/logger.hrl").
 
+%% types
+%% this node's registration of a name, with the monitor on its process
+-type own_claim() :: {Pid :: pid(), Meta :: term(), Time :: integer(), MRef :: reference()}.
+%% another node's registration of a name, as that node holds it
+-type claim() :: {Pid :: pid(), Meta :: term(), Time :: integer()}.
+%% a registration of another node that this node doesn't show
+-type aside_entry() :: {Name :: term(), Node :: node(), Pid :: pid(), Meta :: term(), Time :: integer()}.
+
 %% ===================================================================
 %% API
 %% ===================================================================
@@ -131,59 +139,22 @@ register_or_update(Scope, Name, Pid, MetaOrFun) ->
 
         _ ->
             Node = node(Pid),
-            case Node =/= node() of
-                true -> register_or_update_ordered(Scope, Node, Name, Pid, MetaOrFun);
-                false -> register_or_update_direct(Scope, Node, Name, Pid, MetaOrFun)
+            Response = case Node =/= node() of
+                true ->
+                    %% the scope process of this node applies the result, in order with everything else the process'
+                    %% node sends it, and replies once it has: a lookup on this node right after the call sees it,
+                    %% except for the cases in "Calls for a process on another node" in INTERNALS.md
+                    syn_gen_scope:call_ordered(?MODULE, Node, Scope,
+                        {'3.5', register_or_update_on_node_ordered, Name, Pid, MetaOrFun});
+
+                false ->
+                    syn_gen_scope:call(?MODULE, Scope, {'3.5', register_or_update_on_node, Name, Pid, MetaOrFun})
+            end,
+            case Response of
+                {ok, {Pid, Meta}} -> {ok, {Pid, Meta}};
+                {error, Reason} -> {error, Reason};
+                {raise, Class, Reason, Stacktrace} -> erlang:raise(Class, Reason, Stacktrace)
             end
-    end.
-
-%% the scope process of this node applies the result, in order with everything else the process' node sends it,
-%% and replies once it has: a lookup on this node right after the call sees it
--spec register_or_update_ordered(Scope :: atom(), Node :: node(), Name :: term(), Pid :: pid(), MetaOrFun :: term() | function()) ->
-    {ok, {Pid :: pid(), Meta :: term()}} | {error, Reason :: term()}.
-register_or_update_ordered(Scope, Node, Name, Pid, MetaOrFun) ->
-    case syn_gen_scope:call_ordered(?MODULE, Node, Scope, {'3.0', register_or_update_on_node_ordered, Name, Pid, MetaOrFun}) of
-        {ok, {Pid, Meta}} ->
-            {ok, {Pid, Meta}};
-
-        {error, Reason} ->
-            {error, Reason};
-
-        {raise, Class, Reason, Stacktrace} ->
-            erlang:raise(Class, Reason, Stacktrace);
-
-        undefined ->
-            %% the process' node runs a version that doesn't know this call
-            register_or_update_direct(Scope, Node, Name, Pid, MetaOrFun)
-    end.
-
-%% the process' node replies to the caller directly: used for local processes, and with nodes that don't know
-%% the ordered call
--spec register_or_update_direct(Scope :: atom(), Node :: node(), Name :: term(), Pid :: pid(), MetaOrFun :: term() | function()) ->
-    {ok, {Pid :: pid(), Meta :: term()}} | {error, Reason :: term()}.
-register_or_update_direct(Scope, Node, Name, Pid, MetaOrFun) ->
-    case syn_gen_scope:call(?MODULE, Node, Scope, {'3.0', register_or_update_on_node, node(), Name, Pid, MetaOrFun}) of
-        {ok, {CallbackMethod, PreviousMeta, Meta, Time, TableByName, TableByPid}} when Node =/= node() ->
-            %% update table on caller node immediately so that subsequent calls have an updated registry,
-            %% marked so that a snapshot sent before this change doesn't remove it
-            add_to_local_table(Name, Pid, Meta, Time, caller, TableByName, TableByPid),
-            %% callback
-            syn_event_handler:call_event_handler(CallbackMethod, [Scope, Name, Pid, Meta, normal]),
-            syn_event_handler:call_event_handler(CallbackMethod, [Scope, Name, Pid, PreviousMeta, Meta, normal]),
-            %% return
-            {ok, {Pid, Meta}};
-
-        {ok, {_, _, Meta, _, _, _}} ->
-            {ok, {Pid, Meta}};
-
-        {noop, Meta} ->
-            {ok, {Pid, Meta}};
-
-        {error, Reason} ->
-            {error, Reason};
-
-        {raise, Class, Reason, Stacktrace} ->
-            erlang:raise(Class, Reason, Stacktrace)
     end.
 
 -spec unregister(Scope :: atom(), Name :: term()) -> ok | {error, Reason :: term()}.
@@ -198,49 +169,13 @@ unregister(Scope, Name) ->
                 undefined ->
                     {error, undefined};
 
-                {Name, Pid, Meta, _, _, _} ->
+                {Name, Pid, _, _, _, _} ->
                     Node = node(Pid),
                     case Node =/= node() of
-                        true -> unregister_ordered(Scope, Node, Name, Pid, Meta, TableByName);
-                        false -> unregister_direct(Scope, Node, Name, Pid, Meta, TableByName)
+                        true -> syn_gen_scope:call_ordered(?MODULE, Node, Scope, {'3.5', unregister_on_node_ordered, Name, Pid});
+                        false -> syn_gen_scope:call(?MODULE, Scope, {'3.5', unregister_on_node, Name, Pid})
                     end
             end
-    end.
-
--spec unregister_ordered(Scope :: atom(), Node :: node(), Name :: term(), Pid :: pid(), Meta :: term(), TableByName :: atom()) ->
-    ok | {error, Reason :: term()}.
-unregister_ordered(Scope, Node, Name, Pid, Meta, TableByName) ->
-    case syn_gen_scope:call_ordered(?MODULE, Node, Scope, {'3.0', unregister_on_node_ordered, Name, Pid}) of
-        ok ->
-            ok;
-
-        {error, Reason} ->
-            {error, Reason};
-
-        undefined ->
-            %% the process' node runs a version that doesn't know this call
-            unregister_direct(Scope, Node, Name, Pid, Meta, TableByName)
-    end.
-
--spec unregister_direct(Scope :: atom(), Node :: node(), Name :: term(), Pid :: pid(), Meta :: term(), TableByName :: atom()) ->
-    ok | {error, Reason :: term()}.
-unregister_direct(Scope, Node, Name, Pid, Meta, TableByName) ->
-    case syn_gen_scope:call(?MODULE, Node, Scope, {'3.0', unregister_on_node, node(), Name, Pid}) of
-        {ok, TableByPid} when Node =/= node() ->
-            %% remove table on caller node immediately so that subsequent calls have an updated registry
-            remove_from_local_table(Name, Pid, TableByName, TableByPid),
-            %% callback
-            syn_event_handler:call_event_handler(on_process_unregistered, [Scope, Name, Pid, Meta, normal]),
-            %% the process' node doesn't send it to our scope process, which may keep it aside or show it by now
-            syn_gen_scope:send_to_local_scope(?MODULE, Scope, {'3.0', sync_unregister, Name, Pid, Meta, normal}),
-            %% return
-            ok;
-
-        {ok, _} ->
-            ok;
-
-        {error, Reason} ->
-            {error, Reason}
     end.
 
 -spec count(Scope :: atom()) -> non_neg_integer().
@@ -283,8 +218,8 @@ init(#state{
     %% purge remote & rebuild
     purge_registry_for_remote_nodes(Scope, TableByName, TableByPid),
     rebuild_monitors(Scope, TableByName, TableByPid),
-    %% init, with the registrations of other nodes kept aside (see shadow/6)
-    HandlerState = #{shadowed => ets:new(syn_registry_shadowed, [bag])},
+    %% init, with a table for the registrations of other nodes that this node doesn't show (see store/4)
+    HandlerState = #{aside => ets:new(syn_registry_aside, [bag])},
     {ok, HandlerState}.
 
 %% ----------------------------------------------------------------------------------------------------------
@@ -297,50 +232,51 @@ init(#state{
     {noreply, #state{}, timeout() | hibernate | {continue, term()}} |
     {stop, Reason :: term(), Reply :: term(), #state{}} |
     {stop, Reason :: term(), #state{}}.
-handle_call({'3.0', register_or_update_on_node, RequesterNode, Name, Pid, MetaOrFun}, _From, #state{
-    table_by_name = TableByName,
-    table_by_pid = TableByPid
-} = State) ->
-    case register_or_update_on_node(RequesterNode, Name, Pid, MetaOrFun, State) of
-        {ok, {CallbackMethod, PreviousMeta, Meta, Time}} ->
-            {reply, {ok, {CallbackMethod, PreviousMeta, Meta, Time, TableByName, TableByPid}}, State};
+handle_call({'3.5', register_or_update_on_node, Name, Pid, MetaOrFun}, _From, State) ->
+    case register_or_update_on_node(node(), Name, Pid, MetaOrFun, State) of
+        {ok, Meta, _Time} ->
+            %% an update can make this node lose a conflict it was keeping
+            resolve(Name, all, State),
+            {reply, {ok, {Pid, Meta}}, State};
 
         {noop, Meta, _Time} ->
-            {reply, {noop, Meta}, State};
+            {reply, {ok, {Pid, Meta}}, State};
 
         Error ->
             {reply, Error, State}
     end;
 
-handle_call({'3.0', register_or_update_on_node_ordered, Name, Pid, MetaOrFun, Requester}, From, State) ->
+handle_call({'3.5', register_or_update_on_node_ordered, Name, Pid, MetaOrFun, Requester}, From, State) ->
     {RequesterNode, State1} = syn_gen_scope:discover_requester(Requester, State),
     case register_or_update_on_node(RequesterNode, Name, Pid, MetaOrFun, State1) of
-        {ok, {_, _, Meta, Time}} ->
-            Message = {'3.0', sync_register_reply, Name, Pid, Meta, Time},
-            syn_gen_scope:send_ordered_result(Requester, Message, {ok, {Pid, Meta}}, From, State1);
+        {ok, Meta, Time} ->
+            Message = {'3.5', sync_register_reply, self(), Name, Pid, Meta, Time},
+            Result = syn_gen_scope:send_ordered_result(Requester, Message, {ok, {Pid, Meta}}, From, State1),
+            %% an update can make this node lose a conflict it was keeping: the withdrawal goes after the result,
+            %% so that the caller's node doesn't put the registration back after removing it
+            resolve(Name, all, State1),
+            Result;
 
         {noop, Meta, Time} ->
             %% sent anyway, the requester may be missing the entry
-            Message = {'3.0', sync_register_reply, Name, Pid, Meta, Time},
+            Message = {'3.5', sync_register_reply, self(), Name, Pid, Meta, Time},
             syn_gen_scope:send_ordered_result(Requester, Message, {ok, {Pid, Meta}}, From, State1);
 
         Error ->
             {reply, Error, State1}
     end;
 
-handle_call({'3.0', unregister_on_node, RequesterNode, Name, Pid}, _From, #state{
-    table_by_pid = TableByPid
-} = State) ->
-    case unregister_on_node(RequesterNode, Name, Pid, State) of
-        {ok, _Meta} -> {reply, {ok, TableByPid}, State};
+handle_call({'3.5', unregister_on_node, Name, Pid}, _From, State) ->
+    case unregister_on_node(node(), Name, Pid, State) of
+        {ok, _Meta} -> {reply, ok, State};
         {error, Reason} -> {reply, {error, Reason}, State}
     end;
 
-handle_call({'3.0', unregister_on_node_ordered, Name, Pid, Requester}, From, State) ->
+handle_call({'3.5', unregister_on_node_ordered, Name, Pid, Requester}, From, State) ->
     {RequesterNode, State1} = syn_gen_scope:discover_requester(Requester, State),
     case unregister_on_node(RequesterNode, Name, Pid, State1) of
         {ok, Meta} ->
-            Message = {'3.0', sync_unregister_reply, Name, Pid, Meta},
+            Message = {'3.5', sync_unregister_reply, self(), Name, Pid, Meta},
             syn_gen_scope:send_ordered_result(Requester, Message, ok, From, State1);
 
         {error, Reason} ->
@@ -359,53 +295,53 @@ handle_call(Request, From, #state{scope = Scope} = State) ->
     {noreply, #state{}} |
     {noreply, #state{}, timeout() | hibernate | {continue, term()}} |
     {stop, Reason :: term(), #state{}}.
-handle_info({'3.0', sync_register, Name, Pid, Meta, Time, Reason}, #state{nodes_map = NodesMap} = State) ->
-    case maps:is_key(node(Pid), NodesMap) of
-        true ->
-            handle_registry_sync(Name, Pid, Meta, Time, Reason, State);
-
-        false ->
-            %% ignore, node not yet discovered (ack_sync not yet received)
-            ok
+handle_info({'3.5', sync_register, ScopePid, Name, Pid, Meta, Time, Reason}, State) ->
+    case is_from_owner(ScopePid, Pid, State) of
+        true -> put_claim(Name, Pid, Meta, Time, Reason, State);
+        false -> ok
     end,
     {noreply, State};
 
-handle_info({'3.0', sync_register_reply, Name, Pid, Meta, Time, From}, #state{
-    table_by_name = TableByName,
-    nodes_map = NodesMap
+handle_info({'3.5', sync_register_reply, ScopePid, Name, Pid, Meta, Time, From}, #state{
+    table_by_name = TableByName
 } = State) ->
-    Reply = case maps:is_key(node(Pid), NodesMap) of
+    Reply = case is_from_owner(ScopePid, Pid, State) of
         true ->
-            handle_registry_sync(Name, Pid, Meta, Time, normal, State),
+            put_claim(Name, Pid, Meta, Time, normal, State),
             case find_registry_entry_by_name(Name, TableByName) of
                 {Name, Pid, _, _, _, _} ->
                     {ok, {Pid, Meta}};
 
                 _ ->
-                    %% this node keeps the name on another process: it resolved a conflict against this one,
-                    %% or has a more recent registration of it
+                    %% this node shows another registration of the name
                     {error, race_condition}
             end;
 
         false ->
-            %% node not yet discovered, its ack_sync brings the entry
+            %% a scope process this node doesn't know (anymore): the entry comes with its full data, unless this node
+            %% doesn't sync with that one, as with a hidden node
             {ok, {Pid, Meta}}
     end,
     syn_gen_scope:reply_ordered(From, Reply),
     {noreply, State};
 
-handle_info({'3.0', sync_unregister, Name, Pid, Meta, Reason}, State) ->
-    handle_registry_unregister_sync(Name, Pid, Meta, Reason, State),
+handle_info({'3.5', sync_unregister, ScopePid, Name, Pid, _Meta, Reason}, State) ->
+    case is_from_owner(ScopePid, Pid, State) of
+        true -> drop_claim(Name, Pid, Reason, State);
+        false -> ok
+    end,
     {noreply, State};
 
-handle_info({'3.0', sync_unregister_reply, Name, Pid, Meta, From}, State) ->
-    handle_registry_unregister_sync(Name, Pid, Meta, normal, State),
+handle_info({'3.5', sync_unregister_reply, ScopePid, Name, Pid, _Meta, From}, State) ->
+    case is_from_owner(ScopePid, Pid, State) of
+        true -> drop_claim(Name, Pid, normal, State);
+        false -> ok
+    end,
     syn_gen_scope:reply_ordered(From, ok),
     {noreply, State};
 
 handle_info({'DOWN', _MRef, process, Pid, Reason}, #state{
     scope = Scope,
-    table_by_name = TableByName,
     table_by_pid = TableByPid
 } = State) ->
     case find_registry_entries_by_pid(Pid, TableByPid) of
@@ -415,13 +351,7 @@ handle_info({'DOWN', _MRef, process, Pid, Reason}, #state{
 
         Entries ->
             lists:foreach(fun({_, Name, Meta, _, _, _}) ->
-                %% remove from table
-                remove_from_local_table(Name, Pid, TableByName, TableByPid),
-                %% callback
-                syn_event_handler:call_event_handler(on_process_unregistered, [Scope, Name, Pid, Meta, Reason]),
-                %% broadcast
-                syn_gen_scope:broadcast({'3.0', sync_unregister, Name, Pid, Meta, Reason}, State),
-                show_shadowed(Name, State)
+                withdraw(Name, Pid, Meta, Reason, [], State)
             end, Entries)
     end,
     %% return
@@ -435,27 +365,34 @@ handle_info(Info, #state{scope = Scope} = State) ->
 %% ----------------------------------------------------------------------------------------------------------
 %% Data callbacks
 %% ----------------------------------------------------------------------------------------------------------
--spec get_local_data(#state{}) -> {ok, Data :: term()} | undefined.
+-spec get_local_data(#state{}) -> {ok, Data :: term()}.
 get_local_data(#state{table_by_name = TableByName}) ->
+    %% a node always shows its own registrations
     {ok, get_registry_tuples_for_node(node(), TableByName)}.
 
+%% the full data of a node replaces what this node had from it
 -spec save_remote_data(RemoteNode :: node(), RemoteData :: term(), #state{}) -> any().
 save_remote_data(RemoteNode, RegistryTuplesOfRemoteNode, #state{scope = Scope} = State) ->
-    reconcile_remote_registry_snapshot(RemoteNode, RegistryTuplesOfRemoteNode, State),
-    %% insert/update tuples
+    Reason = {syn_remote_scope_node_up, Scope, RemoteNode},
+    SnapshotNames = maps:from_list([{Name, true} || {Name, _, _, _} <- RegistryTuplesOfRemoteNode]),
+    %% what the node doesn't hold anymore
+    lists:foreach(fun({Name, Pid}) ->
+        case maps:is_key(Name, SnapshotNames) of
+            true -> ok;
+            false -> drop_claim(Name, Pid, Reason, State)
+        end
+    end, claimed_by_node(RemoteNode, State)),
+    %% what it holds now
     lists:foreach(fun({Name, Pid, Meta, Time}) ->
-        handle_registry_sync(Name, Pid, Meta, Time, {syn_remote_scope_node_up, Scope, RemoteNode}, State)
+        put_claim(Name, Pid, Meta, Time, Reason, State)
     end, RegistryTuplesOfRemoteNode).
 
 -spec purge_local_data_for_node(Node :: node(), #state{}) -> any().
-purge_local_data_for_node(Node, #state{
-    scope = Scope,
-    table_by_name = TableByName,
-    table_by_pid = TableByPid
-} = State) ->
-    RegistryTuples = purge_registry_for_remote_node(Scope, Node, TableByName, TableByPid),
-    unshadow_node(Node, State),
-    lists:foreach(fun({Name, _, _, _}) -> show_shadowed(Name, State) end, RegistryTuples).
+purge_local_data_for_node(Node, #state{scope = Scope} = State) ->
+    Reason = {syn_remote_scope_node_down, Scope, Node},
+    lists:foreach(fun({Name, Pid}) ->
+        drop_claim(Name, Pid, Reason, State)
+    end, claimed_by_node(Node, State)).
 
 %% ===================================================================
 %% Internal
@@ -503,7 +440,7 @@ do_rebuild_monitors([{Name, Pid, Meta, Time} | T], NewMRefs, Scope, TableByName,
     MetaOrFun :: term() | function(),
     #state{}
 ) ->
-    {ok, {CallbackMethod :: atom(), PreviousMeta :: term(), Meta :: term(), Time :: integer()}} |
+    {ok, Meta :: term(), Time :: integer()} |
     {noop, Meta :: term(), Time :: integer()} |
     {error, Reason :: term()} |
     {raise, Class :: atom(), Reason :: term(), Stacktrace :: list()}.
@@ -523,7 +460,7 @@ register_or_update_on_node(RequesterNode, Name, Pid, MetaOrFun, #state{
                         undefined -> erlang:monitor(process, Pid);  %% process is not monitored yet, add
                         MRef0 -> MRef0
                     end,
-                    do_register_on_node(Name, Pid, undefined, MetaOrFun, MRef, normal, RequesterNode, on_process_registered, State);
+                    do_register_on_node(Name, Pid, MetaOrFun, MRef, RequesterNode, State);
 
                 {Name, Pid, TableMeta, TableTime, MRef, _} when is_function(MetaOrFun) ->
                     %% update with fun
@@ -532,7 +469,7 @@ register_or_update_on_node(RequesterNode, Name, Pid, MetaOrFun, #state{
                             {noop, TableMeta, TableTime};
 
                         Meta ->
-                            do_register_on_node(Name, Pid, TableMeta, Meta, MRef, normal, RequesterNode, on_registry_process_updated, State)
+                            do_register_on_node(Name, Pid, Meta, MRef, RequesterNode, State)
 
                     catch Class:Reason:Stacktrace ->
                               ?LOG_ERROR(#{event => callback_error,
@@ -546,9 +483,9 @@ register_or_update_on_node(RequesterNode, Name, Pid, MetaOrFun, #state{
                     %% same pid, same meta
                     {noop, MetaOrFun, TableTime};
 
-                {Name, Pid, TableMeta, _, MRef, _} ->
+                {Name, Pid, _, _, MRef, _} ->
                     %% same pid, different meta
-                    do_register_on_node(Name, Pid, TableMeta, MetaOrFun, MRef, normal, RequesterNode, on_registry_process_updated, State);
+                    do_register_on_node(Name, Pid, MetaOrFun, MRef, RequesterNode, State);
 
                 _ ->
                     {error, taken}
@@ -561,7 +498,6 @@ register_or_update_on_node(RequesterNode, Name, Pid, MetaOrFun, #state{
 -spec unregister_on_node(RequesterNode :: node(), Name :: term(), Pid :: pid(), #state{}) ->
     {ok, Meta :: term()} | {error, Reason :: term()}.
 unregister_on_node(RequesterNode, Name, Pid, #state{
-    scope = Scope,
     table_by_name = TableByName,
     table_by_pid = TableByPid
 } = State) ->
@@ -572,14 +508,7 @@ unregister_on_node(RequesterNode, Name, Pid, #state{
         {Name, Pid, Meta, _, _, _} ->
             %% demonitor if the process is not registered under other names
             maybe_demonitor(Pid, TableByPid),
-            %% remove from table
-            remove_from_local_table(Name, Pid, TableByName, TableByPid),
-            %% callback
-            syn_event_handler:call_event_handler(on_process_unregistered, [Scope, Name, Pid, Meta, normal]),
-            %% broadcast
-            syn_gen_scope:broadcast({'3.0', sync_unregister, Name, Pid, Meta, normal}, [RequesterNode], State),
-            show_shadowed(Name, State),
-            %% return
+            withdraw(Name, Pid, Meta, normal, [RequesterNode], State),
             {ok, Meta};
 
         _ ->
@@ -590,30 +519,262 @@ unregister_on_node(RequesterNode, Name, Pid, #state{
 -spec do_register_on_node(
     Name :: term(),
     Pid :: pid(),
-    PreviousMeta :: term(),
     Meta :: term(),
-    MRef :: reference() | undefined,
-    Reason :: term(),
+    MRef :: reference(),
     RequesterNode :: node(),
-    CallbackMethod :: atom(),
     #state{}
-) ->
-    {ok, {CallbackMethod :: atom(), PreviousMeta :: term(), Meta :: term(), Time :: integer()}}.
-do_register_on_node(Name, Pid, PreviousMeta, Meta, MRef, Reason, RequesterNode, CallbackMethod, #state{
+) -> {ok, Meta :: term(), Time :: integer()}.
+do_register_on_node(Name, Pid, Meta, MRef, RequesterNode, State) ->
+    Time = erlang:system_time(),
+    case read(Name, State) of
+        {Before, []} ->
+            %% no other node holds the name: what this node shows is its own registration
+            show(Name, Before, {Pid, Meta, Time, MRef}, normal, State);
+
+        Stored ->
+            {_, Others} = claims(Stored),
+            store(Name, {{Pid, Meta, Time, MRef}, Others}, normal, Stored, State)
+    end,
+    syn_gen_scope:broadcast({'3.5', sync_register, self(), Name, Pid, Meta, Time, normal}, [RequesterNode], State),
+    {ok, Meta, Time}.
+
+%% this node drops its own registration of Pid under Name and tells the other nodes, but ExcludedNodes
+-spec withdraw(Name :: term(), Pid :: pid(), Meta :: term(), Reason :: term(), ExcludedNodes :: [node()], #state{}) ->
+    any().
+withdraw(Name, Pid, Meta, Reason, ExcludedNodes, State) ->
+    case read(Name, State) of
+        {Before, []} ->
+            %% no other node holds the name: nothing to show instead
+            show(Name, Before, undefined, Reason, State);
+
+        Stored ->
+            {_, Others} = claims(Stored),
+            store(Name, {undefined, Others}, Reason, Stored, State)
+    end,
+    syn_gen_scope:broadcast({'3.5', sync_unregister, self(), Name, Pid, Meta, Reason}, ExcludedNodes, State).
+
+%% Pid's node holds Pid under Name, with Meta and Time
+-spec put_claim(Name :: term(), Pid :: pid(), Meta :: term(), Time :: integer(), Reason :: term(), #state{}) -> any().
+put_claim(Name, Pid, Meta, Time, Reason, State) ->
+    Node = node(Pid),
+    case read(Name, State) of
+        {{_, Pid, Meta, Time, _, _}, _} ->
+            %% nothing changed
+            ok;
+
+        {Before, []} when Before =:= undefined; element(6, Before) =:= Node ->
+            %% no other node holds the name: what this node shows is this registration
+            show(Name, Before, {Pid, Meta, Time, undefined}, Reason, State);
+
+        Stored ->
+            {Own, Others} = claims(Stored),
+            Claim = {Pid, Meta, Time},
+            case maps:find(Node, Others) of
+                {ok, Claim} ->
+                    %% nothing changed
+                    ok;
+
+                _ ->
+                    store(Name, {Own, Others#{Node => Claim}}, Reason, Stored, State),
+                    case Own of
+                        undefined -> ok;
+                        _ -> resolve(Name, [Node], State)
+                    end
+            end
+    end.
+
+%% Pid's node doesn't hold Pid under Name anymore
+-spec drop_claim(Name :: term(), Pid :: pid(), Reason :: term(), #state{}) -> any().
+drop_claim(Name, Pid, Reason, State) ->
+    case read(Name, State) of
+        {{_, Pid, _, _, _, _} = Before, []} ->
+            %% no other node holds the name: nothing to show instead
+            show(Name, Before, undefined, Reason, State);
+
+        Stored ->
+            {Own, Others} = claims(Stored),
+            Node = node(Pid),
+            case maps:find(Node, Others) of
+                {ok, {Pid, _, _}} -> store(Name, {Own, maps:remove(Node, Others)}, Reason, Stored, State);
+                _ -> ok
+            end
+    end.
+
+%% what this node stores for Name: the entry it shows, and the registrations of other nodes it keeps aside
+-spec read(Name :: term(), #state{}) -> {Shown :: syn_registry_entry() | undefined, Aside :: [aside_entry()]}.
+read(Name, #state{table_by_name = TableByName} = State) ->
+    {find_registry_entry_by_name(Name, TableByName), ets:lookup(aside_table(State), Name)}.
+
+%% the registrations of Name that this node has: its own, if it holds one, and those of other nodes, by node
+-spec claims({Shown :: syn_registry_entry() | undefined, Aside :: [aside_entry()]}) ->
+    {Own :: own_claim() | undefined, Others :: #{node() => claim()}}.
+claims({Shown, Aside}) ->
+    Others = maps:from_list([{Node, {Pid, Meta, Time}} || {_, Node, Pid, Meta, Time} <- Aside]),
+    LocalNode = node(),
+    case Shown of
+        undefined -> {undefined, Others};
+        {_, Pid, Meta, Time, MRef, LocalNode} -> {{Pid, Meta, Time, MRef}, Others};
+        {_, Pid, Meta, Time, _, Node} -> {undefined, Others#{Node => {Pid, Meta, Time}}}
+    end.
+
+%% the names a node holds, as this node has them
+-spec claimed_by_node(Node :: node(), #state{}) -> [{Name :: term(), Pid :: pid()}].
+claimed_by_node(Node, #state{table_by_name = TableByName} = State) ->
+    Shown = ets:select(TableByName, [{{'$1', '$2', '_', '_', '_', Node}, [], [{{'$1', '$2'}}]}]),
+    Aside = ets:select(aside_table(State), [{{'$1', Node, '$2', '_', '_'}, [], [{{'$1', '$2'}}]}]),
+    Shown ++ Aside.
+
+%% stores the registrations of Name that this node has, where it had Stored: the one it shows goes in the tables, the
+%% others aside. A node shows its own registration if it holds one, and otherwise the most recent one, the node name
+%% breaking ties, so that every node shows the same one. The callbacks report the change in what this node shows.
+-spec store(
+    Name :: term(),
+    {Own :: own_claim() | undefined, Others :: #{node() => claim()}},
+    Reason :: term(),
+    Stored :: {Shown :: syn_registry_entry() | undefined, Aside :: [aside_entry()]},
+    #state{}
+) -> any().
+store(Name, {Own, Others}, Reason, {Before, BeforeAside}, State) ->
+    Shown = case Own of
+        undefined -> newest(Others);
+        _ -> Own
+    end,
+    %% aside: only what changed, most names have no registration aside
+    ShownNode = case Shown of
+        undefined -> undefined;
+        {ShownPid, _, _, _} -> node(ShownPid)
+    end,
+    Aside = [{Name, Node, Pid, Meta, Time} || {Node, {Pid, Meta, Time}} <- maps:to_list(Others), Node =/= ShownNode],
+    case Aside =:= BeforeAside of
+        true ->
+            ok;
+
+        false ->
+            AsideTable = aside_table(State),
+            AsideSet = maps:from_keys(Aside, true),
+            BeforeAsideSet = maps:from_keys(BeforeAside, true),
+            [true = ets:delete_object(AsideTable, Entry) || Entry <- BeforeAside, not maps:is_key(Entry, AsideSet)],
+            [true = ets:insert(AsideTable, Entry) || Entry <- Aside, not maps:is_key(Entry, BeforeAsideSet)]
+    end,
+    show(Name, Before, Shown, Reason, State).
+
+%% puts Shown in the tables in place of Before, the entry this node showed for Name, and calls the callbacks for the change
+-spec show(
+    Name :: term(),
+    Before :: syn_registry_entry() | undefined,
+    Shown :: {Pid :: pid(), Meta :: term(), Time :: integer(), MRef :: reference() | undefined} | undefined,
+    Reason :: term(),
+    #state{}
+) -> any().
+show(Name, Before, Shown, Reason, #state{
     scope = Scope,
     table_by_name = TableByName,
     table_by_pid = TableByPid
-} = State) ->
-    %% add to local table
-    Time = erlang:system_time(),
-    add_to_local_table(Name, Pid, Meta, Time, MRef, TableByName, TableByPid),
-    %% callback
-    syn_event_handler:call_event_handler(CallbackMethod, [Scope, Name, Pid, Meta, Reason]),
-    syn_event_handler:call_event_handler(CallbackMethod, [Scope, Name, Pid, PreviousMeta, Meta, normal]),
-    %% broadcast
-    syn_gen_scope:broadcast({'3.0', sync_register, Name, Pid, Meta, Time, Reason}, [RequesterNode], State),
-    %% return
-    {ok, {CallbackMethod, PreviousMeta, Meta, Time}}.
+}) ->
+    case {Before, Shown} of
+        {undefined, undefined} ->
+            ok;
+
+        {undefined, {Pid, Meta, Time, MRef}} ->
+            add_to_local_table(Name, Pid, Meta, Time, MRef, TableByName, TableByPid),
+            syn_event_handler:call_event_handler(on_process_registered, [Scope, Name, Pid, Meta, Reason]);
+
+        {{_, TablePid, TableMeta, _, _, _}, undefined} ->
+            remove_from_local_table(Name, TablePid, TableByName, TableByPid),
+            syn_event_handler:call_event_handler(on_process_unregistered, [Scope, Name, TablePid, TableMeta, Reason]);
+
+        {{_, Pid, Meta, Time, MRef, _}, {Pid, Meta, Time, MRef}} ->
+            ok;
+
+        {{_, Pid, TableMeta, _, _, _}, {Pid, Meta, Time, MRef}} ->
+            add_to_local_table(Name, Pid, Meta, Time, MRef, TableByName, TableByPid),
+            case TableMeta =/= Meta of
+                true ->
+                    syn_event_handler:call_event_handler(on_registry_process_updated, [Scope, Name, Pid, Meta, Reason]),
+                    syn_event_handler:call_event_handler(on_registry_process_updated, [Scope, Name, Pid, TableMeta, Meta, Reason]);
+
+                false ->
+                    ok
+            end;
+
+        {{_, TablePid, TableMeta, _, _, _}, {Pid, Meta, Time, MRef}} ->
+            remove_from_local_table(Name, TablePid, TableByName, TableByPid),
+            add_to_local_table(Name, Pid, Meta, Time, MRef, TableByName, TableByPid),
+            syn_event_handler:call_event_handler(on_process_unregistered, [Scope, Name, TablePid, TableMeta, Reason]),
+            syn_event_handler:call_event_handler(on_process_registered, [Scope, Name, Pid, Meta, Reason])
+    end.
+
+%% the most recent of the other nodes' registrations, the node name breaking ties, or undefined
+-spec newest(Others :: #{node() => claim()}) ->
+    {Pid :: pid(), Meta :: term(), Time :: integer(), MRef :: undefined} | undefined.
+newest(Others) ->
+    Newest = maps:fold(fun
+        (Node, {_, _, Time} = Claim, {NewestTime, NewestNode, _}) when {Time, Node} > {NewestTime, NewestNode} ->
+            {Time, Node, Claim};
+        (_, _, {_, _, _} = Acc) ->
+            Acc;
+        (Node, {_, _, Time} = Claim, undefined) ->
+            {Time, Node, Claim}
+    end, undefined, Others),
+    case Newest of
+        undefined -> undefined;
+        {_, _, {Pid, Meta, Time}} -> {Pid, Meta, Time, undefined}
+    end.
+
+%% this node holds Name and has other nodes' registrations of it: the resolver decides between this node's process and
+%% the registrations of Nodes (all of them when this node's own registration changed, otherwise the ones that changed).
+%% This node keeps its own only if it wins every time, and otherwise drops it and tells everyone; the node that keeps
+%% its own does nothing, since the others drop theirs
+-spec resolve(Name :: term(), Nodes :: [node()] | all, #state{}) -> any().
+resolve(Name, Nodes, #state{scope = Scope, table_by_pid = TableByPid} = State) ->
+    case claims(read(Name, State)) of
+        {{TablePid, TableMeta, TableTime, _}, Others} when map_size(Others) > 0 ->
+            Contenders = case Nodes of
+                all -> maps:values(Others);
+                _ -> [Claim || {Node, Claim} <- maps:to_list(Others), lists:member(Node, Nodes)]
+            end,
+            Outcomes = lists:map(fun({Pid, Meta, _Time} = Claim) ->
+                %% both nodes pass the two registrations in the same order, the one of the node whose name sorts
+                %% first being the first, so that a resolver that only looks at its arguments decides the same on both
+                {First, Second} = case node(Pid) < node(TablePid) of
+                    true -> {Claim, {TablePid, TableMeta, TableTime}};
+                    false -> {{TablePid, TableMeta, TableTime}, Claim}
+                end,
+                {PidToKeep, KillOtherPid} = syn_event_handler:do_resolve_registry_conflict(Scope, Name, First, Second),
+                Keep = case PidToKeep of
+                    TablePid -> local;
+                    Pid -> remote;
+                    Invalid -> {none, Invalid}
+                end,
+                ?LOG_NOTICE(#{handler => ?MODULE_LOG_NAME, scope => Scope,
+                            event => registry_conflict, name => Name,
+                            remote => {Pid, Meta}, local => {TablePid, TableMeta}, keep => Keep}),
+                {Keep, KillOtherPid}
+            end, Contenders),
+            case [KillOtherPid || {Keep, KillOtherPid} <- Outcomes, Keep =/= local] of
+                [] ->
+                    ok;
+
+                Kills ->
+                    maybe_demonitor(TablePid, TableByPid),
+                    case lists:member(true, Kills) of
+                        true -> exit(TablePid, {syn_resolve_kill, Name, TableMeta});
+                        false -> ok
+                    end,
+                    withdraw(Name, TablePid, TableMeta, syn_conflict_resolution, [], State)
+            end;
+
+        _ ->
+            ok
+    end.
+
+%% a message about Pid comes from the scope process this node knows for Pid's node
+-spec is_from_owner(ScopePid :: pid(), Pid :: pid(), #state{}) -> boolean().
+is_from_owner(ScopePid, Pid, State) ->
+    node(ScopePid) =:= node(Pid) andalso syn_gen_scope:is_current_scope(ScopePid, State).
+
+-spec aside_table(#state{}) -> ets:table().
+aside_table(#state{handler_state = #{aside := Aside}}) -> Aside.
 
 -spec get_registry_tuples_for_node(Node :: node(), TableByName :: atom()) -> [syn_registry_tuple()].
 get_registry_tuples_for_node(Node, TableByName) ->
@@ -672,7 +833,7 @@ maybe_demonitor(Pid, TableByPid) ->
     Pid :: pid(),
     Meta :: term(),
     Time :: integer(),
-    MRef :: undefined | reference() | caller,
+    MRef :: undefined | reference(),
     TableByName :: atom(),
     TableByPid :: atom()
 ) -> true.
@@ -693,23 +854,6 @@ remove_from_local_table(Name, Pid, TableByName, TableByPid) ->
     true = ets:match_delete(TableByName, {Name, Pid, '_', '_', '_', '_'}),
     true = ets:match_delete(TableByPid, {Pid, Name, '_', '_', '_', '_'}).
 
--spec update_local_table(
-    Name :: term(),
-    PreviousPid :: pid(),
-    {
-        Pid :: pid(),
-        Meta :: term(),
-        Time :: integer(),
-        MRef :: undefined | reference()
-    },
-    TableByName :: atom(),
-    TableByPid :: atom()
-) -> true.
-update_local_table(Name, PreviousPid, {Pid, Meta, Time, MRef}, TableByName, TableByPid) ->
-    maybe_demonitor(PreviousPid, TableByPid),
-    remove_from_local_table(Name, PreviousPid, TableByName, TableByPid),
-    add_to_local_table(Name, Pid, Meta, Time, MRef, TableByName, TableByPid).
-
 -spec purge_registry_for_remote_nodes(Scope :: atom(), TableByName :: atom(), TableByPid :: atom()) -> any().
 purge_registry_for_remote_nodes(Scope, TableByName, TableByPid) ->
     LocalNode = node(),
@@ -723,8 +867,7 @@ purge_registry_for_remote_nodes(Scope, TableByName, TableByPid) ->
         purge_registry_for_remote_node(Scope, RemoteNode, TableByName, TableByPid)
     end, undefined, RemoteNodes).
 
--spec purge_registry_for_remote_node(Scope :: atom(), Node :: atom(), TableByName :: atom(), TableByPid :: atom()) ->
-    [syn_registry_tuple()].
+-spec purge_registry_for_remote_node(Scope :: atom(), Node :: atom(), TableByName :: atom(), TableByPid :: atom()) -> true.
 purge_registry_for_remote_node(Scope, Node, TableByName, TableByPid) when Node =/= node() ->
     %% loop elements for callback
     RegistryTuples = get_registry_tuples_for_node(Node, TableByName),
@@ -735,295 +878,4 @@ purge_registry_for_remote_node(Scope, Node, TableByName, TableByPid) when Node =
     end, RegistryTuples),
     %% remove all from pid table
     true = ets:match_delete(TableByName, {'_', '_', '_', '_', '_', Node}),
-    true = ets:match_delete(TableByPid, {'_', '_', '_', '_', '_', Node}),
-    RegistryTuples.
-
--spec reconcile_remote_registry_snapshot(Node :: node(), [syn_registry_tuple()], #state{}) -> ok.
-reconcile_remote_registry_snapshot(Node, RegistryTuplesOfRemoteNode, #state{
-    scope = Scope,
-    table_by_name = TableByName,
-    table_by_pid = TableByPid
-} = State) ->
-    ExistingEntries = ets:select(TableByName, [{
-        {'$1', '$2', '$3', '$4', '$5', Node},
-        [],
-        [{{'$1', '$2', '$3', '$4', '$5'}}]
-    }]),
-    Shadows = shadows_of_node(Node, State),
-    case ExistingEntries =:= [] andalso Shadows =:= [] of
-        true ->
-            ok;
-
-        false ->
-            %% compare pids too: an entry whose name the snapshot has with another pid is stale, whatever its time
-            SnapshotPids = maps:from_list([{Name, Pid} || {Name, Pid, _Meta, _Time} <- RegistryTuplesOfRemoteNode]),
-            %% registrations kept aside that the node doesn't have anymore
-            lists:foreach(fun({Name, _, Pid, _, _, _}) ->
-                case maps:get(Name, SnapshotPids, undefined) =:= Pid of
-                    true -> ok;
-                    false -> unshadow(Name, Pid, State)
-                end
-            end, Shadows),
-            SnapshotTime = lists:foldl(fun({_, _, _, Time}, Acc) -> max(Time, Acc) end, 0, RegistryTuplesOfRemoteNode),
-            lists:foreach(fun({Name, Pid, Meta, Time, MRef}) ->
-                case maps:get(Name, SnapshotPids, undefined) =:= Pid orelse is_newer_caller_entry(MRef, Time, SnapshotTime) of
-                    true ->
-                        ok;
-
-                    false ->
-                        remove_from_local_table(Name, Pid, TableByName, TableByPid),
-                        syn_event_handler:call_event_handler(on_process_unregistered,
-                            [Scope, Name, Pid, Meta, {syn_remote_scope_node_up, Scope, Node}]
-                        ),
-                        show_shadowed(Name, State)
-                end
-            end, ExistingEntries)
-    end.
-
-%% an entry this node wrote itself from the reply to its own call, newer than anything in the snapshot:
-%% the snapshot may have been sent before the call was handled, so it can't know about it yet
--spec is_newer_caller_entry(MRef :: undefined | reference() | caller, Time :: integer(), SnapshotTime :: integer()) -> boolean().
-is_newer_caller_entry(caller, Time, SnapshotTime) -> Time > SnapshotTime;
-is_newer_caller_entry(_, _, _) -> false.
-
--spec handle_registry_sync(
-    Name :: term(),
-    Pid :: pid(),
-    Meta :: term(),
-    Time :: non_neg_integer(),
-    Reason :: term(),
-    #state{}
-) -> any().
-handle_registry_sync(Name, Pid, Meta, Time, Reason, #state{
-    scope = Scope,
-    table_by_name = TableByName,
-    table_by_pid = TableByPid
-} = State) ->
-    case find_registry_entry_by_name(Name, TableByName) of
-        undefined ->
-            %% no conflict
-            add_to_local_table(Name, Pid, Meta, Time, undefined, TableByName, TableByPid),
-            unshadow(Name, node(Pid), State),
-            %% callback
-            syn_event_handler:call_event_handler(on_process_registered, [Scope, Name, Pid, Meta, Reason]);
-
-        {_, Pid, _, TableTime, caller, _} when Time < TableTime ->
-            %% same pid, older than what this node wrote from the reply to its own call: ignore
-            ok;
-
-        {_, Pid, TableMeta, _, MRef, _} ->
-            %% same pid, more recent (because it comes from the same node, which means that it's sequential)
-            %% maybe updated meta or time only
-            add_to_local_table(Name, Pid, Meta, Time, MRef, TableByName, TableByPid),
-            unshadow(Name, node(Pid), State),
-            %% callback (call only if meta update)
-            case TableMeta =/= Meta of
-                true ->
-                    syn_event_handler:call_event_handler(on_registry_process_updated, [Scope, Name, Pid, Meta, Reason]),
-                    syn_event_handler:call_event_handler(on_registry_process_updated, [Scope, Name, Pid, TableMeta, Meta, Reason]);
-                _ -> ok
-            end;
-
-        {_, TablePid, TableMeta, TableTime, TableMRef, TableNode} when TableNode =:= node() ->
-            %% current node runs a conflicting process -> resolve
-            %% * the conflict is resolved by the two nodes that own the conflicting processes
-            %% * when a process is chosen, the time is updated
-            %% * the node that runs the process that is kept sends the sync_register message
-            %% * recipients check that the time is more recent that what they have to ensure that there are no race conditions
-            resolve_conflict(Scope, Name, {Pid, Meta, Time}, {TablePid, TableMeta, TableTime, TableMRef}, State);
-
-        {_, TablePid, TableMeta, TableTime, _, TableNode} when TableTime < Time ->
-            %% current node does not own any of the conflicting processes, update
-            update_local_table(Name, TablePid, {Pid, Meta, Time, undefined}, TableByName, TableByPid),
-            unshadow(Name, node(Pid), State),
-            %% the replaced one is still registered on its node, unless it's the same node
-            case TableNode =/= node(Pid) of
-                true -> shadow(Name, TablePid, TableMeta, TableTime, normal, State);
-                false -> ok
-            end,
-            %% callbacks
-            syn_event_handler:call_event_handler(on_process_unregistered, [Scope, Name, TablePid, TableMeta, Reason]),
-            syn_event_handler:call_event_handler(on_process_registered, [Scope, Name, Pid, Meta, Reason]);
-
-        {_, _, _, _, _, TableNode} when TableNode =/= node(Pid) ->
-            %% current node does not own any of the conflicting processes, incoming data is older or as old:
-            %% keep it aside, it's still registered on its node
-            shadow(Name, Pid, Meta, Time, Reason, State);
-
-        _ ->
-            %% race condition: incoming data is older, ignore
-            ok
-    end.
-
--spec handle_registry_unregister_sync(
-    Name :: term(),
-    Pid :: pid(),
-    Meta :: term(),
-    Reason :: term(),
-    #state{}
-) -> any().
-handle_registry_unregister_sync(Name, Pid, Meta, Reason, #state{
-    scope = Scope,
-    table_by_name = TableByName,
-    table_by_pid = TableByPid
-} = State) ->
-    unshadow(Name, Pid, State),
-    case find_registry_entry_by_name(Name, TableByName) of
-        {_, Pid, _, _, _, _} ->
-            remove_from_local_table(Name, Pid, TableByName, TableByPid),
-            %% callback
-            syn_event_handler:call_event_handler(on_process_unregistered, [Scope, Name, Pid, Meta, Reason]),
-            %% after a conflict resolution, the node that keeps its process tells everyone
-            case Reason of
-                syn_conflict_resolution -> ok;
-                _ -> show_shadowed(Name, State)
-            end;
-
-        _ ->
-            %% not in table, nothing to do
-            ok
-    end.
-
-%% registrations of a name by other nodes that the table doesn't show, because it shows one at least as recent:
-%% kept aside until their node drops them, so that the most recent one gets shown if the table's one goes first
--spec shadow(Name :: term(), Pid :: pid(), Meta :: term(), Time :: integer(), Reason :: term(), #state{}) -> any().
-shadow(Name, Pid, Meta, Time, Reason, State) ->
-    case shadowed_table(State) of
-        undefined ->
-            ok;
-
-        Shadowed ->
-            %% one per node, the last one it sent
-            unshadow(Name, node(Pid), State),
-            true = ets:insert(Shadowed, {Name, node(Pid), Pid, Meta, Time, Reason})
-    end.
-
-%% drops the registration of Name kept aside for a node, or with a pid
--spec unshadow(Name :: term(), NodeOrPid :: node() | pid(), #state{}) -> any().
-unshadow(Name, NodeOrPid, State) ->
-    case shadowed_table(State) of
-        undefined ->
-            ok;
-
-        Shadowed ->
-            lists:foreach(fun
-                ({_, Node, Pid, _, _, _} = Shadow) when Node =:= NodeOrPid; Pid =:= NodeOrPid ->
-                    true = ets:delete_object(Shadowed, Shadow);
-                (_) ->
-                    ok
-            end, ets:lookup(Shadowed, Name))
-    end.
-
-%% drops all the registrations kept aside for a node
--spec unshadow_node(Node :: node(), #state{}) -> any().
-unshadow_node(Node, State) ->
-    case shadowed_table(State) of
-        undefined -> ok;
-        Shadowed -> true = ets:match_delete(Shadowed, {'_', Node, '_', '_', '_', '_'})
-    end.
-
--spec shadows_of_node(Node :: node(), #state{}) -> [tuple()].
-shadows_of_node(Node, State) ->
-    case shadowed_table(State) of
-        undefined -> [];
-        Shadowed -> ets:match_object(Shadowed, {'_', Node, '_', '_', '_', '_'})
-    end.
-
-%% the table doesn't have Name anymore: show the most recent registration kept aside, if any
--spec show_shadowed(Name :: term(), #state{}) -> any().
-show_shadowed(Name, #state{
-    scope = Scope,
-    table_by_name = TableByName,
-    table_by_pid = TableByPid
-} = State) ->
-    case shadowed_table(State) of
-        undefined ->
-            ok;
-
-        Shadowed ->
-            case {ets:lookup(Shadowed, Name), find_registry_entry_by_name(Name, TableByName)} of
-                {[_ | _] = Shadows, undefined} ->
-                    %% most recent, the node breaking ties
-                    {_, _, Pid, Meta, Time, Reason} = Shadow = lists:last(lists:keysort(5, lists:keysort(2, Shadows))),
-                    true = ets:delete_object(Shadowed, Shadow),
-                    add_to_local_table(Name, Pid, Meta, Time, undefined, TableByName, TableByPid),
-                    syn_event_handler:call_event_handler(on_process_registered, [Scope, Name, Pid, Meta, Reason]);
-
-                _ ->
-                    ok
-            end
-    end.
-
--spec shadowed_table(#state{}) -> ets:table() | undefined.
-shadowed_table(#state{handler_state = #{shadowed := Shadowed}}) -> Shadowed;
-shadowed_table(_) -> undefined.
-
--spec resolve_conflict(
-    Scope :: atom(),
-    Name :: term(),
-    {Pid :: pid(), Meta :: term(), Time :: non_neg_integer()},
-    {TablePid :: pid(), TableMeta :: term(), TableTime :: non_neg_integer(), TableMRef :: reference()},
-    #state{}
-) -> any().
-resolve_conflict(Scope, Name, {Pid, Meta, Time}, {TablePid, TableMeta, TableTime, TableMRef}, #state{
-    table_by_name = TableByName,
-    table_by_pid = TableByPid
-} = State) ->
-    %% call conflict resolution
-    {PidToKeep, KillOtherPid} = syn_event_handler:do_resolve_registry_conflict(
-        Scope,
-        Name,
-        {Pid, Meta, Time},
-        {TablePid, TableMeta, TableTime}
-    ),
-    %% resolve
-    case PidToKeep of
-        Pid ->
-            %% -> we keep the remote pid
-            ?LOG_NOTICE(#{handler => ?MODULE_LOG_NAME, scope => Scope,
-                        event => registry_conflict, name => Name,
-                        remote => {Pid, Meta}, local => {TablePid, TableMeta}, keep => remote}),
-            %% update locally, the incoming sync_register will update with the time coming from remote node
-            update_local_table(Name, TablePid, {Pid, Meta, Time, undefined}, TableByName, TableByPid),
-            unshadow(Name, node(Pid), State),
-            %% kill
-            case KillOtherPid of
-                true -> exit(TablePid, {syn_resolve_kill, Name, TableMeta});
-                false -> ok
-            end,
-            %% callbacks
-            syn_event_handler:call_event_handler(on_process_unregistered, [Scope, Name, TablePid, TableMeta, syn_conflict_resolution]),
-            syn_event_handler:call_event_handler(on_process_registered, [Scope, Name, Pid, Meta, syn_conflict_resolution]),
-            %% broadcast unregister for the losing local pid so other nodes clean up stale ack_sync data
-            syn_gen_scope:broadcast({'3.0', sync_unregister, Name, TablePid, TableMeta, syn_conflict_resolution}, State);
-
-        TablePid ->
-            %% -> we keep the local pid, remote pid will be killed by the other node in the conflict
-            ?LOG_NOTICE(#{handler => ?MODULE_LOG_NAME, scope => Scope,
-                        event => registry_conflict, name => Name,
-                        remote => {Pid, Meta}, local => {TablePid, TableMeta}, keep => local}),
-            %% overwrite with updated time
-            ResolveTime = erlang:system_time(),
-            add_to_local_table(Name, TablePid, TableMeta, ResolveTime, TableMRef, TableByName, TableByPid),
-            %% broadcast to all (including remote node to update the time)
-            syn_gen_scope:broadcast({'3.0', sync_register, Name, TablePid, TableMeta, ResolveTime, syn_conflict_resolution}, State);
-
-        Invalid ->
-            ?LOG_NOTICE(#{handler => ?MODULE_LOG_NAME, scope => Scope,
-                        event => registry_conflict, name => Name,
-                        remote => {Pid, Meta}, local => {TablePid, TableMeta},
-                        keep => {none, Invalid}}),
-            %% remove
-            maybe_demonitor(TablePid, TableByPid),
-            remove_from_local_table(Name, TablePid, TableByName, TableByPid),
-            %% kill local, remote will be killed by other node performing the same resolve
-            case KillOtherPid of
-                true -> exit(TablePid, {syn_resolve_kill, Name, TableMeta});
-                false -> ok
-            end,
-            %% callback
-            syn_event_handler:call_event_handler(on_process_unregistered, [Scope, Name, TablePid, TableMeta, syn_conflict_resolution]),
-            %% broadcast to all, remote node included: if its process died before it could see the conflict,
-            %% it has added ours from our snapshot and this removes it
-            syn_gen_scope:broadcast({'3.0', sync_unregister, Name, TablePid, TableMeta, syn_conflict_resolution}, State)
-    end.
+    true = ets:match_delete(TableByPid, {'_', '_', '_', '_', '_', Node}).

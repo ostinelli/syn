@@ -29,3 +29,4 @@ erl_crash.dump
 test/results/*
 !test/results/.keep
 doc/
+tmp/

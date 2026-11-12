@@ -36,6 +36,20 @@
 %%
 %% All of the callbacks, except for `resolve_registry_conflict/4', are called on all the nodes of the cluster.
 %% This allows you to receive events for the processes running on nodes that get shut down, or in case of net splits.
+%% They run in the scope process of the node they are called on, which handles nothing else meanwhile: keep them short.
+%% A registry callback runs in the registry scope process of its scope, and a process group callback in the process
+%% group one. A call to Syn that needs that same scope process can't complete while the callback runs:
+%% <ul>
+%% <li>From the callback itself, registering, updating or unregistering a process of the same node, in the same scope
+%% and kind (registry or process groups), exits. A call for a process on another node works, and returns before the
+%% local node shows the change, unless the scope process of that node is itself waiting for this one, for example in
+%% a callback making the same kind of call back: then neither goes on until one of the calls times out after 5 seconds.
+%% </li>
+%% <li>A process that the callback waits for, and that makes such a call in the same scope and kind, for a process on
+%% any node, waits for the callback in turn: neither goes on until one of the calls times out after 5 seconds. The
+%% operation is done either way, whether the call then returns or exits.</li>
+%% </ul>
+%% To act on an event with Syn, send a message to a process or spawn one, and don't wait for it.
 %%
 %% The argument `Reason' in the callbacks can be:
 %% <ul>
@@ -51,6 +65,10 @@
 %% <li> `undefined' for `on_process_unregistered/5' and `on_process_left/5' when the processes died while the
 %%      scope process had crashed.</li>
 %% </ul>
+%% When a name is registered on more than one node, for example after a net split, a node shows one of the
+%% registrations and keeps the others aside. If the one it shows goes, the next one takes its place, and
+%% `on_process_registered/5' for it gets the same reason as `on_process_unregistered/5' for the one that went:
+%% a crash reason, `{syn_remote_scope_node_down, Scope, Node}', and so on.
 %% While all callbacks do not have a direct effect on Syn (their return value is ignored), a special case is the callback
 %% `resolve_registry_conflict/4'. If specified, this is the method that will be used to resolve registry conflicts when detected.
 %%
@@ -75,7 +93,26 @@
 %%
 %% Important Note: the conflict resolution method will be called on the two nodes where the conflicting processes are running on.
 %% Therefore, this method MUST be defined in the same way across all nodes of the cluster and have the same effect
-%% regardless of the node it is run on, or you will experience unexpected results.
+%% regardless of the node it is run on, or you will experience unexpected results. Each of the two nodes decides on its
+%% own, possibly more than once while the conflict settles. Both pass the two registrations in the same order: first the
+%% one of the process running on the node whose name sorts first. A method that decides only from its arguments therefore
+%% keeps the same process on both nodes when they decide on the same versions of the two registrations, even if it
+%% depends on their order, for example to break a tie. While an update of one of them is on its way, the two nodes can
+%% decide on different versions; a node that still holds its own registration decides again when it gets the update.
+%% The next paragraph says what that can cause.
+%% The method must not depend on anything that differs between nodes, such as `node()', the local clock or random
+%% numbers: if it does, both nodes can end up keeping their own process.
+%%
+%% A process that wins survives if the method always puts the processes in the same order, without three processes
+%% each beating another, if what it compares doesn't change during the conflict, and if the process
+%% isn't dropped for another reason, for example by losing a conflict over another name it is registered under. Syn's
+%% default rule compares registration times, which only fails if a clock moves backwards; comparing a start time stored
+%% in the metadata when registering works too. Otherwise, for example after a metadata update with a rule based on the
+%% metadata, both nodes can end up dropping their process, and the name is then free on every node.
+%%
+%% While a conflict settles, a node that runs neither process shows the most recent registration, and switches to the
+%% kept one once the other node drops its own. When the method keeps neither process, a node can briefly show one of them
+%% before both are dropped, and its callbacks report that.
 %%
 %% <h3>Examples</h3>
 %% The following callback module implements the `on_process_unregistered/5' and the `on_process_left/5' callbacks.
@@ -219,7 +256,7 @@ ensure_event_handler_loaded() ->
     %% get handler
     CustomEventHandler = get_custom_event_handler(),
     %% ensure that is it loaded (not using code:ensure_loaded/1 to support embedded mode)
-    catch CustomEventHandler:module_info(exports),
+    try CustomEventHandler:module_info(exports) catch _:_ -> ok end,
     ok.
 
 %% @private

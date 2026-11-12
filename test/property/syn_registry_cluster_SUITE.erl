@@ -693,10 +693,7 @@ start_node(#state{nodes = Nodes}) ->
         args => ["-connect_all", "false", "-kernel", "dist_auto_connect", "never"],
         connection => 0
     }),
-    CodePath = lists:filter(fun(Path) ->
-        nomatch =/= string:find(Path, "/syn/")
-    end, code:get_path()),
-    ok = rpc:call(Node, code, add_pathsa, [CodePath]),
+    ok = rpc:call(Node, code, add_pathsa, [code:get_path()]),
     ExistingNodes = [N#node_st.node || N <- maps:values(Nodes)],
     lists:foreach(fun(EN) ->
         rpc:call(Node, net_kernel, connect_node, [EN]),
